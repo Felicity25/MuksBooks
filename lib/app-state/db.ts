@@ -8,20 +8,24 @@ const DATA_DIR = IS_SERVERLESS
   : path.join(process.cwd(), 'Knowledge')
 const DB_PATH = path.join(DATA_DIR, 'app-state.db')
 
-let dbInstance: any | null = null
-let DatabaseSync: any = null
+// node:sqlite requires Node.js 22+. Import it synchronously using createRequire to work in ESM.
+import { createRequire } from 'module'
+const _require = createRequire(import.meta.url)
+
+let DatabaseSyncClass: any = null
 
 function getDatabaseSync() {
-  if (!DatabaseSync) {
+  if (!DatabaseSyncClass) {
     try {
-      // node:sqlite is only available in Node.js 22+
-      DatabaseSync = require('node:sqlite').DatabaseSync
+      DatabaseSyncClass = _require('node:sqlite').DatabaseSync
     } catch {
-      throw new Error('node:sqlite is not available in this runtime. Requires Node.js 22+.')
+      throw new Error('node:sqlite is not available — this requires Node.js 22+.')
     }
   }
-  return DatabaseSync
+  return DatabaseSyncClass
 }
+
+let dbInstance: any | null = null
 
 function hasColumn(db: any, table: string, column: string) {
   const rows = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>
