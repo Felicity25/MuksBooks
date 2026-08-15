@@ -1,6 +1,6 @@
-import { createClient } from '@supabase/supabase-js'
+import { createBrowserClient } from '@supabase/ssr'
 
-let browserClient: ReturnType<typeof createClient> | null = null
+let browserClient: ReturnType<typeof createBrowserClient> | null = null
 
 export function createSupabaseBrowserClient() {
   if (typeof window === 'undefined') {
@@ -18,13 +18,9 @@ export function createSupabaseBrowserClient() {
     return null
   }
 
-  browserClient = createClient(url, publishableKey, {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: true
-    }
-  })
+  // createBrowserClient stores sessions in cookies (not localStorage) so the
+  // Next.js middleware can read them during server-side route protection.
+  browserClient = createBrowserClient(url, publishableKey)
 
   return browserClient
 }
