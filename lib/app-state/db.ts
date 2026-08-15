@@ -1,18 +1,34 @@
 import fs from 'fs'
 import path from 'path'
-import { DatabaseSync } from 'node:sqlite'
 
-const DATA_DIR = path.join(process.cwd(), 'Knowledge')
+// In Vercel/serverless, process.cwd() is read-only. Use /tmp which is writable.
+const IS_SERVERLESS = !!(process.env.VERCEL || process.env.VERCEL_ENV || process.env.AWS_LAMBDA_FUNCTION_NAME)
+const DATA_DIR = IS_SERVERLESS
+  ? path.join('/tmp', 'muksbooks')
+  : path.join(process.cwd(), 'Knowledge')
 const DB_PATH = path.join(DATA_DIR, 'app-state.db')
 
-let dbInstance: DatabaseSync | null = null
+let dbInstance: any | null = null
+let DatabaseSync: any = null
 
-function hasColumn(db: DatabaseSync, table: string, column: string) {
+function getDatabaseSync() {
+  if (!DatabaseSync) {
+    try {
+      // node:sqlite is only available in Node.js 22+
+      DatabaseSync = require('node:sqlite').DatabaseSync
+    } catch {
+      throw new Error('node:sqlite is not available in this runtime. Requires Node.js 22+.')
+    }
+  }
+  return DatabaseSync
+}
+
+function hasColumn(db: any, table: string, column: string) {
   const rows = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>
   return rows.some((row) => row.name === column)
 }
 
-function ensureColumn(db: DatabaseSync, table: string, column: string, definition: string) {
+function ensureColumn(db: any, table: string, column: string, definition: string) {
   if (!hasColumn(db, table, column)) {
     db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition};`)
   }
@@ -24,7 +40,8 @@ function ensureDb() {
   }
 
   if (!dbInstance) {
-    dbInstance = new DatabaseSync(DB_PATH)
+    const DB = getDatabaseSync()
+    dbInstance = new DB(DB_PATH)
 
     // WAL is preferred for concurrent reads, but some local environments fail with disk I/O errors.
     try {
@@ -41,7 +58,7 @@ function ensureDb() {
   return dbInstance
 }
 
-function migrate(db: DatabaseSync) {
+function migrate(db: any) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
@@ -312,7 +329,7 @@ function migrate(db: DatabaseSync) {
   `)
 }
 
-export function getDb() {
+export function getDb(): any {
   const db = ensureDb()
   migrate(db)
   return db

@@ -1,9 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
 import fs from 'fs/promises'
 import path from 'path'
 
-const LOG_FILE = path.join(process.cwd(), 'logs', 'error-reports.jsonl')
+async function getPrisma() {
+  if (!process.env.DATABASE_URL) return null
+  try {
+    const { prisma } = await import('@/lib/prisma')
+    return prisma
+  } catch {
+    return null
+  }
+}
+
+const IS_SERVERLESS = !!(process.env.VERCEL || process.env.VERCEL_ENV || process.env.AWS_LAMBDA_FUNCTION_NAME)
+const LOG_FILE = IS_SERVERLESS
+  ? path.join('/tmp', 'muksbooks', 'logs', 'error-reports.jsonl')
+  : path.join(process.cwd(), 'logs', 'error-reports.jsonl')
 
 async function readBackupReports() {
   try {
@@ -32,19 +44,22 @@ export async function GET(request: NextRequest) {
   const skip = (page - 1) * limit
 
   try {
+    const prismaClient = await getPrisma()
+    if (!prismaClient) throw new Error('DATABASE_URL not configured')
+
     const where: any = {}
     if (severity) {
       where.severity = severity
     }
 
     const [reports, total] = await Promise.all([
-      prisma.errorReport.findMany({
+      prismaClient.errorReport.findMany({
         where,
         orderBy: { timestamp: 'desc' },
         skip,
         take: limit
       }),
-      prisma.errorReport.count({ where })
+      prismaClient.errorReport.count({ where })
     ])
 
     return NextResponse.json({

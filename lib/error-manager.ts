@@ -1,6 +1,17 @@
 import fs from 'fs/promises'
 import path from 'path'
-import { prisma } from '@/lib/prisma'
+
+// Lazy Prisma import — only initialise when DATABASE_URL is present to avoid
+// crashes on Vercel when the env var is not set.
+async function getPrisma() {
+  if (!process.env.DATABASE_URL) return null
+  try {
+    const { prisma } = await import('@/lib/prisma')
+    return prisma
+  } catch {
+    return null
+  }
+}
 
 export type ErrorSeverity = 'critical' | 'high' | 'medium' | 'low'
 
@@ -29,7 +40,8 @@ export interface PersistResult {
   databaseError?: string
 }
 
-const LOG_DIR = path.join(process.cwd(), 'logs')
+const IS_SERVERLESS = !!(process.env.VERCEL || process.env.VERCEL_ENV || process.env.AWS_LAMBDA_FUNCTION_NAME)
+const LOG_DIR = IS_SERVERLESS ? path.join('/tmp', 'muksbooks', 'logs') : path.join(process.cwd(), 'logs')
 const LOG_FILE = path.join(LOG_DIR, 'error-reports.jsonl')
 
 function determineSeverity(value?: string): ErrorSeverity {
@@ -97,26 +109,29 @@ export async function persistErrorReport(report: ErrorReport & { reportId: strin
   }
 
   try {
-    await prisma.errorReport.create({
-      data: {
-        reportId: report.reportId,
-        sessionId: report.sessionId,
-        page: report.page,
-        browserUrl: report.browserUrl,
-        userAgent: report.userAgent,
-        userFeedback: report.userFeedback,
-        errorMessage: report.errorMessage,
-        stack: report.stack,
-        severity,
-        resolutionEstimate,
-        browserMemoryMb: report.browserMemoryMb,
-        performanceMetrics: report.performanceMetrics,
-        apiTraces: report.apiTraces,
-        userId: report.userId,
-        localStorageSnapshot: JSON.stringify(report.localStorageSnapshot)
-      }
-    })
-    storedInDatabase = true
+    const prismaClient = await getPrisma()
+    if (prismaClient) {
+      await prismaClient.errorReport.create({
+        data: {
+          reportId: report.reportId,
+          sessionId: report.sessionId,
+          page: report.page,
+          browserUrl: report.browserUrl,
+          userAgent: report.userAgent,
+          userFeedback: report.userFeedback,
+          errorMessage: report.errorMessage,
+          stack: report.stack,
+          severity,
+          resolutionEstimate,
+          browserMemoryMb: report.browserMemoryMb,
+          performanceMetrics: report.performanceMetrics,
+          apiTraces: report.apiTraces,
+          userId: report.userId,
+          localStorageSnapshot: JSON.stringify(report.localStorageSnapshot)
+        }
+      })
+      storedInDatabase = true
+    }
   } catch (error: any) {
     databaseError = error?.message || String(error)
     console.error('[ErrorManager] Failed to persist report to database', error)

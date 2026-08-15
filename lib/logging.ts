@@ -1,7 +1,10 @@
 import { promises as fs } from 'fs'
 import path from 'path'
 
-const LOG_ROOT = path.join(process.cwd(), 'Knowledge', 'logs')
+const IS_SERVERLESS = !!(process.env.VERCEL || process.env.VERCEL_ENV || process.env.AWS_LAMBDA_FUNCTION_NAME)
+const LOG_ROOT = IS_SERVERLESS
+  ? path.join('/tmp', 'muksbooks', 'logs')
+  : path.join(process.cwd(), 'Knowledge', 'logs')
 
 function nowIso() {
   return new Date().toISOString()

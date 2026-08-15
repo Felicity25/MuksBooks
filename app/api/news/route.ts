@@ -33,10 +33,6 @@ function isStale() {
 }
 
 export async function GET(request: NextRequest) {
-  if (isStale()) {
-    startBackgroundRefreshIfNeeded()
-  }
-
   const { searchParams } = new URL(request.url)
   const userId = searchParams.get('userId') || 'default'
 
@@ -53,22 +49,34 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    try {
+      if (isStale()) {
+        startBackgroundRefreshIfNeeded()
+      }
+    } catch (error) {
+      console.warn('News staleness check failed; continuing with cached data.', error)
+    }
+
     const items = queryNewsItems(filters)
     const brief = getDailyBrief()
     const sinceYesterday = getSinceYesterday()
     const concepts = getConceptCounts()
     const savedIds = listSavedIds(userId)
 
-    await appendLog('news', 'News API query served', {
-      category: filters.category,
-      country: filters.country || null,
-      range: filters.range || null,
-      q: filters.q || null,
-      concept: filters.concept || null,
-      practiceArea: filters.practiceArea || null,
-      resultCount: items.length,
-      briefCount: brief.length
-    })
+    try {
+      await appendLog('news', 'News API query served', {
+        category: filters.category,
+        country: filters.country || null,
+        range: filters.range || null,
+        q: filters.q || null,
+        concept: filters.concept || null,
+        practiceArea: filters.practiceArea || null,
+        resultCount: items.length,
+        briefCount: brief.length
+      })
+    } catch (logError) {
+      console.warn('News API logging failed:', logError)
+    }
 
     if (items.length === 0) {
       return NextResponse.json({
@@ -86,13 +94,18 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ ok: true, items, brief, sinceYesterday, concepts, savedIds })
   } catch (error) {
     console.error('Failed to fetch news:', error)
-    await appendLog('news', 'News API query failed', {
-      category: filters.category,
-      country: filters.country || null,
-      range: filters.range || null,
-      q: filters.q || null,
-      error: error instanceof Error ? error.message : String(error)
-    })
+
+    try {
+      await appendLog('news', 'News API query failed', {
+        category: filters.category,
+        country: filters.country || null,
+        range: filters.range || null,
+        q: filters.q || null,
+        error: error instanceof Error ? error.message : String(error)
+      })
+    } catch {
+      // Logging failure must not stop the API from returning a structured error payload.
+    }
 
     try {
       const fallbackItems = queryNewsItems({ userId, limit: 20 })

@@ -1,9 +1,8 @@
 import { getDb as getAppStateDb, nowIso } from '../app-state/db.ts'
-import type { DatabaseSync } from 'node:sqlite'
 
 let migrated = false
 
-function migrateNewsTables(db: DatabaseSync) {
+function migrateNewsTables(db: any) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS news_items (
       id TEXT PRIMARY KEY,
