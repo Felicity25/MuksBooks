@@ -4,7 +4,10 @@ import crypto from 'crypto'
 import { appendLog } from '@/lib/logging'
 import type { CatalogStore } from './types'
 
-export const KNOWLEDGE_ROOT = path.join(process.cwd(), 'Knowledge')
+const IS_SERVERLESS = !!(process.env.VERCEL || process.env.VERCEL_ENV || process.env.AWS_LAMBDA_FUNCTION_NAME)
+export const KNOWLEDGE_ROOT = IS_SERVERLESS
+  ? path.join('/tmp', 'muksbooks', 'Knowledge')
+  : path.join(process.cwd(), 'Knowledge')
 export const CATALOG_PATH = path.join(KNOWLEDGE_ROOT, 'catalog.db')
 
 const COURSE_SUBFOLDERS = [
