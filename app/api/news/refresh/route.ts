@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server'
-import { collectNews } from '@/lib/news/pipeline'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,6 +14,7 @@ export async function GET(request: Request) {
   }
 
   try {
+    const { collectNews } = await import('@/lib/news/pipeline')
     const result = await collectNews()
     return NextResponse.json({ ok: true, ...result })
   } catch (error) {

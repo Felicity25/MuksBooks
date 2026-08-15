@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 
 export default function LoginPage() {
@@ -9,17 +10,23 @@ export default function LoginPage() {
   const [message, setMessage] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [mode, setMode] = useState<'sign-in' | 'sign-up'>('sign-in')
+  const searchParams = useSearchParams()
 
   useEffect(() => {
+    // Show error from email confirmation redirect
+    const error = searchParams.get('error')
+    if (error) setMessage(error)
+
     const client = createSupabaseBrowserClient()
     if (!client) return
 
     client.auth.getSession().then(({ data }) => {
       if (data?.session) {
-        window.location.href = '/'
+        const next = searchParams.get('next') || '/'
+        window.location.href = next
       }
     })
-  }, [])
+  }, [searchParams])
 
   const persistProfile = async (
     client: NonNullable<ReturnType<typeof createSupabaseBrowserClient>>,
@@ -51,9 +58,10 @@ export default function LoginPage() {
     setIsLoading(true)
     setMessage(null)
 
+    const redirectTo = `${window.location.origin}/auth/callback`
     const action = mode === 'sign-in'
       ? client.auth.signInWithPassword({ email, password })
-      : client.auth.signUp({ email, password })
+      : client.auth.signUp({ email, password, options: { emailRedirectTo: redirectTo } })
 
     const { data, error } = await action
     setIsLoading(false)

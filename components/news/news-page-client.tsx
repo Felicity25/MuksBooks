@@ -40,13 +40,18 @@ const RANGES: Array<{ label: string; value: string }> = [
 
 interface NewsResponse {
   ok?: boolean
+  success?: boolean
   reason?: string
   message?: string
+  error?: string
+  articles?: NewsItem[]
   items: NewsItem[]
   brief: BriefItem[]
   sinceYesterday: string[]
   concepts: Array<{ name: string; count: number }>
   savedIds: string[]
+  updatedAt?: string
+  sourcesChecked?: number
 }
 
 export function NewsPageClient() {
@@ -59,6 +64,20 @@ export function NewsPageClient() {
   const [query, setQuery] = useState('')
   const [concept, setConcept] = useState<string | null>(null)
   const [showSinceYesterday, setShowSinceYesterday] = useState(false)
+
+  const parseNewsResponse = async (res: Response) => {
+    const rawBody = await res.text()
+
+    if (!rawBody.trim()) {
+      throw new Error(`News API returned ${res.status} with an empty response.`)
+    }
+
+    try {
+      return JSON.parse(rawBody) as NewsResponse
+    } catch {
+      throw new Error(`News API returned ${res.status} with non-JSON content.`)
+    }
+  }
 
   const load = useCallback(() => {
     setLoading(true)
@@ -73,14 +92,33 @@ export function NewsPageClient() {
 
     fetch(`/api/news?${params.toString()}`)
       .then(async (res) => {
-        const payload: NewsResponse = await res.json()
-        if (!res.ok) {
-          throw new Error(payload.message || 'News could not be loaded right now.')
+        const payload = await parseNewsResponse(res)
+        const items = payload.items || payload.articles || []
+
+        if (!res.ok || payload.success === false || payload.ok === false) {
+          const message = payload.error || payload.message || 'News could not be loaded right now.'
+          throw new Error(message)
         }
-        return payload
+
+        return {
+          ...payload,
+          items,
+          articles: payload.articles || items,
+          savedIds: payload.savedIds || [],
+          brief: payload.brief || [],
+          sinceYesterday: payload.sinceYesterday || [],
+          concepts: payload.concepts || []
+        } as NewsResponse
       })
       .then((payload: NewsResponse) => {
-        setData(payload)
+        setData({
+          ...payload,
+          items: payload.items || payload.articles || [],
+          savedIds: payload.savedIds || [],
+          brief: payload.brief || [],
+          sinceYesterday: payload.sinceYesterday || [],
+          concepts: payload.concepts || []
+        })
         if (payload.ok === false && payload.message) {
           setErrorMessage(payload.message)
         }
