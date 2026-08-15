@@ -1,0 +1,27 @@
+node_modules
+dist
+.next
+.env
+.env.local
+.env.*
+!.env.example
+.DS_Store
+.vscode
+*.log
+coverage
+.cache
+*.pem
+secrets
+**/.DS_Store
+**/tmp
+**/temp
+**/*.sqlite
+**/*.db
+
+# local runtime artifacts
+Knowledge/
+ETC3400/
+ETC3420/
+MuksBooks/
+logs/**/*.log
+*.jsonl

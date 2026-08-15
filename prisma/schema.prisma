@@ -1,0 +1,324 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model UserProfile {
+  id                     String             @id @default(cuid())
+  name                   String?
+  degree                 String?
+  targetMarks            Int?
+  explanationPreferences String?
+  feedbackStrictness     String?
+  writingStyle           String?
+  createdAt              DateTime           @default(now())
+  academicYears          AcademicYear[]
+  studyPreferences       StudyPreferences?
+  themeSettings          ThemeSettings?
+}
+
+model AcademicYear {
+  id         String    @id @default(cuid())
+  name       String
+  startDate  DateTime?
+  endDate    DateTime?
+  userProfile UserProfile @relation(fields: [userProfileId], references: [id])
+  userProfileId String
+  semesters  Semester[]
+}
+
+model Semester {
+  id             String    @id @default(cuid())
+  name           String
+  startDate      DateTime?
+  endDate        DateTime?
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id])
+  academicYearId String
+  units          Unit[]
+}
+
+model Unit {
+  id                 String             @id @default(cuid())
+  code               String
+  name               String
+  description        String?
+  semester           Semester           @relation(fields: [semesterId], references: [id])
+  semesterId         String
+  topics             Topic[]
+  learningObjectives LearningObjective[]
+  uploadedFiles      UploadedFile[]
+  assignments        Assignment[]
+  rubrics            Rubric[]
+  lessons            Lesson[]
+  quizzes            Quiz[]
+  tasks              Task[]
+  studySessions      StudySession[]
+  plannerBlocks      PlannerBlock[]
+  pomodoroSessions   PomodoroSession[]
+  errorLogs          ErrorLog[]
+  resources          Resource[]
+  exams              Exam[]
+  masteryScores      MasteryScore[]
+}
+
+model Topic {
+  id            String        @id @default(cuid())
+  title         String
+  description   String?
+  unit          Unit          @relation(fields: [unitId], references: [id])
+  unitId        String
+  lessons       Lesson[]
+  quizzes       Quiz[]
+  errorLogs     ErrorLog[]
+  masteryScores MasteryScore[]
+  resources     Resource[]
+  uploadedFiles UploadedFile[]
+  tasks         Task[]
+  studySessions StudySession[]
+  plannerBlocks PlannerBlock[]
+  pomodoroSessions PomodoroSession[]
+}
+
+model LearningObjective {
+  id      String @id @default(cuid())
+  description String
+  unit    Unit   @relation(fields: [unitId], references: [id])
+  unitId  String
+}
+
+model UploadedFile {
+  id          String   @id @default(cuid())
+  filename    String
+  url         String?
+  category    String
+  categoryDetail String?
+  unit        Unit?    @relation(fields: [unitId], references: [id])
+  unitId      String?
+  topic       Topic?   @relation(fields: [topicId], references: [id])
+  topicId     String?
+  uploadedAt  DateTime @default(now())
+}
+
+model Assignment {
+  id        String   @id @default(cuid())
+  title     String
+  brief     String?
+  dueDate   DateTime?
+  rubric    Rubric?  @relation(fields: [rubricId], references: [id])
+  rubricId  String?
+  unit      Unit     @relation(fields: [unitId], references: [id])
+  unitId    String
+  createdAt DateTime @default(now())
+}
+
+model Rubric {
+  id          String @id @default(cuid())
+  title       String
+  description String?
+  unit        Unit?  @relation(fields: [unitId], references: [id])
+  unitId      String?
+  assignments Assignment[]
+}
+
+model Lesson {
+  id        String   @id @default(cuid())
+  title     String
+  summary   String?
+  unit      Unit     @relation(fields: [unitId], references: [id])
+  unitId    String
+  topic     Topic    @relation(fields: [topicId], references: [id])
+  topicId   String
+  createdAt DateTime @default(now())
+}
+
+model Quiz {
+  id        String    @id @default(cuid())
+  title     String
+  unit      Unit      @relation(fields: [unitId], references: [id])
+  unitId    String
+  topic     Topic     @relation(fields: [topicId], references: [id])
+  topicId   String
+  questions Question[]
+  createdAt DateTime @default(now())
+}
+
+model Question {
+  id         String        @id @default(cuid())
+  prompt     String
+  type       String
+  quiz       Quiz          @relation(fields: [quizId], references: [id])
+  quizId     String
+  attempts   AnswerAttempt[]
+}
+
+model AnswerAttempt {
+  id         String   @id @default(cuid())
+  response   String
+  correct    Boolean?
+  score      Int?
+  question   Question @relation(fields: [questionId], references: [id])
+  questionId String
+  createdAt  DateTime @default(now())
+}
+
+model MasteryScore {
+  id         String   @id @default(cuid())
+  level      String
+  confidence Int?
+  unit       Unit?    @relation(fields: [unitId], references: [id])
+  unitId     String?
+  topic      Topic?   @relation(fields: [topicId], references: [id])
+  topicId    String?
+  updatedAt  DateTime @default(now())
+}
+
+model Task {
+  id        String   @id @default(cuid())
+  title     String
+  status    String
+  priority  String
+  dueDate   DateTime?
+  notes     String?
+  unit      Unit?    @relation(fields: [unitId], references: [id])
+  unitId    String?
+  topic     Topic?   @relation(fields: [topicId], references: [id])
+  topicId   String?
+  plannerBlocks PlannerBlock[]
+  createdAt DateTime @default(now())
+}
+
+model StudySession {
+  id        String   @id @default(cuid())
+  title     String
+  description String?
+  startDate DateTime
+  endDate   DateTime
+  unit      Unit?    @relation(fields: [unitId], references: [id])
+  unitId    String?
+  topic     Topic?   @relation(fields: [topicId], references: [id])
+  topicId   String?
+  createdAt DateTime @default(now())
+}
+
+model PlannerBlock {
+  id        String   @id @default(cuid())
+  title     String
+  type      String
+  startDate DateTime
+  endDate   DateTime
+  unit      Unit?    @relation(fields: [unitId], references: [id])
+  unitId    String?
+  topic     Topic?   @relation(fields: [topicId], references: [id])
+  topicId   String?
+  task      Task?    @relation(fields: [taskId], references: [id])
+  taskId    String?
+  createdAt DateTime @default(now())
+}
+
+model PomodoroSession {
+  id        String   @id @default(cuid())
+  duration  Int
+  breaks    Int
+  notes     String?
+  unit      Unit?    @relation(fields: [unitId], references: [id])
+  unitId    String?
+  topic     Topic?   @relation(fields: [topicId], references: [id])
+  topicId   String?
+  createdAt DateTime @default(now())
+}
+
+model ErrorLog {
+  id        String   @id @default(cuid())
+  mistake   String
+  why       String?
+  correction String?
+  unit      Unit?    @relation(fields: [unitId], references: [id])
+  unitId    String?
+  topic     Topic?   @relation(fields: [topicId], references: [id])
+  topicId   String?
+  nextAction String?
+  createdAt DateTime @default(now())
+}
+
+model Resource {
+  id          String   @id @default(cuid())
+  title       String
+  link        String
+  type        String
+  coverage    String?
+  valueRating String?
+  unit        Unit?    @relation(fields: [unitId], references: [id])
+  unitId      String?
+  topic       Topic?   @relation(fields: [topicId], references: [id])
+  topicId     String?
+  createdAt   DateTime @default(now())
+}
+
+model ActuarialNewsItem {
+  id          String   @id @default(cuid())
+  title       String
+  source      String
+  publishedDate DateTime
+  summary     String
+  url         String   @unique
+  category    String
+  relevance   String?
+  createdAt   DateTime @default(now())
+}
+
+model ThemeSettings {
+  id          String      @id @default(cuid())
+  preset      String
+  accentColor String?
+  background  String?
+  fontSize    String?
+  userProfile UserProfile @relation(fields: [userProfileId], references: [id])
+  userProfileId String @unique
+}
+
+model ErrorReport {
+  id                    String   @id @default(cuid())
+  reportId              String   @unique
+  sessionId             String
+  page                  String
+  browserUrl            String?
+  userAgent             String?
+  userFeedback          String?
+  errorMessage          String?
+  stack                 String?
+  severity              String   @default("low")
+  resolutionEstimate    String?
+  browserMemoryMb       Int?
+  performanceMetrics    String?
+  apiTraces             String?
+  userId                String?
+  localStorageSnapshot  String?
+  timestamp             DateTime @default(now())
+  reviewed              Boolean  @default(false)
+  reviewNotes           String?
+  reviewedAt            DateTime?
+  createdAt             DateTime @default(now())
+}
+
+model StudyPreferences {
+  id                String      @id @default(cuid())
+  pomodoroLength    Int
+  breakLength       Int
+  quizDifficulty    String
+  preferredStudyTimes String?
+  userProfile       UserProfile @relation(fields: [userProfileId], references: [id])
+  userProfileId     String @unique
+}
+
+model Exam {
+  id        String   @id @default(cuid())
+  title     String
+  date      DateTime
+  unit      Unit     @relation(fields: [unitId], references: [id])
+  unitId    String
+  createdAt DateTime @default(now())
+}
