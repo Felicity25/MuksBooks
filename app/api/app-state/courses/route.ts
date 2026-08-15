@@ -5,28 +5,38 @@ import { publishEvent } from '@/lib/app-state/events'
 export const runtime = 'nodejs'
 
 export async function GET() {
-  const courses = listCourses()
-  return NextResponse.json({ ok: true, courses })
+  try {
+    const courses = listCourses()
+    return NextResponse.json({ ok: true, courses })
+  } catch (error) {
+    console.error('[Courses GET] Failed:', error)
+    return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : String(error), courses: [] }, { status: 500 })
+  }
 }
 
 export async function POST(request: NextRequest) {
-  const body = await request.json()
-  if (!body?.courseCode) {
-    return NextResponse.json({ ok: false, error: 'courseCode is required' }, { status: 400 })
+  try {
+    const body = await request.json()
+    if (!body?.courseCode) {
+      return NextResponse.json({ ok: false, error: 'courseCode is required' }, { status: 400 })
+    }
+
+    const course = upsertCourse({
+      courseCode: String(body.courseCode).toUpperCase(),
+      courseName: body.courseName,
+      university: body.university,
+      semester: body.semester,
+      year: body.year,
+      source: body.source || 'user'
+    })
+
+    publishEvent('COURSE_UPDATED', { courseId: course.id, courseCode: course.course_code })
+
+    return NextResponse.json({ ok: true, course })
+  } catch (error) {
+    console.error('[Courses POST] Failed:', error)
+    return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : String(error) }, { status: 500 })
   }
-
-  const course = upsertCourse({
-    courseCode: String(body.courseCode).toUpperCase(),
-    courseName: body.courseName,
-    university: body.university,
-    semester: body.semester,
-    year: body.year,
-    source: body.source || 'user'
-  })
-
-  publishEvent('COURSE_UPDATED', { courseId: course.id, courseCode: course.course_code })
-
-  return NextResponse.json({ ok: true, course })
 }
 
 export async function DELETE(request: NextRequest) {

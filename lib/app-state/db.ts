@@ -8,20 +8,23 @@ const DATA_DIR = IS_SERVERLESS
   : path.join(process.cwd(), 'Knowledge')
 const DB_PATH = path.join(DATA_DIR, 'app-state.db')
 
-// Import DatabaseSync — available only on Node.js 22+. The import is guarded so
-// the module itself loads without error; failures surface at first use via getDb().
-let DatabaseSyncClass: any = undefined
-try {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const sqlite = eval('require')('node:sqlite') as { DatabaseSync: any }
-  DatabaseSyncClass = sqlite.DatabaseSync
-} catch {
-  // Will throw a descriptive error inside getDatabaseSync() when getDb() is called.
-}
+// Use a module-level variable for the class so it is loaded once.
+// 'node:sqlite' is a built-in Node 22+ module — it must not be bundled by webpack.
+// We declare the require-call as a string expression to prevent bundler detection.
+let DatabaseSyncClass: any = null
 
-function getDatabaseSync() {
-  if (!DatabaseSyncClass) {
-    throw new Error('node:sqlite is not available — this runtime requires Node.js 22+.')
+function getDatabaseSync(): any {
+  if (DatabaseSyncClass) return DatabaseSyncClass
+  // The string-based approach prevents webpack from trying to bundle node:sqlite.
+  const nativeRequire: NodeRequire = typeof __non_webpack_require__ !== 'undefined'
+    ? (__non_webpack_require__ as NodeRequire)
+    : require
+  try {
+    DatabaseSyncClass = nativeRequire('node:sqlite').DatabaseSync
+  } catch (err) {
+    throw new Error(
+      `node:sqlite unavailable — requires Node.js 22+. Original: ${err instanceof Error ? err.message : String(err)}`
+    )
   }
   return DatabaseSyncClass
 }

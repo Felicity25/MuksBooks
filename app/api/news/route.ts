@@ -6,8 +6,6 @@ export const dynamic = 'force-dynamic'
 
 const DEFAULT_LIMIT = 60
 
-type NewsDependencies = Awaited<ReturnType<typeof loadNewsDependencies>>
-
 type NewsResponse = {
   success: boolean
   ok: boolean
@@ -22,6 +20,15 @@ type NewsResponse = {
   message?: string
   error?: string
   reason?: string
+}
+
+type NewsDependencies = {
+  queryNewsItems: (filters: NewsQueryFilters) => NewsItem[]
+  getDailyBrief: () => Array<{ id: string; title: string; summary: string; category: string }>
+  getSinceYesterday: () => string[]
+  getConceptCounts: () => Array<{ name: string; count: number }>
+  listSavedIds: (userId: string) => string[]
+  appendLog: (channel: string, message: string, details?: Record<string, unknown>) => Promise<void>
 }
 
 let newsDependenciesPromise: Promise<{

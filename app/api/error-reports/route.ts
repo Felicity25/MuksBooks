@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import fs from 'fs/promises'
 import path from 'path'
+import { prisma } from '@/lib/prisma'
 
 async function getPrisma() {
   if (!process.env.DATABASE_URL) return null
@@ -111,7 +112,12 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ ok: false, error: 'Report ID is required' }, { status: 400 })
     }
 
-    const updated = await prisma.errorReport.update({
+    const prismaClient = await getPrisma()
+    if (!prismaClient) {
+      return NextResponse.json({ ok: false, error: 'Database is not configured' }, { status: 503 })
+    }
+
+    const updated = await prismaClient.errorReport.update({
       where: { id },
       data: {
         reviewed: reviewed !== undefined ? reviewed : undefined,
