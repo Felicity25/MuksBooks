@@ -8,19 +8,20 @@ const DATA_DIR = IS_SERVERLESS
   : path.join(process.cwd(), 'Knowledge')
 const DB_PATH = path.join(DATA_DIR, 'app-state.db')
 
-// node:sqlite requires Node.js 22+. Import it synchronously using createRequire to work in ESM.
-import { createRequire } from 'module'
-const _require = createRequire(import.meta.url)
-
-let DatabaseSyncClass: any = null
+// Import DatabaseSync — available only on Node.js 22+. The import is guarded so
+// the module itself loads without error; failures surface at first use via getDb().
+let DatabaseSyncClass: any = undefined
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const sqlite = eval('require')('node:sqlite') as { DatabaseSync: any }
+  DatabaseSyncClass = sqlite.DatabaseSync
+} catch {
+  // Will throw a descriptive error inside getDatabaseSync() when getDb() is called.
+}
 
 function getDatabaseSync() {
   if (!DatabaseSyncClass) {
-    try {
-      DatabaseSyncClass = _require('node:sqlite').DatabaseSync
-    } catch {
-      throw new Error('node:sqlite is not available — this requires Node.js 22+.')
-    }
+    throw new Error('node:sqlite is not available — this runtime requires Node.js 22+.')
   }
   return DatabaseSyncClass
 }
