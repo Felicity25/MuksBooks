@@ -1,0 +1,17 @@
+version: '3.9'
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: muksbooks-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: muksbooks
+    ports:
+      - '5432:5432'
+    volumes:
+      - muksbooks-data:/var/lib/postgresql/data
+
+volumes:
+  muksbooks-data:

@@ -1,0 +1,5 @@
+- Project scaffold created with Vite, React, and TypeScript.
+- Core app pages added: onboarding, subject dashboard, planner, Pomodoro placeholder, assignment feedback placeholder.
+- `.vscode/tasks.json` added for `npm run dev`.
+- README updated with Node.js requirement.
+- Node tooling is not available in this environment, so dependency install and app launch need to run locally where Node is installed.
