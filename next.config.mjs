@@ -1,6 +1,12 @@
 const nextConfig = {
   reactStrictMode: true,
-  webpack: (config, { dev }) => {
+  webpack: (config, { dev, isServer }) => {
+    // Exclude native Node.js modules from the webpack bundle so they are loaded
+    // at runtime rather than bundled. node:sqlite is a built-in Node 22 module.
+    if (isServer) {
+      config.externals = [...(config.externals || []), 'node:sqlite']
+    }
+
     if (dev) {
       // Avoid filesystem pack cache writes/reads that can hang on synced folders.
       config.cache = false
