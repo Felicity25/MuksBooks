@@ -3,6 +3,7 @@ import { getDb, nowIso } from './db.ts'
 import type { BriefItem, NewsCategory, NewsCountry, NewsItem, NewsQueryFilters, SupportingSource } from './types.ts'
 import { scoreNewsItem } from './score.ts'
 import { getInterestKeywords } from './personalize.ts'
+import { isLikelyCareerOpportunity } from './classify.ts'
 
 function id(prefix: string) {
   return `${prefix}_${crypto.randomUUID()}`
@@ -287,7 +288,11 @@ export function queryNewsItems(filters: NewsQueryFilters = {}): NewsItem[] {
     .prepare(`SELECT * FROM news_items ${where} ORDER BY COALESCE(published_at, discovered_at) DESC LIMIT ?`)
     .all(...params, limit) as any[]
 
-  const items = rows.map(rowToItem)
+  let items = rows.map(rowToItem)
+  if (filters.category === 'CAREERS') {
+    // Guard against stale rows previously labeled as CAREERS before stricter opportunity classification.
+    items = items.filter((item) => item.sourceName !== 'The Actuary - Events' && isLikelyCareerOpportunity(item.title, item.summary || ''))
+  }
   const interestKeywords = getInterestKeywords(filters.userId)
   return items.sort((a, b) => scoreNewsItem(b, { interestKeywords }) - scoreNewsItem(a, { interestKeywords }))
 }
