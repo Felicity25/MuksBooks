@@ -109,10 +109,43 @@ function scoreCategories(text: string): Array<[NewsCategory, number]> {
   ])
 }
 
+const CAREER_POSITIVE_SIGNALS = [
+  'internship', 'vacation program', 'graduate role', 'graduate program', 'analyst role',
+  'actuarial analyst', 'job opening', 'job posting', 'vacancy', 'hiring', 'apply now',
+  'application closes', 'applications close', 'position available', 'entry level', 'entry-level'
+]
+
+const CAREER_EVENT_SIGNALS = [
+  'seminar', 'webinar', 'forum', 'conference', 'workshop', 'session', 'leadership transition',
+  'call for volunteers', 'practitioners forum', 'event'
+]
+
+export function isLikelyCareerOpportunity(title: string, summary: string): boolean {
+  const text = textOf(title, summary)
+  const positiveHits = countMatches(text, CAREER_POSITIVE_SIGNALS)
+  const eventHits = countMatches(text, CAREER_EVENT_SIGNALS)
+  if (positiveHits === 0) return false
+  return positiveHits > eventHits
+}
+
 export function classifyCategory(title: string, summary: string, source: NewsSource): NewsCategory {
   const text = textOf(title, summary)
   const scored = scoreCategories(text).sort((a, b) => b[1] - a[1])
-  if (scored[0][1] > 0) return scored[0][0]
+
+  if (scored[0][1] > 0) {
+    const topCategory = scored[0][0]
+    if (topCategory === 'CAREERS' && !isLikelyCareerOpportunity(title, summary)) {
+      const nextNonCareers = scored.find(([category, score]) => category !== 'CAREERS' && score > 0)
+      if (nextNonCareers) return nextNonCareers[0]
+    } else {
+      return topCategory
+    }
+  }
+
+  if (source.defaultCategory === 'CAREERS' && !isLikelyCareerOpportunity(title, summary)) {
+    return 'RISK_MANAGEMENT'
+  }
+
   return source.defaultCategory || 'INSURANCE'
 }
 
