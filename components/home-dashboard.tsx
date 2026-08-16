@@ -97,7 +97,12 @@ export function HomeDashboard() {
               MuksBooks organises your units, tasks, uploads, planner and mastery progress in one academic workflow.
             </p>
           </div>
-          <Button variant="default" onClick={generateStudyPlan}>Plan my next study session</Button>
+          <div className="flex flex-wrap gap-3">
+            <Link href="/news">
+              <Button variant="secondary">Actuarial News</Button>
+            </Link>
+            <Button variant="default" onClick={generateStudyPlan}>Plan my next study session</Button>
+          </div>
         </div>
 
         {studyPlan && (
