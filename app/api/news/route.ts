@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import type { NewsItem, NewsQueryFilters } from '@/lib/news/types'
+import { queryPrismaBackupNews } from '@/lib/news/prisma-backup'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 const DEFAULT_LIMIT = 60
+const WARM_COLLECTION_TIMEOUT_MS = 20000
 
 type NewsResponse = {
   success: boolean
@@ -120,6 +122,27 @@ function toErrorNewsResponse(message: string): NewsResponse {
   }
 }
 
+function shouldWarmCollection(filters: NewsQueryFilters) {
+  const isAll = !filters.category || filters.category === 'All'
+  return isAll && !filters.country && !filters.q && !filters.concept && !filters.practiceArea && !filters.savedOnly
+}
+
+async function tryWarmCollection() {
+  const { collectNews } = await import('@/lib/news/pipeline')
+  const timeout = new Promise<never>((_, reject) => {
+    setTimeout(() => reject(new Error('Warm collection timed out')), WARM_COLLECTION_TIMEOUT_MS)
+  })
+  return Promise.race([collectNews(), timeout])
+}
+
+async function tryLivePreview(limit: number) {
+  const { collectNewsPreview } = await import('@/lib/news/pipeline')
+  const timeout = new Promise<never>((_, reject) => {
+    setTimeout(() => reject(new Error('Live preview timed out')), WARM_COLLECTION_TIMEOUT_MS)
+  })
+  return Promise.race([collectNewsPreview(limit), timeout])
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const userId = searchParams.get('userId') || 'default'
@@ -138,7 +161,61 @@ export async function GET(request: NextRequest) {
 
   try {
     const dependencies = await loadNewsDependencies()
-    const items = dependencies.queryNewsItems(filters)
+    let items = dependencies.queryNewsItems(filters)
+
+    if (items.length === 0 && shouldWarmCollection(filters)) {
+      try {
+        const collectResult = await tryWarmCollection()
+        items = dependencies.queryNewsItems(filters)
+        await dependencies.appendLog('news', 'Warm collection attempted from /api/news', {
+          category: filters.category,
+          collected: (collectResult as any)?.collected ?? null,
+          stored: (collectResult as any)?.stored ?? null,
+          resultCountAfterWarm: items.length
+        })
+      } catch (warmError) {
+        await dependencies.appendLog('news', 'Warm collection failed from /api/news', {
+          category: filters.category,
+          error: warmError instanceof Error ? warmError.message : String(warmError)
+        })
+      }
+    }
+
+    if (items.length === 0) {
+      try {
+        const backupItems = await queryPrismaBackupNews(filters)
+        if (backupItems.length > 0) {
+          items = backupItems
+          await dependencies.appendLog('news', 'Served Prisma backup news', {
+            category: filters.category,
+            count: backupItems.length
+          })
+        }
+      } catch (backupError) {
+        await dependencies.appendLog('news', 'Prisma backup news query failed', {
+          category: filters.category,
+          error: backupError instanceof Error ? backupError.message : String(backupError)
+        })
+      }
+    }
+
+    if (items.length === 0 && shouldWarmCollection(filters)) {
+      try {
+        const previewItems = await tryLivePreview(filters.limit || DEFAULT_LIMIT)
+        if (previewItems.length > 0) {
+          items = previewItems
+          await dependencies.appendLog('news', 'Served live preview news fallback', {
+            category: filters.category,
+            count: previewItems.length
+          })
+        }
+      } catch (previewError) {
+        await dependencies.appendLog('news', 'Live preview news fallback failed', {
+          category: filters.category,
+          error: previewError instanceof Error ? previewError.message : String(previewError)
+        })
+      }
+    }
 
     try {
       await dependencies.appendLog('news', 'News API query served', {

@@ -7,14 +7,17 @@ import {
   classifyJurisdictions,
   classifyPracticeAreas,
   classifyActuarialConcepts,
+  isLikelyCareerOpportunity,
   classifyRegulatoryStatus,
   extractConsultationCloseDate,
   extractEffectiveDate
 } from './classify.ts'
 import { generateActuarialImpact, generateWhyItMatters, maybeEnrichWhyItMatters } from './relevance.ts'
 import { upsertNewsItem } from './store.ts'
-import type { NewsSource } from './types.ts'
+import { upsertPrismaBackupNews } from './prisma-backup.ts'
+import type { NewsItem, NewsSource } from './types.ts'
 import { appendLog } from '../logging.ts'
+import crypto from 'crypto'
 
 const parser = new Parser({
   customFields: {
@@ -113,6 +116,12 @@ export async function collectNews(): Promise<CollectResult> {
           if (!title || !isValidUrl(url) || isPlaceholderArticle(title)) continue
 
           const summary = summaryFrom(item)
+
+          // The events feed is useful only when it contains real opportunities.
+          if (source.id === 'the-actuary-events' && !isLikelyCareerOpportunity(title, summary)) {
+            continue
+          }
+
           const category = classifyCategory(title, summary, source)
           const country = classifyCountry(title, summary, source)
           const practiceAreas = classifyPracticeAreas(title, summary)
@@ -159,6 +168,17 @@ export async function collectNews(): Promise<CollectResult> {
             researchDifficulty: isResearch ? 'TECHNICAL' : undefined,
             confidence: 0.7
           })
+
+          await upsertPrismaBackupNews({
+            title,
+            source: source.name,
+            publishedDate: item.isoDate || item.pubDate || null,
+            summary,
+            url,
+            category,
+            relevance: whyItMatters
+          })
+
           if (result.created) sourceStored += 1
         } catch (error) {
           parseFailures += 1
@@ -193,4 +213,85 @@ export async function collectNews(): Promise<CollectResult> {
   })
 
   return { collected, stored, logs }
+}
+
+export async function collectNewsPreview(limit = 60): Promise<NewsItem[]> {
+  const previewItems: NewsItem[] = []
+
+  for (const source of NEWS_SOURCES) {
+    if (previewItems.length >= limit) break
+
+    try {
+      const feed = await fetchFeed(source)
+      const items = feed.items || []
+
+      for (const item of items) {
+        if (previewItems.length >= limit) break
+
+        try {
+          const title = (item.title || '').trim()
+          const rawItem = item as unknown as Record<string, unknown>
+          const url = String(rawItem.link ?? rawItem.id ?? '')
+          if (!title || !isValidUrl(url) || isPlaceholderArticle(title)) continue
+
+          const summary = summaryFrom(item)
+          if (source.id === 'the-actuary-events' && !isLikelyCareerOpportunity(title, summary)) continue
+
+          const category = classifyCategory(title, summary, source)
+          const country = classifyCountry(title, summary, source)
+          const practiceAreas = classifyPracticeAreas(title, summary)
+          const actuarialConcepts = classifyActuarialConcepts(title, summary)
+          const jurisdictions = classifyJurisdictions(title, summary)
+          const importance = classifyImportance(title, summary, source)
+          const whyItMatters = generateWhyItMatters(category, title, summary)
+          const actuarialImpact = generateActuarialImpact(actuarialConcepts, practiceAreas)
+
+          const isRegulation = category === 'REGULATION'
+          const status = isRegulation ? classifyRegulatoryStatus(title, summary) : undefined
+          const effectiveDate = isRegulation ? extractEffectiveDate(title, summary) : undefined
+          const consultationCloseDate = isRegulation ? extractConsultationCloseDate(title, summary) : undefined
+
+          previewItems.push({
+            id: `preview_${crypto.createHash('sha1').update(url).digest('hex').slice(0, 12)}`,
+            clusterKey: title.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).slice(0, 8).join('-'),
+            title,
+            summary,
+            category,
+            subcategories: [],
+            country,
+            jurisdictions,
+            practiceAreas,
+            actuarialConcepts,
+            sourceName: source.name,
+            sourceType: source.sourceType,
+            sourceTier: source.tier,
+            sourceUrl: source.feedUrl,
+            url,
+            publishedAt: item.isoDate || item.pubDate || null,
+            discoveredAt: new Date().toISOString(),
+            lastCheckedAt: new Date().toISOString(),
+            sourceUpdatedAt: null,
+            importance,
+            whyItMatters,
+            actuarialImpact,
+            affectedGroups: [],
+            effectiveDate,
+            consultationCloseDate,
+            status,
+            researchAuthors: [],
+            relatedCompanies: [],
+            relatedRegulators: [],
+            supportingSources: [],
+            confidence: 0.5
+          })
+        } catch {
+          // Skip malformed entries for preview mode.
+        }
+      }
+    } catch {
+      // Skip failed source in preview mode.
+    }
+  }
+
+  return previewItems.slice(0, limit)
 }
