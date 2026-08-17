@@ -17,7 +17,7 @@ interface Settings {
 }
 
 export function SettingsManager() {
-  const { requireAuth, settings: sharedSettings } = useAuth()
+  const { requireAuth } = useAuth()
   const [settings, setSettings] = useState<Settings>({
     theme: 'light',
     name: '',
@@ -28,10 +28,6 @@ export function SettingsManager() {
     studyTimes: ''
   })
   const [message, setMessage] = useState('')
-
-  useEffect(() => {
-    setSettings(sharedSettings)
-  }, [sharedSettings])
 
   useEffect(() => {
     const load = async () => {
