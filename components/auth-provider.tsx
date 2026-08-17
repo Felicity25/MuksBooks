@@ -47,8 +47,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const client = createSupabaseBrowserClient()
     if (!client) { setIsLoading(false); return }
 
-    client.auth.getSession().then(({ data }) => {
-      setUser(data.session?.user ?? null)
+    client.auth.getSession().then((result) => {
+      setUser(result.data.session?.user ?? null)
       setIsLoading(false)
     })
 
