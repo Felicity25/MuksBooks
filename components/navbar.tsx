@@ -18,7 +18,7 @@ const navItems = [
 ]
 
 export function Navbar() {
-  const { user, isGuest, isLoading, requireAuth, signOut, settings } = useAuth()
+  const { user, isGuest, isLoading, requireAuth, signOut } = useAuth()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
   const handleSignIn = () => requireAuth('Sign in to save your work and access it from any device.')
@@ -90,7 +90,7 @@ export function Navbar() {
                 </>
               ) : (
                 <>
-                  <span className="hidden max-w-[160px] truncate text-xs text-slate-500 sm:inline">{settings.name || user?.email}</span>
+                  <span className="hidden max-w-[160px] truncate text-xs text-slate-500 sm:inline">{user?.email}</span>
                   <button type="button" onClick={() => signOut().then(() => { window.location.href = '/' })}
                     className="rounded-full border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100">
                     Sign Out
@@ -147,7 +147,7 @@ export function Navbar() {
                 </>
               ) : (
                 <>
-                  <p className="truncate px-1 text-xs text-slate-500">{settings.name || user?.email}</p>
+                  <p className="truncate px-1 text-xs text-slate-500">{user?.email}</p>
                   <button
                     type="button"
                     onClick={handleMobileSignOut}
