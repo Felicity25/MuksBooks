@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedUser } from '@/lib/supabase/server'
 import { getUnitMastery, setUnitMastery } from '@/lib/app-state/service'
+import { syncCloudMastery } from '@/lib/supabase/documents-service'
 
 export const runtime = 'nodejs'
 
@@ -35,6 +36,20 @@ export async function POST(request: NextRequest) {
     }
 
     const mastery = setUnitMastery(user.id, courseId, masteryLevel)
+
+    // Sync to Supabase mastery_records (requires course code — look up from SQLite)
+    void (async () => {
+      try {
+        // Get the course code from SQLite to use for Supabase lookup
+        const { listCourses } = await import('@/lib/app-state/service')
+        const courses = listCourses(user.id)
+        const course = courses.find((c) => c.id === courseId)
+        if (course?.course_code) {
+          await syncCloudMastery(user.id, course.course_code, masteryLevel)
+        }
+      } catch { /* non-fatal */ }
+    })()
+
     return NextResponse.json({ ok: true, mastery })
   } catch (error) {
     console.error('[UnitMastery POST] Failed:', error)

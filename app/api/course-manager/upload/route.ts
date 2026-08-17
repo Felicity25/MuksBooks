@@ -4,12 +4,25 @@ import { classifyResource } from '@/lib/course-manager/classification'
 import { addBatchFile, createUploadBatch, getUploadBatch, recomputeBatchStatus, updateBatchFileStatus, upsertCourse } from '@/lib/app-state/service'
 import { appendLog } from '@/lib/logging'
 import { requireAuthCookie } from '@/lib/api-auth'
+import { getAuthenticatedUser } from '@/lib/supabase/server'
+import {
+  uploadFileToStorage,
+  persistUploadMetadata,
+  persistDocumentChunks,
+  upsertCloudUnit
+} from '@/lib/supabase/documents-service'
 
 export const runtime = 'nodejs'
 
 export async function POST(request: NextRequest) {
   const authError = requireAuthCookie(request)
   if (authError) return authError
+
+  const user = await getAuthenticatedUser()
+  if (!user) {
+    return NextResponse.json({ ok: false, error: 'Authentication required', code: 'UNAUTHENTICATED' }, { status: 401 })
+  }
+
   try {
     await appendLog('uploads', '[UPLOAD] request received', { route: '/api/course-manager/upload' })
     const form = await request.formData()
@@ -65,18 +78,21 @@ export async function POST(request: NextRequest) {
       courseName,
       semester,
       university,
-      source: 'batch_upload'
+      source: 'batch_upload',
+      userId: user.id
     })
 
     const totalBytes = files.reduce((acc, file) => acc + file.size, 0)
     const batch = batchIdFromClient
       ? getUploadBatch(batchIdFromClient) || createUploadBatch({
+          userId: user.id,
           courseId: course.id,
           name: batchName || `${targetCourseCode} · ${new Date().toISOString().slice(0, 10)} · ${files.length} files`,
           totalFiles: files.length,
           totalBytes
         })
       : createUploadBatch({
+          userId: user.id,
           courseId: course.id,
           name: batchName || `${targetCourseCode} · ${new Date().toISOString().slice(0, 10)} · ${files.length} files`,
           totalFiles: files.length,
@@ -100,6 +116,7 @@ export async function POST(request: NextRequest) {
 
       return addBatchFile({
         batchId,
+        userId: user.id,
         courseId: course.id,
         originalFilename: file.name,
         displayName: file.name,
@@ -131,6 +148,7 @@ export async function POST(request: NextRequest) {
 
         updateBatchFileStatus({ batchFileId: batchFile.id, status: 'PROCESSING' })
         const upload = await ingestUpload({
+          userId: user.id,
           fileName: file.name,
           originalFilename: file.name,
           mimeType: file.type || 'application/octet-stream',
@@ -162,6 +180,32 @@ export async function POST(request: NextRequest) {
           fileHash: typeof upload.fileHash === 'string' ? upload.fileHash : undefined,
           version: typeof upload.version === 'number' ? upload.version : undefined
         })
+
+        // Persist to Supabase Storage + Postgres (non-blocking; local SQLite already written above)
+        if (!upload.duplicated && upload.documentId) {
+          void (async () => {
+            try {
+              const storagePath = await uploadFileToStorage(user.id, String(upload.documentId), file.name, buffer, file.type || 'application/octet-stream')
+              await upsertCloudUnit(user.id, upload.courseCode || targetCourseCode, courseName || upload.courseCode || targetCourseCode, semester)
+              const uploadId = await persistUploadMetadata(user.id, String(upload.documentId), storagePath ?? `pending/${upload.documentId}/${file.name}`, {
+                fileName: file.name,
+                mimeType: file.type || 'application/octet-stream',
+                sizeBytes: file.size,
+                courseCode: upload.courseCode || targetCourseCode,
+                fileHash: typeof upload.fileHash === 'string' ? upload.fileHash : '',
+                chunkCount: upload.chunks ?? 0,
+                documentType: upload.documentType,
+                week: metadata?.week ?? undefined,
+                resourceType: metadata?.resourceType ?? undefined
+              })
+              if (upload.chunkData && upload.chunkData.length > 0) {
+                await persistDocumentChunks(user.id, uploadId, String(upload.documentId), upload.courseCode || targetCourseCode, upload.chunkData)
+              }
+            } catch (cloudErr) {
+              console.error('[Upload] Cloud persistence failed (non-fatal):', cloudErr)
+            }
+          })()
+        }
 
         results.push({
           fileName: file.name,

@@ -3,6 +3,7 @@ import OpenAI from 'openai'
 import Anthropic from '@anthropic-ai/sdk'
 import { AiTutorRequestBody, buildSystemPrompt, buildOptimizedPrompt, formatDemoResponse } from '@/lib/ai-helper'
 import { buildTutorRetrievalContext } from '@/lib/tutor-agent/service'
+import { getAuthenticatedUser } from '@/lib/supabase/server'
 
 const provider = process.env.AI_PROVIDER || 'anthropic'
 const openaiModel = process.env.OPENAI_MODEL || 'gpt-4o-mini'
@@ -43,7 +44,8 @@ export async function POST(request: NextRequest) {
     console.log('[AI Tutor] Processing request:', { unit, topic, mode, messageLength: message.length })
 
     // Retrieval-first architecture: always query Knowledge Base before generation
-    const retrievalContext = await buildTutorRetrievalContext(body)
+    const tutorUser = await getAuthenticatedUser()
+    const retrievalContext = await buildTutorRetrievalContext(body, tutorUser?.id)
     const enrichedBody: AiTutorRequestBody = {
       ...body,
       unit: body.unit || retrievalContext.availableUnits[0],

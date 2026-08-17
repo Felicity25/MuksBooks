@@ -2,6 +2,7 @@ import type { AiTutorRequestBody } from '@/lib/ai-helper'
 import { searchKnowledgeBase } from '@/lib/knowledge-base/search'
 import { appendLog } from '@/lib/logging'
 import { getLessonContext, listDocuments } from '@/lib/app-state/service'
+import { listCloudDocuments } from '@/lib/supabase/documents-service'
 
 export interface TutorRetrievalContext {
   availableUnits: string[]
@@ -11,9 +12,26 @@ export interface TutorRetrievalContext {
   unitContext: string
 }
 
-export async function buildTutorRetrievalContext(request: AiTutorRequestBody): Promise<TutorRetrievalContext> {
+export async function buildTutorRetrievalContext(request: AiTutorRequestBody, userId?: string): Promise<TutorRetrievalContext> {
   const lessonContext = await getLessonContext({ unit: request.unit, topic: request.topic })
-  const allDocuments = await listDocuments({ limit: 1000 })
+
+  // Prefer Supabase document list (persistent) when authenticated
+  let allDocuments: Array<{ course_code: string | null; filename: string; document_type?: string | null; processing_status?: string | null; indexing_status?: string | null }> = []
+  if (userId) {
+    const cloudDocs = await listCloudDocuments(userId)
+    if (cloudDocs !== null && cloudDocs.length > 0) {
+      allDocuments = cloudDocs.map((d) => ({
+        course_code: d.course_code ?? null,
+        filename: d.original_filename,
+        document_type: d.document_type ?? null,
+        processing_status: d.processing_status ?? null,
+        indexing_status: d.processing_status === 'tutor_ready' ? 'indexed' : null
+      }))
+    }
+  }
+  if (allDocuments.length === 0) {
+    allDocuments = await listDocuments({ limit: 1000 })
+  }
 
   const availableUnits = Array.from(
     new Set(
@@ -28,7 +46,8 @@ export async function buildTutorRetrievalContext(request: AiTutorRequestBody): P
     ? normalizedRequestedUnit
     : lessonContext.units[0]?.code || availableUnits[0]
 
-  const hits = await searchKnowledgeBase(request.message, chosenUnit, 10)
+  // Pass userId so search prefers Supabase chunks
+  const hits = await searchKnowledgeBase(request.message, chosenUnit, 10, userId)
   const relevantChunks = hits.map((hit) => `${hit.chunk.text.slice(0, 800)}\n[section:${hit.chunk.sectionTitle || 'general'}][score:${hit.score.toFixed(3)}]`)
 
   const scopedDocuments = chosenUnit
@@ -56,7 +75,8 @@ export async function buildTutorRetrievalContext(request: AiTutorRequestBody): P
     selectedUnit: chosenUnit || null,
     availableUnits,
     resultCount: hits.length,
-    documentCount: scopedDocuments.length
+    documentCount: scopedDocuments.length,
+    source: userId ? 'cloud' : 'local'
   })
 
   return {

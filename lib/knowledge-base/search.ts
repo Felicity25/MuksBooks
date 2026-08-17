@@ -42,7 +42,50 @@ function addNeighborChunks(sorted: SearchResult[], allChunks: ChunkRecord[]) {
   return Array.from(picked.values()).sort((a, b) => b.score - a.score)
 }
 
-export async function searchKnowledgeBase(query: string, courseCode?: string, limit = 8): Promise<SearchResult[]> {
+/**
+ * Search the knowledge base for chunks relevant to `query`.
+ * When `userId` is provided and authenticated, prefers Supabase document_chunks
+ * (persistent across Vercel redeploys) over the local filesystem catalog.
+ */
+export async function searchKnowledgeBase(query: string, courseCode?: string, limit = 8, userId?: string): Promise<SearchResult[]> {
+  // ── Supabase path (production, persistent) ─────────────────────────────────
+  if (userId) {
+    try {
+      const { searchCloudChunks } = await import('@/lib/supabase/documents-service')
+      const cloudChunks = await searchCloudChunks(userId, courseCode, limit * 4)
+      if (cloudChunks && cloudChunks.length > 0) {
+        const queryEmbedding = await embedText(query)
+        const scored = cloudChunks
+          .map((c) => {
+            const emb: number[] = Array.isArray(c.embedding) ? c.embedding : []
+            return {
+              chunk: {
+                chunkId: c.id,
+                documentId: c.document_id,
+                chunkIndex: c.chunk_index,
+                sectionTitle: c.section ?? '',
+                text: c.text,
+                keywords: [],
+                relationships: [],
+                embeddingPath: '',
+                sourcePriority: 1,
+                version: 1
+              } as ChunkRecord,
+              score: emb.length > 0 ? cosineSimilarity(queryEmbedding, emb) : 0
+            }
+          })
+          .sort((a, b) => b.score - a.score)
+          .slice(0, limit)
+
+        await appendLog('searches', 'Knowledge base search (cloud)', { returned: scored.length }).catch(() => {})
+        return scored
+      }
+    } catch {
+      // Fall through to local filesystem search
+    }
+  }
+
+  // ── Local filesystem path (local dev / fallback) ────────────────────────────
   const catalog = await loadCatalog()
   const queryEmbedding = await embedText(query)
 

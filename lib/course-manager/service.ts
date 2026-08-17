@@ -80,6 +80,15 @@ export interface UploadPayload {
   }
 }
 
+export interface UploadChunkResult {
+  id: string
+  chunkIndex: number
+  text: string
+  section?: string
+  embedding: number[]
+  keywords: string[]
+}
+
 export async function ingestUpload(payload: UploadPayload) {
   await appendLog('uploads', '[UPLOAD] request received', {
     fileName: payload.fileName,
@@ -256,6 +265,7 @@ export async function ingestUpload(payload: UploadPayload) {
 
     const blocks = semanticChunk(extractedText)
     const chunkIds: string[] = []
+    const chunkResults: UploadChunkResult[] = []
 
     await appendLog('uploads', '[UPLOAD] indexing started', {
       documentId,
@@ -268,6 +278,7 @@ export async function ingestUpload(payload: UploadPayload) {
       const relEmbeddingPath = path.join('embeddings', `${chunkId}.json`)
       const embedding = await embedText(block.text)
       await saveEmbedding(relEmbeddingPath, embedding)
+      const keywords = extractKeywords(block.text)
 
       const chunk: ChunkRecord = {
         chunkId,
@@ -276,7 +287,7 @@ export async function ingestUpload(payload: UploadPayload) {
         chunkIndex: i,
         sectionTitle: block.title,
         text: block.text,
-        keywords: extractKeywords(block.text),
+        keywords,
         relationships: [],
         embeddingPath: relEmbeddingPath,
         sourcePriority: 1
@@ -284,6 +295,7 @@ export async function ingestUpload(payload: UploadPayload) {
 
       chunkIds.push(chunkId)
       catalog.chunks.push(chunk)
+      chunkResults.push({ id: chunkId, chunkIndex: i, text: block.text, section: block.title, embedding, keywords })
 
       const chunkPath = path.join(courseRoot, 'Chunks', `${chunkId}.txt`)
       await fs.writeFile(chunkPath, block.text, 'utf8')
@@ -371,7 +383,7 @@ export async function ingestUpload(payload: UploadPayload) {
       curriculumVersion: catalog.activeCurriculumVersion
     })
 
-    return { documentId, duplicated: false, chunks: chunkIds.length, courseCode: enrichedMetadata.courseCode, fileHash, version }
+    return { documentId, duplicated: false, chunks: chunkIds.length, courseCode: enrichedMetadata.courseCode, fileHash, version, chunkData: chunkResults, documentType: enrichedMetadata.documentType }
   } catch (error: any) {
     createOrUpdateDocument({
       id: documentId,
