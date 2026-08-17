@@ -78,10 +78,11 @@ export async function GET(request: NextRequest) {
     const disciplines = parseCsv(searchParams.get('disciplines'))
     const countries = parseCsv(searchParams.get('countries'))
     const companies = parseCsv(searchParams.get('companies'))
+    const careerAreas = parseCsv(searchParams.get('careerAreas'))
 
     const discover = cloudClient
-      ? await listDiscoverJobsSupabase(cloudClient, { q, roleTypes, disciplines, countries, companies })
-      : listDiscoverJobs({ q, roleTypes, disciplines, countries, companies })
+      ? await listDiscoverJobsSupabase(cloudClient, { q, roleTypes, disciplines, countries, companies, careerAreas })
+      : listDiscoverJobs({ q, roleTypes, disciplines, countries, companies, careerAreas })
     const companyList = cloudClient
       ? await listCompaniesSupabase(cloudClient)
       : listCompanies()
@@ -216,6 +217,7 @@ export async function POST(request: NextRequest) {
         const assessmentId = await createAssessmentSupabase(cloudClient, userId!, {
           applicationId: body.applicationId || null,
           companyId: body.companyId || null,
+          customCompanyName: body.customCompanyName || null,
           assessmentType: body.assessmentType || 'Online Assessment',
           title: body.title,
           invitationReceivedAtUtc: body.invitationReceivedAtUtc || null,
@@ -233,6 +235,7 @@ export async function POST(request: NextRequest) {
       const assessmentId = createAssessment(userId!, {
         applicationId: body.applicationId || null,
         companyId: body.companyId || null,
+        customCompanyName: body.customCompanyName || null,
         assessmentType: body.assessmentType || 'Online Assessment',
         title: body.title,
         invitationReceivedAtUtc: body.invitationReceivedAtUtc || null,

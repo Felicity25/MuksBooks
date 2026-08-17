@@ -44,6 +44,8 @@ const TABS: Array<{ key: TabKey; label: string }> = [
 const ROLE_TYPES = ['Graduate', 'Internship', 'Vacation Program', 'Entry Level', 'Analyst', 'Actuarial Analyst']
 const DISCIPLINES = ['Actuarial', 'Insurance', 'Risk', 'Investments', 'Consulting', 'Superannuation', 'Finance', 'Data', 'Quantitative', 'Reinsurance']
 const COUNTRIES = ['Australia', 'South Africa', 'United Kingdom', 'International']
+const CAREER_AREAS = ['All', 'Actuarial', 'Banking', 'Technology']
+const OTHER_COMPANY_VALUE = '__other__'
 const APPLICATION_STAGES = [
   'Interested', 'Preparing', 'Ready to Apply', 'Applied', 'Online Assessment', 'Video Interview', 'Phone Interview', 'Interview',
   'Assessment Centre', 'Final Interview', 'Offer', 'Accepted', 'Rejected', 'Withdrawn', 'Closed'
@@ -115,8 +117,10 @@ export function CareersManager() {
   const [selectedDisciplines, setSelectedDisciplines] = useState<string[]>([])
   const [selectedCountries, setSelectedCountries] = useState<string[]>([])
   const [selectedCompanies, setSelectedCompanies] = useState<string[]>([])
+  const [selectedCareerArea, setSelectedCareerArea] = useState<string>('All')
   const [assessmentForm, setAssessmentForm] = useState({
     companyId: '',
+    customCompanyName: '',
     applicationId: '',
     title: '',
     assessmentType: 'Online Assessment',
@@ -134,8 +138,9 @@ export function CareersManager() {
     if (selectedDisciplines.length) params.set('disciplines', selectedDisciplines.join(','))
     if (selectedCountries.length) params.set('countries', selectedCountries.join(','))
     if (selectedCompanies.length) params.set('companies', selectedCompanies.join(','))
+    if (selectedCareerArea !== 'All') params.set('careerAreas', selectedCareerArea)
     return params.toString()
-  }, [query, selectedRoleTypes, selectedDisciplines, selectedCountries, selectedCompanies])
+  }, [query, selectedRoleTypes, selectedDisciplines, selectedCountries, selectedCompanies, selectedCareerArea])
 
   const loadCareers = async () => {
     setIsLoading(true)
@@ -301,13 +306,21 @@ export function CareersManager() {
       ? new Date(assessmentForm.deadlineAt).toISOString()
       : null
 
+    const isOtherCompany = assessmentForm.companyId === OTHER_COMPANY_VALUE
+    const trimmedCustomCompanyName = assessmentForm.customCompanyName.trim()
+    if (isOtherCompany && !trimmedCustomCompanyName) {
+      setMessage('Enter a company name for "Other".')
+      return
+    }
+
     await runProtectedAction('Sign in to track assessments and deadlines.', async () => {
       const response = await fetch('/api/careers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'create-assessment',
-          companyId: assessmentForm.companyId || null,
+          companyId: isOtherCompany ? null : (assessmentForm.companyId || null),
+          customCompanyName: isOtherCompany ? trimmedCustomCompanyName : null,
           applicationId: assessmentForm.applicationId || null,
           title: assessmentForm.title,
           assessmentType: assessmentForm.assessmentType,
@@ -327,6 +340,7 @@ export function CareersManager() {
 
       setAssessmentForm({
         companyId: '',
+        customCompanyName: '',
         applicationId: '',
         title: '',
         assessmentType: 'Online Assessment',
@@ -479,6 +493,15 @@ export function CareersManager() {
             />
           </div>
 
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Career area</p>
+            <div className="flex flex-wrap gap-2">
+              {CAREER_AREAS.map((area) => (
+                <Button key={area} size="sm" variant={selectedCareerArea === area ? 'default' : 'outline'} onClick={() => setSelectedCareerArea(area)}>{area}</Button>
+              ))}
+            </div>
+          </div>
+
           <div className="grid gap-3 lg:grid-cols-3">
             <div className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Role type</p>
@@ -524,7 +547,7 @@ export function CareersManager() {
                     )}
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <a href={job.applicationUrl} target="_blank" rel="noreferrer"><Button size="sm">Apply on Company Website</Button></a>
+                    {job.applicationUrl && <a href={job.applicationUrl} target="_blank" rel="noreferrer"><Button size="sm">Apply on Company Website</Button></a>}
                     <Button size="sm" variant="outline" onClick={() => handleSaveRole(job.id)}>Save Role</Button>
                     <Button size="sm" variant="outline" onClick={() => handleTrackApplication(job.id)}>I've Applied</Button>
                     <Button size="sm" variant="outline" onClick={() => handleFollowCompany(job.companyId)}>Follow Company</Button>
@@ -704,7 +727,17 @@ export function CareersManager() {
               <select value={assessmentForm.companyId} onChange={(event) => setAssessmentForm((current) => ({ ...current, companyId: event.target.value }))} className="rounded-md border border-slate-300 px-3 py-2 text-sm">
                 <option value="">Select company</option>
                 {state.companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
+                <option value={OTHER_COMPANY_VALUE}>Other</option>
               </select>
+              {assessmentForm.companyId === OTHER_COMPANY_VALUE && (
+                <input
+                  value={assessmentForm.customCompanyName}
+                  onChange={(event) => setAssessmentForm((current) => ({ ...current, customCompanyName: event.target.value }))}
+                  required
+                  placeholder="Company name"
+                  className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+                />
+              )}
               <select value={assessmentForm.applicationId} onChange={(event) => setAssessmentForm((current) => ({ ...current, applicationId: event.target.value }))} className="rounded-md border border-slate-300 px-3 py-2 text-sm">
                 <option value="">Link application (optional)</option>
                 {state.applications.map((application) => <option key={application.id} value={application.id}>{application.title}</option>)}

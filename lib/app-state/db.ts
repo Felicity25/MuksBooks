@@ -529,6 +529,8 @@ function migrate(db: any) {
   ensureColumn(db, 'documents', 'academic_year', 'INTEGER')
   ensureColumn(db, 'courses', 'user_id', 'TEXT')
   ensureColumn(db, 'planner_tasks', 'career_assessment_id', 'TEXT')
+  ensureColumn(db, 'career_jobs', 'career_area', "TEXT NOT NULL DEFAULT 'Actuarial'")
+  ensureColumn(db, 'career_assessments', 'custom_company_name', 'TEXT')
 
   ensureColumn(db, 'batch_files', 'batch_id', 'TEXT')
   ensureColumn(db, 'batch_files', 'processing_status', 'TEXT')
@@ -562,6 +564,7 @@ function migrate(db: any) {
 
     CREATE INDEX IF NOT EXISTS idx_career_jobs_company ON career_jobs(company_id);
     CREATE INDEX IF NOT EXISTS idx_career_jobs_active ON career_jobs(is_active);
+    CREATE INDEX IF NOT EXISTS idx_career_jobs_area ON career_jobs(career_area);
     CREATE INDEX IF NOT EXISTS idx_career_follow_user ON career_company_follows(user_id);
     CREATE INDEX IF NOT EXISTS idx_career_saved_user ON career_saved_jobs(user_id);
     CREATE INDEX IF NOT EXISTS idx_career_app_user ON career_applications(user_id);

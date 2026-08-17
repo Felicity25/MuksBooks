@@ -5,6 +5,7 @@ import {
   setUserTaskCompletion,
   updateUserTask
 } from '@/lib/cloud/service'
+import { resolveJobApplicationUrl, isJobListingExpired } from '@/lib/careers/opportunity-utils'
 
 type SupabaseClient = any
 
@@ -139,11 +140,12 @@ export async function listDiscoverJobsSupabase(client: SupabaseClient, filters: 
   disciplines?: string[]
   countries?: string[]
   companies?: string[]
+  careerAreas?: string[]
 }) {
   const { data, error } = await client
     .from('career_jobs')
     .select(`
-      id, company_id, external_job_id, job_title, location, city, country, role_type, discipline,
+      id, company_id, external_job_id, job_title, location, city, country, role_type, discipline, career_area,
       description, requirements, opening_date, closing_date, closing_time, application_url,
       source_url, source_type, work_rights_information, international_student_information,
       date_found, last_verified, source_timezone,
@@ -160,6 +162,7 @@ export async function listDiscoverJobsSupabase(client: SupabaseClient, filters: 
   const disciplines = (filters.disciplines || []).map((v) => normalizeText(v))
   const countries = (filters.countries || []).map((v) => normalizeText(v))
   const companies = (filters.companies || []).map((v) => normalizeText(v))
+  const careerAreas = (filters.careerAreas || []).map((v) => normalizeText(v))
 
   const rows = (data || []).filter((row: any) => {
     const company = row.career_companies
@@ -175,40 +178,48 @@ export async function listDiscoverJobsSupabase(client: SupabaseClient, filters: 
     if (disciplines.length && !disciplines.includes(normalizeText(row.discipline))) return false
     if (countries.length && !countries.includes(normalizeText(row.country))) return false
     if (companies.length && !companies.includes(normalizeText(company?.name))) return false
+    if (careerAreas.length && !careerAreas.includes(normalizeText(row.career_area))) return false
     return true
   })
 
-  return rows.map((row: any) => {
-    const company = row.career_companies
-    return {
-      id: row.id,
-      companyId: row.company_id,
-      company: company?.name || null,
-      companySlug: company?.slug || null,
-      companyProfileAvailable: Boolean(company?.profile_created),
-      officialCareersUrl: company?.official_careers_url || null,
-      jobTitle: row.job_title,
-      externalJobId: row.external_job_id,
-      location: row.location,
-      city: row.city,
-      country: row.country,
-      roleType: row.role_type,
-      discipline: row.discipline,
-      description: row.description,
-      requirements: row.requirements,
-      openingDate: row.opening_date,
-      closingDate: row.closing_date,
-      closingTime: row.closing_time,
-      applicationUrl: row.application_url,
-      sourceUrl: row.source_url,
-      sourceType: row.source_type,
-      workRightsInformation: row.work_rights_information || 'Not stated',
-      internationalStudentInformation: row.international_student_information || 'Not stated',
-      dateFound: row.date_found,
-      lastVerified: row.last_verified,
-      sourceTimezone: row.source_timezone
-    }
-  })
+  return rows
+    .map((row: any) => {
+      const company = row.career_companies
+      return {
+        id: row.id,
+        companyId: row.company_id,
+        company: company?.name || null,
+        companySlug: company?.slug || null,
+        companyProfileAvailable: Boolean(company?.profile_created),
+        officialCareersUrl: company?.official_careers_url || null,
+        jobTitle: row.job_title,
+        externalJobId: row.external_job_id,
+        location: row.location,
+        city: row.city,
+        country: row.country,
+        roleType: row.role_type,
+        discipline: row.discipline,
+        careerArea: row.career_area || 'Actuarial',
+        description: row.description,
+        requirements: row.requirements,
+        openingDate: row.opening_date,
+        closingDate: row.closing_date,
+        closingTime: row.closing_time,
+        applicationUrl: resolveJobApplicationUrl({
+          applicationUrl: row.application_url,
+          sourceUrl: row.source_url,
+          officialCareersUrl: company?.official_careers_url
+        }),
+        sourceUrl: row.source_url,
+        sourceType: row.source_type,
+        workRightsInformation: row.work_rights_information || 'Not stated',
+        internationalStudentInformation: row.international_student_information || 'Not stated',
+        dateFound: row.date_found,
+        lastVerified: row.last_verified,
+        sourceTimezone: row.source_timezone
+      }
+    })
+    .filter((job: { applicationUrl: string | null; closingDate: unknown }) => Boolean(job.applicationUrl) && !isJobListingExpired(job.closingDate as string | null))
 }
 
 export async function getCompanyDetailsSupabase(client: SupabaseClient, companyId: string, userId?: string) {
@@ -223,7 +234,7 @@ export async function getCompanyDetailsSupabase(client: SupabaseClient, companyI
 
   const { data: jobs, error: jobsError } = await client
     .from('career_jobs')
-    .select('id, job_title, location, role_type, discipline, application_url, source_url, last_verified')
+    .select('id, job_title, location, role_type, discipline, career_area, application_url, source_url, last_verified')
     .eq('company_id', companyId)
     .eq('is_active', true)
     .order('last_verified', { ascending: false, nullsFirst: false })
@@ -274,7 +285,12 @@ export async function getCompanyDetailsSupabase(client: SupabaseClient, companyI
       location: job.location,
       roleType: job.role_type,
       discipline: job.discipline,
-      applicationUrl: job.application_url,
+      careerArea: job.career_area || 'Actuarial',
+      applicationUrl: resolveJobApplicationUrl({
+        applicationUrl: job.application_url,
+        sourceUrl: job.source_url,
+        officialCareersUrl: company.official_careers_url
+      }),
       sourceUrl: job.source_url,
       lastVerified: job.last_verified
     }))
@@ -378,7 +394,7 @@ export async function listFollowingSupabase(client: SupabaseClient, userId: stri
   const [jobsResponse, checksResponse] = await Promise.all([
     client
       .from('career_jobs')
-      .select('id, company_id, job_title, location, country, role_type, discipline, application_url, last_verified')
+      .select('id, company_id, job_title, location, country, role_type, discipline, career_area, application_url, last_verified')
       .in('company_id', companyIds.length ? companyIds : ['__none__'])
       .eq('is_active', true),
     client
@@ -459,7 +475,12 @@ export async function listFollowingSupabase(client: SupabaseClient, userId: stri
         location: job.location,
         roleType: job.role_type,
         discipline: job.discipline,
-        applicationUrl: job.application_url,
+        careerArea: job.career_area || 'Actuarial',
+        applicationUrl: resolveJobApplicationUrl({
+          applicationUrl: job.application_url,
+          sourceUrl: undefined,
+          officialCareersUrl: company.official_careers_url
+        }),
         lastVerified: job.last_verified
       }))
     }
@@ -478,9 +499,14 @@ function buildJobSnapshot(job: any) {
     location: job.location,
     roleType: job.role_type,
     discipline: job.discipline,
+    careerArea: job.career_area || 'Actuarial',
     closingDate: job.closing_date,
     closingTime: job.closing_time,
-    applicationUrl: job.application_url,
+    applicationUrl: resolveJobApplicationUrl({
+      applicationUrl: job.application_url,
+      sourceUrl: job.source_url,
+      officialCareersUrl: company?.official_careers_url
+    }),
     sourceUrl: job.source_url,
     sourceType: job.source_type,
     workRightsInformation: job.work_rights_information || 'Not stated',
@@ -493,10 +519,10 @@ export async function saveRoleSupabase(client: SupabaseClient, userId: string, j
   const { data: job, error: jobError } = await client
     .from('career_jobs')
     .select(`
-      id, company_id, job_title, description, requirements, location, role_type, discipline,
+      id, company_id, job_title, description, requirements, location, role_type, discipline, career_area,
       closing_date, closing_time, application_url, source_url, source_type,
       work_rights_information, international_student_information, last_verified,
-      career_companies!inner(name)
+      career_companies!inner(name, official_careers_url)
     `)
     .eq('id', jobId)
     .maybeSingle()
@@ -549,7 +575,7 @@ export async function createApplicationFromJobSupabase(client: SupabaseClient, u
 }) {
   const { data: job, error: jobError } = await client
     .from('career_jobs')
-    .select('id, company_id, job_title, description, requirements, location, role_type, discipline, closing_date, closing_time, application_url, source_url, source_type, work_rights_information, international_student_information, last_verified, career_companies!inner(name)')
+    .select('id, company_id, job_title, description, requirements, location, role_type, discipline, career_area, closing_date, closing_time, application_url, source_url, source_type, work_rights_information, international_student_information, last_verified, career_companies!inner(name, official_careers_url)')
     .eq('id', input.jobId)
     .maybeSingle()
 
@@ -732,7 +758,7 @@ async function createPlannerTaskForAssessmentSupabase(_client: SupabaseClient, _
 export async function addAssessmentToPlannerSupabase(client: SupabaseClient, userId: string, assessmentId: string) {
   const { data: assessment, error } = await client
     .from('career_assessments')
-    .select('id, title, deadline_at_utc, deadline_has_exact_time, company_id, planner_task_id')
+    .select('id, title, deadline_at_utc, deadline_has_exact_time, company_id, custom_company_name, planner_task_id')
     .eq('id', assessmentId)
     .eq('user_id', userId)
     .maybeSingle()
@@ -750,12 +776,13 @@ export async function addAssessmentToPlannerSupabase(client: SupabaseClient, use
     .maybeSingle()
 
   if (companyError) throw new Error(companyError.message)
-  return createPlannerTaskForAssessmentSupabase(client, userId, assessment, company?.name || null)
+  return createPlannerTaskForAssessmentSupabase(client, userId, assessment, company?.name || assessment.custom_company_name || null)
 }
 
 export async function createAssessmentSupabase(client: SupabaseClient, userId: string, input: {
   applicationId?: string | null
   companyId?: string | null
+  customCompanyName?: string | null
   assessmentType: string
   title: string
   invitationReceivedAtUtc?: string | null
@@ -780,12 +807,14 @@ export async function createAssessmentSupabase(client: SupabaseClient, userId: s
 
   const hasExact = Boolean(input.deadlineHasExactTime && computedDeadlineAtUtc)
   const assessmentId = makeId('carass')
+  const customCompanyName = input.companyId ? null : (input.customCompanyName?.trim() || null)
 
   const { error } = await client.from('career_assessments').insert({
     id: assessmentId,
     user_id: userId,
     application_id: input.applicationId || null,
     company_id: input.companyId || null,
+    custom_company_name: customCompanyName,
     assessment_type: input.assessmentType,
     title: input.title,
     status: 'Incomplete',
@@ -812,7 +841,7 @@ export async function createAssessmentSupabase(client: SupabaseClient, userId: s
       .maybeSingle()
     if (companyError) throw new Error(companyError.message)
 
-    await createPlannerTaskForAssessmentSupabase(client, userId, { id: assessmentId, deadline_at_utc: computedDeadlineAtUtc }, company?.name || null)
+    await createPlannerTaskForAssessmentSupabase(client, userId, { id: assessmentId, deadline_at_utc: computedDeadlineAtUtc }, company?.name || customCompanyName)
   }
 
   if (input.applicationId) {
@@ -1056,7 +1085,7 @@ export async function runCvMatchSupabase(client: SupabaseClient, userId: string,
 export async function listAssessmentsSupabase(client: SupabaseClient, userId: string) {
   const { data, error } = await client
     .from('career_assessments')
-    .select('id, assessment_type, title, status, invitation_received_at_utc, deadline_rule_hours, deadline_at_utc, deadline_date_only, deadline_has_exact_time, employer_deadline_label, employer_timezone, assessment_url, notes, completed_at_utc, planner_task_id, career_companies(name), career_applications(title)')
+    .select('id, assessment_type, title, status, invitation_received_at_utc, deadline_rule_hours, deadline_at_utc, deadline_date_only, deadline_has_exact_time, employer_deadline_label, employer_timezone, assessment_url, notes, completed_at_utc, planner_task_id, custom_company_name, career_companies(name), career_applications(title)')
     .eq('user_id', userId)
     .order('deadline_at_utc', { ascending: true, nullsFirst: false })
 
@@ -1064,7 +1093,7 @@ export async function listAssessmentsSupabase(client: SupabaseClient, userId: st
 
   return (data || []).map((row: any) => ({
     id: row.id,
-    company: row.career_companies?.name || null,
+    company: row.career_companies?.name || row.custom_company_name || null,
     applicationTitle: row.career_applications?.title || null,
     assessmentType: row.assessment_type,
     title: row.title,

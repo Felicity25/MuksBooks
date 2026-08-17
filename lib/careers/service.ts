@@ -1,6 +1,7 @@
 import crypto from 'crypto'
 import { getDb, nowIso } from '@/lib/app-state/db'
 import { ensureUser } from '@/lib/app-state/service'
+import { resolveJobApplicationUrl, isJobListingExpired } from '@/lib/careers/opportunity-utils'
 
 export type CareerStage =
   | 'Interested'
@@ -57,32 +58,288 @@ function normalizeSlug(name: string) {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
 }
 
+const ACTUARIAL_COMPANIES = [
+  { name: 'Mercer', official_careers_url: 'https://careers.mercer.com/' },
+  { name: 'Aon', official_careers_url: 'https://jobs.aon.com/' },
+  { name: 'QBE', official_careers_url: 'https://careers.qbe.com/' },
+  { name: 'Deloitte', official_careers_url: 'https://apply.deloitte.com/careers' },
+  { name: 'EY', official_careers_url: 'https://careers.ey.com/' },
+  { name: 'KPMG', official_careers_url: 'https://kpmg.com/careers' },
+  { name: 'PwC', official_careers_url: 'https://www.pwc.com/gx/en/careers.html' },
+  { name: 'Swiss Re', official_careers_url: 'https://careers.swissre.com/' },
+  { name: 'Munich Re', official_careers_url: 'https://www.munichre.com/en/company/careers.html' },
+  { name: 'Allianz', official_careers_url: 'https://careers.allianz.com/' },
+  { name: 'TAL', official_careers_url: 'https://www.tal.com.au/about-us/careers' },
+  { name: 'Suncorp', official_careers_url: 'https://www.suncorpgroup.com.au/careers' }
+]
+
+const BANKING_COMPANIES = [
+  { name: 'Goldman Sachs', official_careers_url: 'https://www.goldmansachs.com/careers/' },
+  { name: 'JPMorgan Chase', official_careers_url: 'https://careers.jpmorgan.com/' },
+  { name: 'Macquarie Group', official_careers_url: 'https://www.macquarie.com/careers' },
+  { name: 'Commonwealth Bank', official_careers_url: 'https://www.commbank.com.au/about-us/careers.html' },
+  { name: 'Morgan Stanley', official_careers_url: 'https://www.morganstanley.com/careers' },
+  { name: 'Citi', official_careers_url: 'https://jobs.citi.com/' }
+]
+
+const TECHNOLOGY_COMPANIES = [
+  { name: 'Google', official_careers_url: 'https://careers.google.com/' },
+  { name: 'Microsoft', official_careers_url: 'https://careers.microsoft.com/' },
+  { name: 'Amazon', official_careers_url: 'https://www.amazon.jobs/' },
+  { name: 'Atlassian', official_careers_url: 'https://www.atlassian.com/company/careers' },
+  { name: 'Canva', official_careers_url: 'https://www.canva.com/careers/' },
+  { name: 'Accenture', official_careers_url: 'https://www.accenture.com/us-en/careers' }
+]
+
+const ACTUARIAL_JOBS = [
+  {
+    company: 'Mercer',
+    title: 'Graduate Actuarial Analyst',
+    location: 'Melbourne, Australia',
+    city: 'Melbourne',
+    country: 'Australia',
+    role_type: 'Graduate',
+    discipline: 'Actuarial',
+    careerArea: 'Actuarial',
+    requirements: 'Bachelor degree in Actuarial Science, Excel, R or Python, communication skills.',
+    work_rights_information: 'Valid Australian work rights required',
+    international_student_information: 'Not stated'
+  },
+  {
+    company: 'Mercer',
+    title: 'Investment Analyst Intern',
+    location: 'Sydney, Australia',
+    city: 'Sydney',
+    country: 'Australia',
+    role_type: 'Internship',
+    discipline: 'Investments',
+    careerArea: 'Actuarial',
+    requirements: 'Finance or Actuarial degree, Excel, stakeholder communication.',
+    work_rights_information: 'Not stated',
+    international_student_information: 'Not stated'
+  },
+  {
+    company: 'Aon',
+    title: 'Risk Graduate Program',
+    location: 'Johannesburg, South Africa',
+    city: 'Johannesburg',
+    country: 'South Africa',
+    role_type: 'Graduate',
+    discipline: 'Risk',
+    careerArea: 'Actuarial',
+    requirements: 'Quantitative degree, analytics mindset, teamwork.',
+    work_rights_information: 'Not stated',
+    international_student_information: 'Not stated'
+  },
+  {
+    company: 'QBE',
+    title: 'Actuarial Internship',
+    location: 'London, United Kingdom',
+    city: 'London',
+    country: 'United Kingdom',
+    role_type: 'Internship',
+    discipline: 'Insurance',
+    careerArea: 'Actuarial',
+    requirements: 'Actuarial studies, SQL preferred, presentation skills.',
+    work_rights_information: 'Not stated',
+    international_student_information: 'Not stated'
+  },
+  {
+    company: 'Deloitte',
+    title: 'Data & Risk Analyst',
+    location: 'International',
+    city: null,
+    country: 'International',
+    role_type: 'Entry Level',
+    discipline: 'Data',
+    careerArea: 'Actuarial',
+    requirements: 'Statistics or actuarial background, Python, communication.',
+    work_rights_information: 'Not stated',
+    international_student_information: 'Not stated'
+  }
+]
+
+const BANKING_JOBS = [
+  {
+    company: 'Goldman Sachs',
+    title: 'Investment Banking Analyst Graduate Program',
+    location: 'Sydney, Australia',
+    city: 'Sydney',
+    country: 'Australia',
+    role_type: 'Graduate',
+    discipline: 'Investment Banking',
+    careerArea: 'Banking',
+    requirements: 'Finance, economics or quantitative degree, financial modelling, communication skills.',
+    work_rights_information: 'Not stated',
+    international_student_information: 'Not stated'
+  },
+  {
+    company: 'JPMorgan Chase',
+    title: 'Corporate & Investment Bank Summer Analyst',
+    location: 'Melbourne, Australia',
+    city: 'Melbourne',
+    country: 'Australia',
+    role_type: 'Internship',
+    discipline: 'Investment Banking',
+    careerArea: 'Banking',
+    requirements: 'Finance or business degree, Excel, stakeholder communication.',
+    work_rights_information: 'Not stated',
+    international_student_information: 'Not stated'
+  },
+  {
+    company: 'Macquarie Group',
+    title: 'Quantitative Analyst Graduate Program',
+    location: 'Sydney, Australia',
+    city: 'Sydney',
+    country: 'Australia',
+    role_type: 'Graduate',
+    discipline: 'Quantitative',
+    careerArea: 'Banking',
+    requirements: 'Mathematics, statistics or actuarial degree, Python or R, analytical mindset.',
+    work_rights_information: 'Not stated',
+    international_student_information: 'Not stated'
+  },
+  {
+    company: 'Commonwealth Bank',
+    title: 'Graduate Program - Retail Banking',
+    location: 'Melbourne, Australia',
+    city: 'Melbourne',
+    country: 'Australia',
+    role_type: 'Graduate',
+    discipline: 'Banking',
+    careerArea: 'Banking',
+    requirements: 'Business, finance or commerce degree, communication and teamwork skills.',
+    work_rights_information: 'Not stated',
+    international_student_information: 'Not stated'
+  },
+  {
+    company: 'Morgan Stanley',
+    title: 'Markets Summer Analyst Program',
+    location: 'London, United Kingdom',
+    city: 'London',
+    country: 'United Kingdom',
+    role_type: 'Internship',
+    discipline: 'Markets',
+    careerArea: 'Banking',
+    requirements: 'Finance, economics or quantitative degree, market awareness, communication skills.',
+    work_rights_information: 'Not stated',
+    international_student_information: 'Not stated'
+  },
+  {
+    company: 'Citi',
+    title: 'Treasury and Trade Solutions Analyst',
+    location: 'International',
+    city: null,
+    country: 'International',
+    role_type: 'Entry Level',
+    discipline: 'Treasury',
+    careerArea: 'Banking',
+    requirements: 'Finance or business degree, attention to detail, client communication.',
+    work_rights_information: 'Not stated',
+    international_student_information: 'Not stated'
+  }
+]
+
+const TECHNOLOGY_JOBS = [
+  {
+    company: 'Google',
+    title: 'Software Engineering Graduate Program',
+    location: 'Sydney, Australia',
+    city: 'Sydney',
+    country: 'Australia',
+    role_type: 'Graduate',
+    discipline: 'Software Engineering',
+    careerArea: 'Technology',
+    requirements: 'Computer science or related degree, coding proficiency, problem solving.',
+    work_rights_information: 'Not stated',
+    international_student_information: 'Not stated'
+  },
+  {
+    company: 'Microsoft',
+    title: 'Data Scientist Internship',
+    location: 'Melbourne, Australia',
+    city: 'Melbourne',
+    country: 'Australia',
+    role_type: 'Internship',
+    discipline: 'Data Science',
+    careerArea: 'Technology',
+    requirements: 'Statistics, data science or computer science background, Python or R, SQL.',
+    work_rights_information: 'Not stated',
+    international_student_information: 'Not stated'
+  },
+  {
+    company: 'Amazon',
+    title: 'Software Development Engineer Intern',
+    location: 'International',
+    city: null,
+    country: 'International',
+    role_type: 'Internship',
+    discipline: 'Software Engineering',
+    careerArea: 'Technology',
+    requirements: 'Computer science or related degree, data structures and algorithms, coding proficiency.',
+    work_rights_information: 'Not stated',
+    international_student_information: 'Not stated'
+  },
+  {
+    company: 'Atlassian',
+    title: 'Graduate Software Engineer',
+    location: 'Sydney, Australia',
+    city: 'Sydney',
+    country: 'Australia',
+    role_type: 'Graduate',
+    discipline: 'Software Engineering',
+    careerArea: 'Technology',
+    requirements: 'Computer science or related degree, coding proficiency, collaboration skills.',
+    work_rights_information: 'Not stated',
+    international_student_information: 'Not stated'
+  },
+  {
+    company: 'Canva',
+    title: 'Data Analytics Graduate Program',
+    location: 'Sydney, Australia',
+    city: 'Sydney',
+    country: 'Australia',
+    role_type: 'Graduate',
+    discipline: 'Data Analytics',
+    careerArea: 'Technology',
+    requirements: 'Data, statistics or computer science degree, SQL, communication skills.',
+    work_rights_information: 'Not stated',
+    international_student_information: 'Not stated'
+  },
+  {
+    company: 'Accenture',
+    title: 'Technology Consulting Analyst Graduate Program',
+    location: 'Melbourne, Australia',
+    city: 'Melbourne',
+    country: 'Australia',
+    role_type: 'Graduate',
+    discipline: 'Technology Consulting',
+    careerArea: 'Technology',
+    requirements: 'Business, IT or engineering degree, client communication, problem solving.',
+    work_rights_information: 'Not stated',
+    international_student_information: 'Not stated'
+  }
+]
+
 function ensureDefaultCareerData() {
   const db = getDb()
-  const existing = db.prepare('SELECT COUNT(1) as count FROM career_companies').get() as { count: number }
-  if (Number(existing?.count || 0) > 0) return
-
   const now = nowIso()
 
-  const companies = [
-    { name: 'Mercer', official_careers_url: 'https://careers.mercer.com/' },
-    { name: 'Aon', official_careers_url: 'https://jobs.aon.com/' },
-    { name: 'QBE', official_careers_url: 'https://careers.qbe.com/' },
-    { name: 'Deloitte', official_careers_url: 'https://apply.deloitte.com/careers' },
-    { name: 'EY', official_careers_url: 'https://careers.ey.com/' },
-    { name: 'KPMG', official_careers_url: 'https://kpmg.com/careers' },
-    { name: 'PwC', official_careers_url: 'https://www.pwc.com/gx/en/careers.html' },
-    { name: 'Swiss Re', official_careers_url: 'https://careers.swissre.com/' },
-    { name: 'Munich Re', official_careers_url: 'https://www.munichre.com/en/company/careers.html' },
-    { name: 'Allianz', official_careers_url: 'https://careers.allianz.com/' },
-    { name: 'TAL', official_careers_url: 'https://www.tal.com.au/about-us/careers' },
-    { name: 'Suncorp', official_careers_url: 'https://www.suncorpgroup.com.au/careers' }
-  ]
+  const companies = [...ACTUARIAL_COMPANIES, ...BANKING_COMPANIES, ...TECHNOLOGY_COMPANIES]
+  const jobs = [...ACTUARIAL_JOBS, ...BANKING_JOBS, ...TECHNOLOGY_JOBS]
 
   const companyIds = new Map<string, string>()
+
   for (const company of companies) {
-    const companyId = id('carco')
     const slug = normalizeSlug(company.name)
+    const existingCompany = db.prepare('SELECT id FROM career_companies WHERE slug = ?').get(slug) as any
+
+    if (existingCompany?.id) {
+      companyIds.set(company.name, existingCompany.id)
+      continue
+    }
+
+    const companyId = id('carco')
     db.prepare(`
       INSERT INTO career_companies (id, name, slug, official_careers_url, source_type, profile_created, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -95,97 +352,43 @@ function ensureDefaultCareerData() {
     `).run(id('carcheck'), companyId, 'HEALTHY', now, now, null, 0, now, now)
   }
 
-  const jobs = [
-    {
-      company: 'Mercer',
-      title: 'Graduate Actuarial Analyst',
-      location: 'Melbourne, Australia',
-      city: 'Melbourne',
-      country: 'Australia',
-      role_type: 'Graduate',
-      discipline: 'Actuarial',
-      requirements: 'Bachelor degree in Actuarial Science, Excel, R or Python, communication skills.',
-      work_rights_information: 'Valid Australian work rights required',
-      international_student_information: 'Not stated'
-    },
-    {
-      company: 'Mercer',
-      title: 'Investment Analyst Intern',
-      location: 'Sydney, Australia',
-      city: 'Sydney',
-      country: 'Australia',
-      role_type: 'Internship',
-      discipline: 'Investments',
-      requirements: 'Finance or Actuarial degree, Excel, stakeholder communication.',
-      work_rights_information: 'Not stated',
-      international_student_information: 'Not stated'
-    },
-    {
-      company: 'Aon',
-      title: 'Risk Graduate Program',
-      location: 'Johannesburg, South Africa',
-      city: 'Johannesburg',
-      country: 'South Africa',
-      role_type: 'Graduate',
-      discipline: 'Risk',
-      requirements: 'Quantitative degree, analytics mindset, teamwork.',
-      work_rights_information: 'Not stated',
-      international_student_information: 'Not stated'
-    },
-    {
-      company: 'QBE',
-      title: 'Actuarial Internship',
-      location: 'London, United Kingdom',
-      city: 'London',
-      country: 'United Kingdom',
-      role_type: 'Internship',
-      discipline: 'Insurance',
-      requirements: 'Actuarial studies, SQL preferred, presentation skills.',
-      work_rights_information: 'Not stated',
-      international_student_information: 'Not stated'
-    },
-    {
-      company: 'Deloitte',
-      title: 'Data & Risk Analyst',
-      location: 'International',
-      city: null,
-      country: 'International',
-      role_type: 'Entry Level',
-      discipline: 'Data',
-      requirements: 'Statistics or actuarial background, Python, communication.',
-      work_rights_information: 'Not stated',
-      international_student_information: 'Not stated'
-    }
-  ]
-
   for (const job of jobs) {
     const companyId = companyIds.get(job.company)
     if (!companyId) continue
+
+    const externalJobId = `${normalizeSlug(job.company)}-${normalizeSlug(job.title)}`
+    const existingJob = db.prepare('SELECT id FROM career_jobs WHERE company_id = ? AND external_job_id = ?').get(companyId, externalJobId) as any
+    if (existingJob?.id) continue
+
+    const companyRecord = companies.find((item) => item.name === job.company)
+    const jobUrl = companyRecord?.official_careers_url || null
     const jobId = id('carjob')
+
     db.prepare(`
       INSERT INTO career_jobs (
-        id, company_id, external_job_id, job_title, location, city, country, role_type, discipline,
+        id, company_id, external_job_id, job_title, location, city, country, role_type, discipline, career_area,
         description, requirements, opening_date, closing_date, closing_time, application_url,
         source_url, source_type, work_rights_information, international_student_information,
         date_found, last_verified, source_timezone, is_active, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       jobId,
       companyId,
-      `${normalizeSlug(job.company)}-${normalizeSlug(job.title)}`,
+      externalJobId,
       job.title,
       job.location,
       job.city,
       job.country,
       job.role_type,
       job.discipline,
+      job.careerArea,
       `${job.title} opportunity at ${job.company}.`,
       job.requirements,
       now,
       null,
       null,
-      `https://example.com/apply/${jobId}`,
-      `https://example.com/jobs/${jobId}`,
+      jobUrl,
+      jobUrl,
       'SEED',
       job.work_rights_information,
       job.international_student_information,
@@ -298,6 +501,7 @@ export function listDiscoverJobs(filters: {
   disciplines?: string[]
   countries?: string[]
   companies?: string[]
+  careerAreas?: string[]
 }) {
   ensureDefaultCareerData()
   const db = getDb()
@@ -330,37 +534,49 @@ export function listDiscoverJobs(filters: {
     params.push(...(filters.companies || []).map((value) => normalizeText(value)))
   }
 
+  if ((filters.careerAreas || []).length) {
+    clauses.push(`LOWER(COALESCE(j.career_area, '')) IN (${(filters.careerAreas || []).map(() => '?').join(',')})`)
+    params.push(...(filters.careerAreas || []).map((value) => normalizeText(value)))
+  }
+
   const where = clauses.length ? ` AND ${clauses.join(' AND ')}` : ''
   const rows = db.prepare(`${baseJobQuery()} ${where} ORDER BY COALESCE(j.last_verified, j.created_at) DESC`).all(...params) as any[]
 
-  return rows.map((row) => ({
-    id: row.id,
-    companyId: row.company_id,
-    company: row.company_name,
-    companySlug: row.company_slug,
-    companyProfileAvailable: Boolean(row.profile_created),
-    officialCareersUrl: row.official_careers_url,
-    jobTitle: row.job_title,
-    externalJobId: row.external_job_id,
-    location: row.location,
-    city: row.city,
-    country: row.country,
-    roleType: row.role_type,
-    discipline: row.discipline,
-    description: row.description,
-    requirements: row.requirements,
-    openingDate: row.opening_date,
-    closingDate: row.closing_date,
-    closingTime: row.closing_time,
-    applicationUrl: row.application_url,
-    sourceUrl: row.source_url,
-    sourceType: row.source_type,
-    workRightsInformation: row.work_rights_information || 'Not stated',
-    internationalStudentInformation: row.international_student_information || 'Not stated',
-    dateFound: row.date_found,
-    lastVerified: row.last_verified,
-    sourceTimezone: row.source_timezone
-  }))
+  return rows
+    .map((row) => ({
+      id: row.id,
+      companyId: row.company_id,
+      company: row.company_name,
+      companySlug: row.company_slug,
+      companyProfileAvailable: Boolean(row.profile_created),
+      officialCareersUrl: row.official_careers_url,
+      jobTitle: row.job_title,
+      externalJobId: row.external_job_id,
+      location: row.location,
+      city: row.city,
+      country: row.country,
+      roleType: row.role_type,
+      discipline: row.discipline,
+      careerArea: row.career_area || 'Actuarial',
+      description: row.description,
+      requirements: row.requirements,
+      openingDate: row.opening_date,
+      closingDate: row.closing_date,
+      closingTime: row.closing_time,
+      applicationUrl: resolveJobApplicationUrl({
+        applicationUrl: row.application_url,
+        sourceUrl: row.source_url,
+        officialCareersUrl: row.official_careers_url
+      }),
+      sourceUrl: row.source_url,
+      sourceType: row.source_type,
+      workRightsInformation: row.work_rights_information || 'Not stated',
+      internationalStudentInformation: row.international_student_information || 'Not stated',
+      dateFound: row.date_found,
+      lastVerified: row.last_verified,
+      sourceTimezone: row.source_timezone
+    }))
+    .filter((job) => Boolean(job.applicationUrl) && !isJobListingExpired(job.closingDate))
 }
 
 export function listCompanies() {
@@ -434,7 +650,12 @@ export function getCompanyDetails(companyId: string, userId?: string) {
       location: job.location,
       roleType: job.role_type,
       discipline: job.discipline,
-      applicationUrl: job.application_url,
+      careerArea: job.career_area || 'Actuarial',
+      applicationUrl: resolveJobApplicationUrl({
+        applicationUrl: job.application_url,
+        sourceUrl: job.source_url,
+        officialCareersUrl: company.official_careers_url
+      }),
       sourceUrl: job.source_url,
       lastVerified: job.last_verified
     }))
@@ -554,7 +775,12 @@ export function listFollowing(userId: string) {
         location: job.location,
         roleType: job.role_type,
         discipline: job.discipline,
-        applicationUrl: job.application_url,
+        careerArea: job.career_area || 'Actuarial',
+        applicationUrl: resolveJobApplicationUrl({
+          applicationUrl: job.application_url,
+          sourceUrl: job.source_url,
+          officialCareersUrl: row.official_careers_url
+        }),
         lastVerified: job.last_verified
       }))
     }
@@ -608,9 +834,14 @@ function buildJobSnapshot(job: any) {
     location: job.location,
     roleType: job.role_type,
     discipline: job.discipline,
+    careerArea: job.career_area || 'Actuarial',
     closingDate: job.closing_date,
     closingTime: job.closing_time,
-    applicationUrl: job.application_url,
+    applicationUrl: resolveJobApplicationUrl({
+      applicationUrl: job.application_url,
+      sourceUrl: job.source_url,
+      officialCareersUrl: job.official_careers_url
+    }),
     sourceUrl: job.source_url,
     sourceType: job.source_type,
     workRightsInformation: job.work_rights_information || 'Not stated',
@@ -863,7 +1094,7 @@ export function addAssessmentToPlanner(userId: string, assessmentId: string) {
 
   const companyName = assessment.company_id
     ? (db.prepare('SELECT name FROM career_companies WHERE id = ?').get(assessment.company_id) as any)?.name
-    : null
+    : (assessment.custom_company_name || null)
 
   return createPlannerTaskForAssessment(userId, assessment, companyName)
 }
@@ -871,6 +1102,7 @@ export function addAssessmentToPlanner(userId: string, assessmentId: string) {
 export function createAssessment(userId: string, input: {
   applicationId?: string | null
   companyId?: string | null
+  customCompanyName?: string | null
   assessmentType: string
   title: string
   invitationReceivedAtUtc?: string | null
@@ -898,18 +1130,20 @@ export function createAssessment(userId: string, input: {
 
   const hasExact = Boolean(input.deadlineHasExactTime && computedDeadlineAtUtc)
   const assessmentId = id('carass')
+  const customCompanyName = input.companyId ? null : (input.customCompanyName?.trim() || null)
 
   db.prepare(`
     INSERT INTO career_assessments (
-      id, user_id, application_id, company_id, assessment_type, title, status, invitation_received_at_utc,
+      id, user_id, application_id, company_id, custom_company_name, assessment_type, title, status, invitation_received_at_utc,
       deadline_rule_hours, deadline_at_utc, deadline_date_only, deadline_has_exact_time, employer_deadline_label,
       employer_timezone, assessment_url, notes, completed_at_utc, planner_task_id, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     assessmentId,
     userId,
     input.applicationId || null,
     input.companyId || null,
+    customCompanyName,
     input.assessmentType,
     input.title,
     'Incomplete',
@@ -931,7 +1165,7 @@ export function createAssessment(userId: string, input: {
   const assessment = db.prepare('SELECT * FROM career_assessments WHERE id = ?').get(assessmentId) as any
   const companyName = input.companyId
     ? (db.prepare('SELECT name FROM career_companies WHERE id = ?').get(input.companyId) as any)?.name
-    : null
+    : customCompanyName
 
   if (
     settings.autoAddDeadlinesToPlanner
@@ -971,7 +1205,7 @@ export function listAssessments(userId: string) {
 
   return rows.map((row) => ({
     id: row.id,
-    company: row.company_name,
+    company: row.company_name || row.custom_company_name || null,
     applicationTitle: row.application_title,
     assessmentType: row.assessment_type,
     title: row.title,
