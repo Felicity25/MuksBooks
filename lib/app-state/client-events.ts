@@ -4,6 +4,7 @@ export type AppStateUpdateType =
   | 'uploads'
   | 'settings'
   | 'planner'
+  | 'careers'
   | 'dashboard'
 
 const EVENT_NAME = 'muksbooks:app-state-updated'

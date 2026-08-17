@@ -6,15 +6,18 @@ import { useAuth } from '@/components/auth-provider'
 const navItems = [
   { href: '/', label: 'Dashboard' },
   { href: '/units', label: 'Units' },
+  { href: '/planner', label: 'Planner' },
   { href: '/uploads', label: 'Uploads' },
   { href: '/ai-tutor', label: 'AI Tutor' },
-  { href: '/planner', label: 'Planner' },
-  { href: '/news', label: 'News' },
+  { href: '/news', label: 'Actuarial News' },
+  { href: '/careers', label: 'Careers' },
+  { href: '/resources', label: 'Resources' },
+  { href: '/semester-timeline', label: 'Semester Timeline' },
   { href: '/settings', label: 'Settings' }
 ]
 
 export function Navbar() {
-  const { user, isGuest, isLoading, requireAuth, signOut } = useAuth()
+  const { user, isGuest, isLoading, requireAuth, signOut, settings } = useAuth()
 
   const handleSignIn = () => requireAuth('Sign in to save your work and access it from any device.')
   const handleSignUp = () => {
@@ -57,7 +60,7 @@ export function Navbar() {
                 </>
               ) : (
                 <>
-                  <span className="hidden max-w-[140px] truncate text-xs text-slate-500 sm:inline">{user?.email}</span>
+                  <span className="hidden max-w-[160px] truncate text-xs text-slate-500 sm:inline">{settings.name || user?.email}</span>
                   <button type="button" onClick={() => signOut().then(() => { window.location.href = '/' })}
                     className="rounded-full border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100">
                     Sign Out

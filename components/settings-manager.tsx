@@ -17,7 +17,7 @@ interface Settings {
 }
 
 export function SettingsManager() {
-  const { requireAuth } = useAuth()
+  const { requireAuth, settings: sharedSettings } = useAuth()
   const [settings, setSettings] = useState<Settings>({
     theme: 'light',
     name: '',
@@ -30,12 +30,16 @@ export function SettingsManager() {
   const [message, setMessage] = useState('')
 
   useEffect(() => {
+    setSettings(sharedSettings)
+  }, [sharedSettings])
+
+  useEffect(() => {
     const load = async () => {
       const response = await fetch('/api/app-state/settings', { cache: 'no-store' })
-      const payload = await response.json()
+      if (!response.ok) return
+      const payload = await response.json().catch(() => null)
       if (payload?.ok && payload.settings) {
         setSettings(payload.settings)
-        applyTheme(payload.settings.theme)
       }
     }
     void load()
@@ -43,11 +47,15 @@ export function SettingsManager() {
 
   const saveSettings = async (newSettings: Settings) => {
     setSettings(newSettings)
-    await fetch('/api/app-state/settings', {
+    const response = await fetch('/api/app-state/settings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newSettings)
     })
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null)
+      throw new Error(payload?.error || 'Failed to save settings')
+    }
     emitAppStateUpdate('settings')
     setMessage('Settings saved successfully!')
     setTimeout(() => setMessage(''), 3000)
@@ -56,36 +64,20 @@ export function SettingsManager() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (requireAuth('Sign in to save your settings and profile.')) return
-    await saveSettings(settings)
+    try {
+      await saveSettings(settings)
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Failed to save settings')
+    }
   }
 
   const updateSetting = (key: keyof Settings, value: any) => {
     setSettings(prev => ({ ...prev, [key]: value }))
   }
 
-  const applyTheme = (theme: 'light' | 'dark' | 'system') => {
-    if (theme === 'dark') {
-      document.documentElement.classList.add('dark')
-    } else if (theme === 'light') {
-      document.documentElement.classList.remove('dark')
-    } else {
-      // system
-      if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-        document.documentElement.classList.add('dark')
-      } else {
-        document.documentElement.classList.remove('dark')
-      }
-    }
-  }
-
   const handleThemeChange = (theme: 'light' | 'dark' | 'system') => {
     updateSetting('theme', theme)
-    applyTheme(theme)
   }
-
-  useEffect(() => {
-    applyTheme(settings.theme)
-  }, [settings.theme])
 
   return (
     <div className="space-y-4">

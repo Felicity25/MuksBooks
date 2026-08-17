@@ -82,7 +82,6 @@ export const NEWS_SOURCES: NewsSource[] = [
     sourceType: 'PROFESSIONAL_BODY',
     tier: 3,
     country: 'INTERNATIONAL',
-    defaultCategory: 'CAREERS',
     cadence: 'daily'
   },
   {

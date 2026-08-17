@@ -1,6 +1,7 @@
 import crypto from 'crypto'
 import path from 'path'
 import { promises as fs } from 'fs'
+import { getCurrentMonashCalendar, getCurrentSemesterWeek } from '@/lib/semester-calendar'
 import { getDb, nowIso } from './db'
 import { loadCatalog, saveCatalog } from '@/lib/knowledge-base/catalog'
 
@@ -120,18 +121,31 @@ interface StoredSettings {
   studyTimes: string
 }
 
-export function ensureDefaultUser() {
+export function ensureUser(userId: string, defaults?: Partial<StoredSettings>) {
   const db = getDb()
-  const row = db.prepare('SELECT * FROM users WHERE id = ?').get('default') as any
+  const row = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as any
   if (row) return row
 
   const now = nowIso()
   db.prepare(`
     INSERT INTO users (id, name, university, timezone, semester, preferences, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run('default', 'Student', 'Monash', 'Australia/Melbourne', 'Semester 2', json({}), now, now)
+  `).run(
+    userId,
+    defaults?.name || 'Student',
+    'Monash',
+    'Australia/Melbourne',
+    'Semester 2',
+    json(defaults || {}),
+    now,
+    now
+  )
 
-  return db.prepare('SELECT * FROM users WHERE id = ?').get('default') as any
+  return db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as any
+}
+
+export function ensureDefaultUser() {
+  return ensureUser('default')
 }
 
 export function createEvent(eventType: string, payload: Record<string, unknown>) {
@@ -140,9 +154,17 @@ export function createEvent(eventType: string, payload: Record<string, unknown>)
     .run(id('evt'), eventType, json(payload), nowIso())
 }
 
-export function listCourses() {
+export function listCourses(userId = 'default') {
+  ensureUser(userId)
   const db = getDb()
-  const rows = db.prepare('SELECT * FROM courses WHERE status IS NULL OR status != ? ORDER BY created_at DESC').all('archived') as any[]
+  const rows = db.prepare(`
+    SELECT c.*,
+      COALESCE((SELECT mastery_level FROM unit_mastery m WHERE m.course_id = c.id AND m.user_id = ?), NULL) AS mastery_level
+    FROM courses c
+    WHERE (c.status IS NULL OR c.status != ?)
+      AND COALESCE(c.user_id, ?) = ?
+    ORDER BY c.created_at DESC
+  `).all(userId, 'archived', 'default', userId) as any[]
   return rows
 }
 
@@ -155,11 +177,15 @@ export async function listDocuments(filters: {
   query?: string
   sort?: 'newest' | 'oldest' | 'filename' | 'unit' | 'week' | 'fileType'
   limit?: number
-} = {}) {
+} = {}, userId = 'default') {
+  ensureUser(userId)
   await ensureCatalogSynced()
   const db = getDb()
   const clauses: string[] = []
   const params: any[] = []
+
+  clauses.push('COALESCE(c.user_id, ?) = ?')
+  params.push('default', userId)
 
   if (filters.courseId) {
     clauses.push('d.course_id = ?')
@@ -229,6 +255,11 @@ export async function listDocuments(filters: {
 }
 
 export async function getDocument(documentId: string) {
+  return getDocumentForUser(documentId, 'default')
+}
+
+export async function getDocumentForUser(documentId: string, userId = 'default') {
+  ensureUser(userId)
   await ensureCatalogSynced()
   const db = getDb()
   const row = db.prepare(`
@@ -241,16 +272,24 @@ export async function getDocument(documentId: string) {
     FROM documents d
     LEFT JOIN courses c ON c.id = d.course_id
     WHERE d.id = ?
+      AND COALESCE(c.user_id, ?) = ?
     LIMIT 1
-  `).get(documentId) as any
+  `).get(documentId, 'default', userId) as any
 
   return row ? deriveDocumentState(row) : null
 }
 
-export async function deleteDocument(documentId: string) {
+export async function deleteDocument(documentId: string, userId = 'default') {
+  ensureUser(userId)
   await ensureCatalogSynced()
   const db = getDb()
-  const document = db.prepare('SELECT * FROM documents WHERE id = ?').get(documentId) as any
+  const document = db.prepare(`
+    SELECT d.*
+    FROM documents d
+    LEFT JOIN courses c ON c.id = d.course_id
+    WHERE d.id = ? AND COALESCE(c.user_id, ?) = ?
+    LIMIT 1
+  `).get(documentId, 'default', userId) as any
   if (!document) return false
 
   db.prepare('DELETE FROM knowledge_chunks WHERE document_id = ?').run(documentId)
@@ -289,9 +328,12 @@ export function upsertCourse(input: {
   semester?: string
   year?: number
   source?: string
+  userId?: string
 }) {
+  const userId = input.userId || 'default'
+  ensureUser(userId)
   const db = getDb()
-  const existing = db.prepare('SELECT * FROM courses WHERE course_code = ? ORDER BY updated_at DESC LIMIT 1').get(input.courseCode) as any
+  const existing = db.prepare('SELECT * FROM courses WHERE course_code = ? AND COALESCE(user_id, ?) = ? ORDER BY updated_at DESC LIMIT 1').get(input.courseCode, 'default', userId) as any
   const now = nowIso()
 
   if (existing) {
@@ -302,9 +344,10 @@ export function upsertCourse(input: {
           semester = COALESCE(?, semester),
           year = COALESCE(?, year),
           source = COALESCE(?, source),
+          user_id = COALESCE(user_id, ?),
           updated_at = ?
       WHERE id = ?
-    `).run(input.courseName || null, input.university || null, input.semester || null, input.year ?? null, input.source || null, now, existing.id)
+    `).run(input.courseName || null, input.university || null, input.semester || null, input.year ?? null, input.source || null, userId, now, existing.id)
     return db.prepare('SELECT * FROM courses WHERE id = ?').get(existing.id) as any
   }
 
@@ -316,13 +359,14 @@ export function upsertCourse(input: {
     year: input.year ?? new Date().getFullYear(),
     status: 'active',
     source: input.source || 'document_analysis',
+    user_id: userId,
     created_at: now,
     updated_at: now
   }
 
   db.prepare(`
-    INSERT INTO courses (id, course_code, course_name, university, semester, year, status, source, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO courses (id, course_code, course_name, university, semester, year, status, source, user_id, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     created.id,
     input.courseCode,
@@ -332,6 +376,7 @@ export function upsertCourse(input: {
     created.year,
     created.status,
     created.source,
+    created.user_id,
     created.created_at,
     created.updated_at
   )
@@ -699,7 +744,54 @@ export function upsertAssessment(input: {
   const now = nowIso()
   const existing = db.prepare('SELECT * FROM assessments WHERE course_id = ? AND name = ? LIMIT 1').get(input.courseId, input.name) as any
 
+  const createConflict = (existingRow: any) => {
+    const existingDue = existingRow?.due_date ? String(existingRow.due_date) : null
+    const newDue = input.dueDate ? String(input.dueDate) : null
+    if (!existingDue || !newDue || existingDue === newDue) return
+
+    const existingSource = existingRow?.source_document_id ? String(existingRow.source_document_id) : null
+    const newSource = input.sourceDocumentId ? String(input.sourceDocumentId) : null
+    if (existingSource && newSource && existingSource === newSource) return
+
+    const duplicate = db.prepare(`
+      SELECT id
+      FROM assessment_conflicts
+      WHERE course_id = ?
+        AND LOWER(assessment_name) = LOWER(?)
+        AND due_date_existing = ?
+        AND due_date_new = ?
+        AND COALESCE(source_document_id_existing, '') = COALESCE(?, '')
+        AND COALESCE(source_document_id_new, '') = COALESCE(?, '')
+      LIMIT 1
+    `).get(input.courseId, input.name, existingDue, newDue, existingSource, newSource) as { id?: string } | undefined
+
+    if (duplicate?.id) {
+      db.prepare('UPDATE assessment_conflicts SET updated_at = ? WHERE id = ?').run(now, duplicate.id)
+      return
+    }
+
+    db.prepare(`
+      INSERT INTO assessment_conflicts (
+        id, course_id, assessment_name, due_date_existing, due_date_new,
+        source_document_id_existing, source_document_id_new, status, details, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id('assessment_conflict'),
+      input.courseId,
+      input.name,
+      existingDue,
+      newDue,
+      existingSource,
+      newSource,
+      'open',
+      json({ reason: 'Conflicting assessment date extracted from multiple uploads' }),
+      now,
+      now
+    )
+  }
+
   if (existing) {
+    createConflict(existing)
     db.prepare(`
       UPDATE assessments
       SET type = ?, weighting = COALESCE(?, weighting), due_date = COALESCE(?, due_date), source_document_id = COALESCE(?, source_document_id), updated_at = ?
@@ -714,33 +806,206 @@ export function upsertAssessment(input: {
   `).run(id('assessment'), input.courseId, input.name, input.type, input.weighting ?? null, input.dueDate || null, 'upcoming', input.sourceDocumentId || null, now, now)
 }
 
+export function upsertTopic(input: {
+  courseId: string
+  name: string
+  week?: number
+  description?: string
+  sourceDocumentId?: string
+}) {
+  const db = getDb()
+  const now = nowIso()
+  const existing = db.prepare('SELECT * FROM topics WHERE course_id = ? AND COALESCE(week, -1) = COALESCE(?, -1) AND LOWER(name) = LOWER(?) LIMIT 1').get(input.courseId, input.week ?? null, input.name) as any
+
+  if (existing) {
+    db.prepare(`
+      UPDATE topics
+      SET description = COALESCE(?, description),
+          week = COALESCE(?, week),
+          updated_at = ?
+      WHERE id = ?
+    `).run(input.description || null, input.week ?? null, now, existing.id)
+    return existing.id as string
+  }
+
+  const topicId = id('topic')
+  db.prepare(`
+    INSERT INTO topics (id, course_id, name, description, week, lecture_number, parent_topic_id, importance, exam_relevance, learning_status, mastery_score, confidence_score, last_studied_at, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, NULL, NULL, 0.5, 0.5, 'new', 0, 0, NULL, ?, ?)
+  `).run(topicId, input.courseId, input.name, input.description || null, input.week ?? null, now, now)
+  createEvent('TOPIC_CREATED', { courseId: input.courseId, topicId, week: input.week ?? null, name: input.name })
+  return topicId
+}
+
+export function extractWeeklyTopicsFromText(courseId: string, text: string, sourceDocumentId?: string) {
+  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+  const weekTopicPairs: Array<{ week: number; topic: string }> = []
+
+  for (const line of lines) {
+    const match = line.match(/(?:week\s*0?(\d{1,2}))\s*[-:–—]\s*(.+)$/i)
+    if (match?.[1] && match[2]) {
+      const week = Number(match[1])
+      const topic = match[2].replace(/\s+/g, ' ').trim()
+      if (Number.isFinite(week) && topic) {
+        weekTopicPairs.push({ week, topic })
+      }
+    }
+  }
+
+  const topicHeadingPattern = /^(?:topic|lecture|tutorial)\s*0?(\d{1,2})\s*[:\-–—]\s*(.+)$/i
+  for (const line of lines) {
+    const match = line.match(topicHeadingPattern)
+    if (match?.[1] && match[2]) {
+      const week = Number(match[1])
+      const topic = match[2].replace(/\s+/g, ' ').trim()
+      if (Number.isFinite(week) && topic) {
+        weekTopicPairs.push({ week, topic })
+      }
+    }
+  }
+
+  for (const entry of weekTopicPairs) {
+    upsertTopic({
+      courseId,
+      week: entry.week,
+      name: entry.topic,
+      description: sourceDocumentId ? `Extracted from ${sourceDocumentId}` : undefined,
+      sourceDocumentId
+    })
+  }
+
+  return weekTopicPairs
+}
+
 export function extractAssessmentsFromText(courseId: string, text: string, sourceDocumentId?: string) {
-  const patterns = [
+  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+  const detected: Array<{ name: string; type: string; weighting?: number; dueDate?: string }> = []
+
+  const currentYear = getCurrentMonashCalendar(new Date())?.year || new Date().getFullYear()
+  const monthMap: Record<string, number> = {
+    jan: 0,
+    january: 0,
+    feb: 1,
+    february: 1,
+    mar: 2,
+    march: 2,
+    apr: 3,
+    april: 3,
+    may: 4,
+    jun: 5,
+    june: 5,
+    jul: 6,
+    july: 6,
+    aug: 7,
+    august: 7,
+    sep: 8,
+    sept: 8,
+    september: 8,
+    oct: 9,
+    october: 9,
+    nov: 10,
+    november: 10,
+    dec: 11,
+    december: 11
+  }
+
+  const parseDateFromLine = (line: string) => {
+    const slash = line.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/)
+    if (slash) {
+      const day = Number(slash[1])
+      const month = Number(slash[2])
+      const year = slash[3] ? Number(slash[3].length === 2 ? `20${slash[3]}` : slash[3]) : currentYear
+      const date = new Date(Date.UTC(year, month - 1, day))
+      if (!Number.isNaN(date.getTime())) return date.toISOString().slice(0, 10)
+    }
+
+    const named = line.match(/\b(\d{1,2})\s+([A-Za-z]{3,12})(?:\s+(20\d{2}))?\b/)
+    if (named) {
+      const day = Number(named[1])
+      const month = monthMap[named[2].toLowerCase()]
+      const year = named[3] ? Number(named[3]) : currentYear
+      if (typeof month === 'number') {
+        const date = new Date(Date.UTC(year, month, day))
+        if (!Number.isNaN(date.getTime())) return date.toISOString().slice(0, 10)
+      }
+    }
+
+    return undefined
+  }
+
+  const normalizeAssessmentName = (line: string) => {
+    const assignment = line.match(/\bassignment\s*([1-9]\d*)\b/i)
+    if (assignment?.[1]) return `Assignment ${assignment[1]}`
+
+    const quiz = line.match(/\bquiz\s*([1-9]\d*)\b/i)
+    if (quiz?.[1]) return `Quiz ${quiz[1]}`
+
+    if (/mid\s*[- ]?semester\s*(test|exam)?/i.test(line)) return 'Mid-semester test'
+    if (/final\s*exam/i.test(line)) return 'Final exam'
+    if (/\bexam\b/i.test(line)) return 'Exam'
+    if (/\btest\b/i.test(line)) return 'Test'
+    return undefined
+  }
+
+  const detectType = (name: string) => {
+    if (/assignment/i.test(name)) return 'assignment'
+    if (/quiz|test/i.test(name)) return 'quiz'
+    return 'exam'
+  }
+
+  for (const line of lines) {
+    if (!/(assignment|quiz|test|exam|mid\s*[- ]?semester)/i.test(line)) continue
+    const name = normalizeAssessmentName(line)
+    if (!name) continue
+
+    const weightingMatch = line.match(/(\d+(?:\.\d+)?)\s*%/)
+    const weighting = weightingMatch ? Number(weightingMatch[1]) : undefined
+    const dueDate = parseDateFromLine(line)
+
+    detected.push({
+      name,
+      type: detectType(name),
+      weighting: Number.isFinite(weighting as number) ? weighting : undefined,
+      dueDate
+    })
+  }
+
+  const fallbackPatterns = [
     { name: 'Assignment 1', regex: /assignment\s*1\D+(\d+(?:\.\d+)?)\s*%/i, type: 'assignment' },
     { name: 'Assignment 2', regex: /assignment\s*2\D+(\d+(?:\.\d+)?)\s*%/i, type: 'assignment' },
     { name: 'Assignment 3', regex: /assignment\s*3\D+(\d+(?:\.\d+)?)\s*%/i, type: 'assignment' },
     { name: 'Final Exam', regex: /(final\s*exam|exam)\D+(\d+(?:\.\d+)?)\s*%/i, type: 'exam' }
   ]
 
-  for (const pattern of patterns) {
+  for (const pattern of fallbackPatterns) {
     const match = text.match(pattern.regex)
     if (!match) continue
+    if (detected.find((entry) => entry.name.toLowerCase() === pattern.name.toLowerCase())) continue
     const rawWeight = match[2] || match[1]
     const weight = Number(rawWeight)
     if (!Number.isFinite(weight)) continue
+    detected.push({ name: pattern.name, type: pattern.type, weighting: weight })
+  }
+
+  for (const entry of detected) {
     upsertAssessment({
       courseId,
-      name: pattern.name,
-      type: pattern.type,
-      weighting: weight,
+      name: entry.name,
+      type: entry.type,
+      weighting: entry.weighting,
+      dueDate: entry.dueDate,
       sourceDocumentId
     })
   }
+
+  return detected
 }
 
 export function getDashboard(userId = 'default') {
   ensureDefaultUser()
   const db = getDb()
+  const currentWeek = getCurrentSemesterWeek(new Date())
+  const currentWeekNumber = currentWeek?.weekNumber || null
 
   const today = new Date().toISOString().slice(0, 10)
   const upcomingLimitDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
@@ -758,36 +1023,88 @@ export function getDashboard(userId = 'default') {
     SELECT a.*, c.course_code, c.course_name
     FROM assessments a
     LEFT JOIN courses c ON c.id = a.course_id
-    WHERE a.status != 'completed' AND (a.due_date IS NULL OR a.due_date <= ?)
+    WHERE a.status != 'completed'
+      AND COALESCE(c.user_id, ?) = ?
+      AND (a.due_date IS NULL OR a.due_date <= ?)
     ORDER BY COALESCE(a.due_date, a.created_at) ASC
     LIMIT 12
-  `).all(upcomingLimitDate) as any[]
+  `).all('default', userId, upcomingLimitDate) as any[]
 
   const activeCourses = db.prepare(`
     SELECT c.*,
       (SELECT COUNT(1) FROM topics t WHERE t.course_id = c.id) AS topic_count,
-      (SELECT AVG(t.mastery_score) FROM topics t WHERE t.course_id = c.id) AS avg_mastery
+      (SELECT AVG(t.mastery_score) FROM topics t WHERE t.course_id = c.id) AS avg_mastery,
+      COALESCE((SELECT mastery_level FROM unit_mastery m WHERE m.course_id = c.id AND m.user_id = ?), 0) AS mastery_level
     FROM courses c
-    WHERE c.status IS NULL OR c.status != 'archived'
+    WHERE (c.status IS NULL OR c.status != 'archived') AND COALESCE(c.user_id, ?) = ?
     ORDER BY c.updated_at DESC
-  `).all() as any[]
+  `).all(userId, 'default', userId) as any[]
 
   const weakTopics = db.prepare(`
     SELECT t.*, c.course_code
     FROM topics t
     LEFT JOIN courses c ON c.id = t.course_id
     WHERE COALESCE(t.mastery_score, 0) < 0.45
+      AND COALESCE(c.user_id, ?) = ?
     ORDER BY COALESCE(t.mastery_score, 0) ASC, t.updated_at DESC
     LIMIT 10
-  `).all() as any[]
+  `).all('default', userId) as any[]
+
+  const currentTopics = currentWeekNumber
+    ? db.prepare(`
+      SELECT t.*, c.course_code
+      FROM topics t
+      LEFT JOIN courses c ON c.id = t.course_id
+      WHERE t.week = ?
+        AND COALESCE(c.user_id, ?) = ?
+      ORDER BY c.updated_at DESC, t.updated_at DESC
+      LIMIT 12
+    `).all(currentWeekNumber, 'default', userId) as any[]
+    : []
 
   const recentResources = db.prepare(`
     SELECT d.*, c.course_code
     FROM documents d
     LEFT JOIN courses c ON c.id = d.course_id
+    WHERE COALESCE(c.user_id, ?) = ?
     ORDER BY d.created_at DESC
     LIMIT 10
-  `).all() as any[]
+  `).all('default', userId) as any[]
+
+  const assessmentConflicts = db.prepare(`
+    SELECT ac.*, c.course_code
+    FROM assessment_conflicts ac
+    LEFT JOIN courses c ON c.id = ac.course_id
+    WHERE ac.status = 'open'
+      AND COALESCE(c.user_id, ?) = ?
+    ORDER BY ac.updated_at DESC
+    LIMIT 6
+  `).all('default', userId) as any[]
+
+  const careerPulse = {
+    activeApplications: Number((db.prepare(`
+      SELECT COUNT(1) as count
+      FROM career_applications
+      WHERE user_id = ? AND stage NOT IN ('Accepted', 'Rejected', 'Withdrawn', 'Closed')
+    `).get(userId) as any)?.count || 0),
+    outstandingAssessments: Number((db.prepare(`
+      SELECT COUNT(1) as count
+      FROM career_assessments
+      WHERE user_id = ? AND status != 'Completed'
+    `).get(userId) as any)?.count || 0),
+    interviews: Number((db.prepare(`
+      SELECT COUNT(1) as count
+      FROM career_applications
+      WHERE user_id = ? AND stage IN ('Interview', 'Phone Interview', 'Video Interview', 'Final Interview', 'Assessment Centre')
+    `).get(userId) as any)?.count || 0),
+    needsAttention: db.prepare(`
+      SELECT title, deadline_at_utc
+      FROM career_assessments
+      WHERE user_id = ? AND status != 'Completed' AND deadline_at_utc IS NOT NULL
+      ORDER BY deadline_at_utc ASC
+      LIMIT 3
+    `).all(userId) as Array<{ title: string; deadline_at_utc: string }>
+  }
 
   const continueLearning = db.prepare(`
     SELECT s.*, c.course_code, t.name AS topic_name
@@ -813,18 +1130,40 @@ export function getDashboard(userId = 'default') {
     activeCourses,
     continueLearning,
     weakTopics,
+    currentWeek: currentWeek ? {
+      label: currentWeek.label,
+      start: currentWeek.start,
+      end: currentWeek.end,
+      phase: currentWeek.phase,
+      weekNumber: currentWeek.weekNumber || null
+    } : null,
+    currentTopics,
     recentResources,
-    studyStats
+    assessmentConflicts,
+    studyStats,
+    careerPulse
   }
 }
 
 export function getPlannerContext(userId = 'default') {
-  ensureDefaultUser()
+  ensureUser(userId)
   const db = getDb()
 
-  const courses = db.prepare('SELECT * FROM courses WHERE status IS NULL OR status != ? ORDER BY updated_at DESC').all('archived') as any[]
-  const assessments = db.prepare('SELECT * FROM assessments ORDER BY COALESCE(due_date, created_at) ASC').all() as any[]
-  const topics = db.prepare('SELECT * FROM topics ORDER BY updated_at DESC').all() as any[]
+  const courses = db.prepare('SELECT * FROM courses WHERE (status IS NULL OR status != ?) AND COALESCE(user_id, ?) = ? ORDER BY updated_at DESC').all('archived', 'default', userId) as any[]
+  const assessments = db.prepare(`
+    SELECT a.*
+    FROM assessments a
+    LEFT JOIN courses c ON c.id = a.course_id
+    WHERE COALESCE(c.user_id, ?) = ?
+    ORDER BY COALESCE(a.due_date, a.created_at) ASC
+  `).all('default', userId) as any[]
+  const topics = db.prepare(`
+    SELECT t.*
+    FROM topics t
+    LEFT JOIN courses c ON c.id = t.course_id
+    WHERE COALESCE(c.user_id, ?) = ?
+    ORDER BY t.updated_at DESC
+  `).all('default', userId) as any[]
   const mastery = topics.map((topic) => ({
     topicId: topic.id,
     masteryScore: topic.mastery_score ?? 0,
@@ -864,6 +1203,7 @@ export function createPlannerTask(input: {
   courseId?: string
   topicId?: string
   assessmentId?: string
+  careerAssessmentId?: string
   title: string
   description?: string
   taskType?: string
@@ -878,15 +1218,16 @@ export function createPlannerTask(input: {
   const taskId = id('task')
   db.prepare(`
     INSERT INTO planner_tasks (
-      id, user_id, course_id, topic_id, assessment_id, title, description, task_type,
+      id, user_id, course_id, topic_id, assessment_id, career_assessment_id, title, description, task_type,
       priority, planned_date, due_date, estimated_minutes, completed, generated_by, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     taskId,
     input.userId || 'default',
     input.courseId || null,
     input.topicId || null,
     input.assessmentId || null,
+    input.careerAssessmentId || null,
     input.title,
     input.description || null,
     input.taskType || 'study',
@@ -908,12 +1249,28 @@ export function completePlannerTask(taskId: string) {
   const db = getDb()
   const now = nowIso()
   db.prepare('UPDATE planner_tasks SET completed = 1, completed_at = ?, updated_at = ? WHERE id = ?').run(now, now, taskId)
+
+  const linked = db.prepare('SELECT career_assessment_id FROM planner_tasks WHERE id = ?').get(taskId) as { career_assessment_id?: string | null } | undefined
+  if (linked?.career_assessment_id) {
+    db.prepare(`
+      UPDATE career_assessments
+      SET status = 'Completed', completed_at_utc = COALESCE(completed_at_utc, ?), planner_task_id = ?, updated_at = ?
+      WHERE id = ?
+    `).run(now, taskId, now, linked.career_assessment_id)
+  }
+
   createEvent('TASK_COMPLETED', { taskId })
 }
 
 export function deletePlannerTask(taskId: string) {
   const db = getDb()
+  const linked = db.prepare('SELECT career_assessment_id FROM planner_tasks WHERE id = ?').get(taskId) as { career_assessment_id?: string | null } | undefined
   db.prepare('DELETE FROM planner_tasks WHERE id = ?').run(taskId)
+
+  if (linked?.career_assessment_id) {
+    db.prepare('UPDATE career_assessments SET planner_task_id = NULL, updated_at = ? WHERE id = ?').run(nowIso(), linked.career_assessment_id)
+  }
+
   createEvent('TASK_COMPLETED', { taskId, deleted: true })
 }
 
@@ -925,14 +1282,14 @@ export function archiveCourse(courseId: string) {
 }
 
 export function getUserSettings(userId = 'default'): StoredSettings {
-  ensureDefaultUser()
+  ensureUser(userId)
   const db = getDb()
-  const row = db.prepare('SELECT preferences FROM users WHERE id = ?').get(userId) as { preferences?: string | null } | undefined
+  const row = db.prepare('SELECT name, preferences FROM users WHERE id = ?').get(userId) as { name?: string | null; preferences?: string | null } | undefined
   const parsed = parseJson<Partial<StoredSettings>>(row?.preferences || null) || {}
 
   return {
     theme: parsed.theme || 'light',
-    name: parsed.name || '',
+    name: parsed.name || row?.name || '',
     degree: parsed.degree || '',
     targetMarks: parsed.targetMarks || '',
     feedbackStrictness: parsed.feedbackStrictness || 'normal',
@@ -942,17 +1299,61 @@ export function getUserSettings(userId = 'default'): StoredSettings {
 }
 
 export function updateUserSettings(userId: string, updates: Partial<StoredSettings>) {
-  ensureDefaultUser()
+  ensureUser(userId)
   const db = getDb()
   const current = getUserSettings(userId)
   const merged: StoredSettings = {
     ...current,
     ...updates
   }
-  db.prepare('UPDATE users SET preferences = ?, updated_at = ? WHERE id = ?')
-    .run(json(merged), nowIso(), userId)
+  db.prepare('UPDATE users SET name = ?, preferences = ?, updated_at = ? WHERE id = ?')
+    .run(merged.name || 'Student', json(merged), nowIso(), userId)
   createEvent('STUDY_PLAN_UPDATED', { userId, settingsUpdated: true })
   return merged
+}
+
+export function getUnitMastery(userId = 'default') {
+  ensureUser(userId)
+  const db = getDb()
+  return db.prepare(`
+    SELECT
+      c.id,
+      c.course_code,
+      c.course_name,
+      COALESCE(m.mastery_level, 0) AS mastery_level,
+      m.updated_at AS mastery_updated_at
+    FROM courses c
+    LEFT JOIN unit_mastery m ON m.course_id = c.id AND m.user_id = ?
+    WHERE COALESCE(c.user_id, ?) = ? AND (c.status IS NULL OR c.status != 'archived')
+    ORDER BY c.updated_at DESC
+  `).all(userId, 'default', userId) as Array<{ id: string; course_code: string; course_name?: string | null; mastery_level: number; mastery_updated_at?: string | null }>
+}
+
+export function setUnitMastery(userId: string, courseId: string, masteryLevel: number) {
+  ensureUser(userId)
+  const db = getDb()
+  const now = nowIso()
+  const existing = db.prepare('SELECT id FROM unit_mastery WHERE user_id = ? AND course_id = ?').get(userId, courseId) as { id?: string } | undefined
+
+  if (existing?.id) {
+    db.prepare('UPDATE unit_mastery SET mastery_level = ?, updated_at = ? WHERE id = ?').run(masteryLevel, now, existing.id)
+  } else {
+    db.prepare('INSERT INTO unit_mastery (id, user_id, course_id, mastery_level, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(id('mastery'), userId, courseId, masteryLevel, now, now)
+  }
+
+  createEvent('TOPIC_MASTERY_UPDATED', { userId, courseId, masteryLevel })
+  return db.prepare(`
+    SELECT
+      c.id,
+      c.course_code,
+      c.course_name,
+      COALESCE(m.mastery_level, 0) AS mastery_level,
+      m.updated_at AS mastery_updated_at
+    FROM courses c
+    LEFT JOIN unit_mastery m ON m.course_id = c.id AND m.user_id = ?
+    WHERE c.id = ?
+  `).get(userId, courseId) as { id: string; course_code: string; course_name?: string | null; mastery_level: number; mastery_updated_at?: string | null }
 }
 
 export function getLessonContext(input: { unit?: string; topic?: string }) {

@@ -12,6 +12,7 @@ interface Unit {
   name: string
   status: string
   topics: number
+  masteryLevel: number
 }
 
 export function UnitsManager() {
@@ -33,7 +34,8 @@ export function UnitsManager() {
           code: course.course_code,
           name: course.course_name || course.course_code,
           status: course.status === 'completed' ? 'Completed' : course.status === 'planned' ? 'Planned' : 'In progress',
-          topics: 0
+          topics: 0,
+          masteryLevel: Math.max(0, Math.min(100, Math.round(Number(course.mastery_level ?? 0))))
         }))
         setUnits(mapped)
       }
@@ -79,6 +81,25 @@ export function UnitsManager() {
     await fetch(`/api/app-state/courses?courseId=${encodeURIComponent(id)}`, { method: 'DELETE' })
     await loadUnits()
     emitAppStateUpdate('courses')
+  }
+
+  const updateMastery = async (unitId: string, masteryLevel: number) => {
+    if (requireAuth('Sign in to save unit mastery levels.')) return
+    setUnits(prev => prev.map((unit) => unit.id === unitId ? { ...unit, masteryLevel } : unit))
+
+    const response = await fetch('/api/app-state/unit-mastery', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ courseId: unitId, masteryLevel })
+    })
+
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null)
+      throw new Error(payload?.error || 'Failed to save mastery level')
+    }
+
+    emitAppStateUpdate('dashboard')
+    emitAppStateUpdate('settings')
   }
 
   return (
@@ -151,6 +172,29 @@ export function UnitsManager() {
                 </div>
               </div>
               <p className="mt-3 text-sm text-slate-600">Weekly topics: {unit.topics}</p>
+                <div className="mt-4 space-y-2">
+                  <div className="flex items-center justify-between text-sm text-slate-600">
+                    <span>Mastery level</span>
+                    <span className="font-semibold text-slate-900">{unit.masteryLevel}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="1"
+                    value={unit.masteryLevel}
+                    onChange={(event) => {
+                      const masteryLevel = Number(event.target.value)
+                      void updateMastery(unit.id, masteryLevel)
+                    }}
+                    className="w-full accent-sky-600"
+                    aria-label={`Mastery level for ${unit.code}`}
+                  />
+                  <div className="flex justify-between text-xs uppercase tracking-[0.16em] text-slate-400">
+                    <span>Beginning</span>
+                    <span>Mastered</span>
+                  </div>
+                </div>
             </div>
           ))}
         </div>

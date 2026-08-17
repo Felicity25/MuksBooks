@@ -5,7 +5,7 @@ import { embedText } from '@/lib/knowledge-base/embeddings'
 import { extractKeywords, semanticChunk } from '@/lib/knowledge-base/chunking'
 import { activateCurriculumVersion, ensureCourseFolders, hashBuffer, loadCatalog, makeChunkId, makeDocumentId, saveCatalog, KNOWLEDGE_ROOT } from '@/lib/knowledge-base/catalog'
 import type { CatalogDocument, ChunkRecord, CourseMetadata } from '@/lib/knowledge-base/types'
-import { addKnowledgeChunk, createOrUpdateDocument, extractAssessmentsFromText, upsertCourse } from '@/lib/app-state/service'
+import { addKnowledgeChunk, createOrUpdateDocument, extractAssessmentsFromText, extractWeeklyTopicsFromText, upsertCourse } from '@/lib/app-state/service'
 import { publishEvent } from '@/lib/app-state/events'
 import { extractTextFromUpload } from './extractors'
 
@@ -59,6 +59,7 @@ async function saveEmbedding(relativePath: string, embedding: number[]) {
 }
 
 export interface UploadPayload {
+  userId?: string
   fileName: string
   mimeType: string
   content: Buffer
@@ -99,7 +100,8 @@ export async function ingestUpload(payload: UploadPayload) {
       courseName: existingMetadata.courseName,
       university: existingMetadata.university,
       semester: existingMetadata.semester,
-      source: 'catalog_duplicate_recovery'
+      source: 'catalog_duplicate_recovery',
+      userId: payload.userId || 'default'
     })
 
     createOrUpdateDocument({
@@ -148,7 +150,8 @@ export async function ingestUpload(payload: UploadPayload) {
     courseName: payload.metadata?.courseName,
     university: metadata.university,
     semester: metadata.semester,
-    source: 'document_analysis'
+    source: 'document_analysis',
+    userId: payload.userId || 'default'
   })
 
   const newCurriculumVersion = `v_${Date.now()}`
@@ -323,6 +326,7 @@ export async function ingestUpload(payload: UploadPayload) {
       })
     })
 
+    extractWeeklyTopicsFromText(appCourse.id, extractedText, documentId)
     extractAssessmentsFromText(appCourse.id, extractedText, documentId)
 
     createOrUpdateDocument({

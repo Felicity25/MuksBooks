@@ -6,13 +6,23 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import { onAppStateUpdate } from '@/lib/app-state/client-events'
+import { SemesterTimeline } from '@/components/semester-timeline'
 
 interface DashboardData {
   todayTasks: Array<{ id: string; title: string; due_date?: string | null; planned_date?: string | null; course_code?: string | null }>
   upcomingAssessments: Array<{ id: string; name: string; due_date?: string | null; course_code?: string | null; weighting?: number | null }>
   activeCourses: Array<{ id: string; course_code: string; course_name?: string | null; avg_mastery?: number | null; topic_count?: number | null; mastery_level?: number | null }>
   weakTopics: Array<{ id: string; name?: string | null; mastery_score?: number | null; course_code?: string | null }>
+  currentWeek?: { label: string; start: string; end: string; phase: string; weekNumber?: number | null } | null
+  currentTopics?: Array<{ id: string; name?: string | null; week?: number | null; course_code?: string | null }>
   recentResources: Array<{ id: string; filename: string; document_type?: string | null; course_code?: string | null; created_at: string }>
+  assessmentConflicts?: Array<{ id: string; assessment_name?: string | null; due_date_existing?: string | null; due_date_new?: string | null; course_code?: string | null }>
+  careerPulse?: {
+    activeApplications: number
+    outstandingAssessments: number
+    interviews: number
+    needsAttention: Array<{ title: string; deadline_at_utc: string }>
+  }
 }
 
 export function HomeDashboard() {
@@ -148,6 +158,36 @@ export function HomeDashboard() {
           ))}
         </div>
 
+        <Card className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Career Pulse</p>
+              <p className="mt-1 text-sm text-slate-600">Actionable career priorities from your current applications.</p>
+            </div>
+            <Link href="/careers">
+              <Button variant="outline" size="sm">Open Careers</Button>
+            </Link>
+          </div>
+          {dashboard?.careerPulse ? (
+            <>
+              <p className="text-sm text-slate-700">
+                {dashboard.careerPulse.activeApplications} active applications · {dashboard.careerPulse.outstandingAssessments} assessments · {dashboard.careerPulse.interviews} interviews
+              </p>
+              {(dashboard.careerPulse.needsAttention || []).length > 0 ? (
+                <div className="space-y-1 text-sm text-slate-700">
+                  {dashboard.careerPulse.needsAttention.map((item) => (
+                    <p key={`${item.title}_${item.deadline_at_utc}`}>{item.title} · Due {new Date(item.deadline_at_utc).toLocaleString()}</p>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-slate-600">No urgent career deadlines right now.</p>
+              )}
+            </>
+          ) : (
+            <p className="text-sm text-slate-600">Career pulse will appear once you follow companies or track applications.</p>
+          )}
+        </Card>
+
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <Link href="/units"><Card className="h-full space-y-2 hover:bg-slate-50 transition-colors"><p className="text-sm font-semibold text-slate-500">Units</p><p className="text-lg font-semibold text-slate-950">Manage your enrolled units</p></Card></Link>
           <Link href="/planner"><Card className="h-full space-y-2 hover:bg-slate-50 transition-colors"><p className="text-sm font-semibold text-slate-500">Planner</p><p className="text-lg font-semibold text-slate-950">Track tasks and deadlines</p></Card></Link>
@@ -155,7 +195,8 @@ export function HomeDashboard() {
           <Link href="/ai-tutor"><Card className="h-full space-y-2 hover:bg-slate-50 transition-colors"><p className="text-sm font-semibold text-slate-500">AI Tutor</p><p className="text-lg font-semibold text-slate-950">Ask for study help</p></Card></Link>
           <Link href="/news"><Card className="h-full space-y-2 hover:bg-slate-50 transition-colors"><p className="text-sm font-semibold text-slate-500">Actuarial News</p><p className="text-lg font-semibold text-slate-950">Read current industry news</p></Card></Link>
           <Link href="/semester-timeline"><Card className="h-full space-y-2 hover:bg-slate-50 transition-colors"><p className="text-sm font-semibold text-slate-500">Semester Timeline</p><p className="text-lg font-semibold text-slate-950">See the current Monash teaching week</p></Card></Link>
-          <Link href="/resources"><Card className="h-full space-y-2 hover:bg-slate-50 transition-colors"><p className="text-sm font-semibold text-slate-500">Careers</p><p className="text-lg font-semibold text-slate-950">Explore resources and templates</p></Card></Link>
+          <Link href="/careers"><Card className="h-full space-y-2 hover:bg-slate-50 transition-colors"><p className="text-sm font-semibold text-slate-500">Careers</p><p className="text-lg font-semibold text-slate-950">Discover jobs, track applications and assessments</p></Card></Link>
+          <Link href="/resources"><Card className="h-full space-y-2 hover:bg-slate-50 transition-colors"><p className="text-sm font-semibold text-slate-500">Resources</p><p className="text-lg font-semibold text-slate-950">Explore learning resources and templates</p></Card></Link>
           <Link href="/settings"><Card className="h-full space-y-2 hover:bg-slate-50 transition-colors"><p className="text-sm font-semibold text-slate-500">Settings / Profile</p><p className="text-lg font-semibold text-slate-950">Update your name and appearance</p></Card></Link>
         </div>
       </section>
@@ -267,6 +308,64 @@ export function HomeDashboard() {
           )}
         </Card>
       </section>
+
+      <section className="grid gap-4 lg:grid-cols-2">
+        <Card className="space-y-4">
+          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Current week topics</p>
+          {dashboard?.currentWeek ? (
+            <div className="space-y-3">
+              <p className="text-lg font-semibold text-slate-950">{dashboard.currentWeek.label}</p>
+              <p className="text-sm text-slate-600">{new Date(dashboard.currentWeek.start).toLocaleDateString('en-AU')} - {new Date(dashboard.currentWeek.end).toLocaleDateString('en-AU')}</p>
+              <div className="space-y-3">
+                {(dashboard.currentTopics || []).length > 0 ? (dashboard.currentTopics || []).map((topic) => (
+                  <div key={topic.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                    <p className="font-semibold text-slate-950">{topic.course_code || 'Unit'}: {topic.name || 'Topic unavailable'}</p>
+                    <p className="text-sm text-slate-600">Week {topic.week || dashboard.currentWeek?.weekNumber || '—'}</p>
+                  </div>
+                )) : <p className="text-sm text-slate-600">Upload a unit guide or teaching schedule to extract current topics for this week.</p>}
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-slate-600">Semester dates are not available yet.</p>
+          )}
+        </Card>
+
+        <Card className="space-y-4">
+          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Upcoming assessments</p>
+          <div className="space-y-3">
+            {(dashboard?.upcomingAssessments || []).length > 0 ? (dashboard?.upcomingAssessments || []).map((assessment) => (
+              <div key={assessment.id} className="rounded-2xl border border-slate-200 bg-white p-3">
+                <p className="font-semibold text-slate-950">{assessment.course_code || 'Unit'}: {assessment.name}</p>
+                <p className="text-sm text-slate-600">{assessment.due_date ? new Date(assessment.due_date).toLocaleDateString('en-AU') : 'No due date yet'}</p>
+              </div>
+            )) : <p className="text-sm text-slate-600">Upload assessment briefs or guides to populate upcoming dates.</p>}
+          </div>
+        </Card>
+      </section>
+
+      {(dashboard?.assessmentConflicts || []).length > 0 ? (
+        <section>
+          <Card className="space-y-3 border-amber-200 bg-amber-50">
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-amber-800">Date conflicts detected</p>
+            <p className="text-sm text-amber-800">Some uploaded documents disagree on assessment due dates. Check the latest unit guide before finalising your plan.</p>
+            <div className="space-y-2">
+              {(dashboard?.assessmentConflicts || []).map((conflict) => (
+                <div key={conflict.id} className="rounded-2xl border border-amber-200 bg-white p-3 text-sm text-slate-700">
+                  <p className="font-semibold text-slate-900">{conflict.course_code || 'Unit'}: {conflict.assessment_name || 'Assessment'}</p>
+                  <p>Existing: {conflict.due_date_existing ? new Date(conflict.due_date_existing).toLocaleDateString('en-AU') : 'Unknown'} · New: {conflict.due_date_new ? new Date(conflict.due_date_new).toLocaleDateString('en-AU') : 'Unknown'}</p>
+                </div>
+              ))}
+            </div>
+            <Link href="/uploads">
+              <Button variant="outline">Review uploaded documents</Button>
+            </Link>
+          </Card>
+        </section>
+      ) : null}
+
+        <section>
+          <SemesterTimeline />
+        </section>
     </div>
   )
 }
