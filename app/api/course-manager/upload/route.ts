@@ -3,10 +3,13 @@ import { ingestUpload } from '@/lib/course-manager/service'
 import { classifyResource } from '@/lib/course-manager/classification'
 import { addBatchFile, createUploadBatch, getUploadBatch, recomputeBatchStatus, updateBatchFileStatus, upsertCourse } from '@/lib/app-state/service'
 import { appendLog } from '@/lib/logging'
+import { requireAuthCookie } from '@/lib/api-auth'
 
 export const runtime = 'nodejs'
 
 export async function POST(request: NextRequest) {
+  const authError = requireAuthCookie(request)
+  if (authError) return authError
   try {
     await appendLog('uploads', '[UPLOAD] request received', { route: '/api/course-manager/upload' })
     const form = await request.formData()

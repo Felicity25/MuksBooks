@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { emitAppStateUpdate } from '@/lib/app-state/client-events'
+import { useAuth } from '@/components/auth-provider'
 
 interface Unit {
   id: string
@@ -14,6 +15,7 @@ interface Unit {
 }
 
 export function UnitsManager() {
+  const { requireAuth } = useAuth()
   const [units, setUnits] = useState<Unit[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -46,6 +48,7 @@ export function UnitsManager() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (requireAuth('Sign in to create and manage your units.')) return
 
     await fetch('/api/app-state/courses', {
       method: 'POST',
@@ -65,12 +68,14 @@ export function UnitsManager() {
   }
 
   const handleEdit = (unit: Unit) => {
+    if (requireAuth('Sign in to edit your units.')) return
     setEditingUnit(unit)
     setFormData({ code: unit.code, name: unit.name, status: unit.status, topics: unit.topics })
     setShowForm(true)
   }
 
   const handleDelete = async (id: string) => {
+    if (requireAuth('Sign in to manage your units.')) return
     await fetch(`/api/app-state/courses?courseId=${encodeURIComponent(id)}`, { method: 'DELETE' })
     await loadUnits()
     emitAppStateUpdate('courses')
@@ -81,7 +86,7 @@ export function UnitsManager() {
       <Card>
         <div className="flex items-center justify-between">
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Active units</p>
-          <Button onClick={() => { setShowForm(true); setEditingUnit(null); setFormData({ code: '', name: '', status: 'In progress', topics: 0 }) }}>
+          <Button onClick={() => { if (requireAuth('Sign in to create and manage your units.')) return; setShowForm(true); setEditingUnit(null); setFormData({ code: '', name: '', status: 'In progress', topics: 0 }) }}>
             Add Unit
           </Button>
         </div>

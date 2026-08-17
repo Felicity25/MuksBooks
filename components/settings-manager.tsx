@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { emitAppStateUpdate } from '@/lib/app-state/client-events'
+import { useAuth } from '@/components/auth-provider'
 
 interface Settings {
   theme: 'light' | 'dark' | 'system'
@@ -16,6 +17,7 @@ interface Settings {
 }
 
 export function SettingsManager() {
+  const { requireAuth } = useAuth()
   const [settings, setSettings] = useState<Settings>({
     theme: 'light',
     name: '',
@@ -53,6 +55,7 @@ export function SettingsManager() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (requireAuth('Sign in to save your settings and profile.')) return
     await saveSettings(settings)
   }
 

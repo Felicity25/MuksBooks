@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { archiveCourse, listCourses, upsertCourse } from '@/lib/app-state/service'
 import { publishEvent } from '@/lib/app-state/events'
+import { requireAuthCookie } from '@/lib/api-auth'
 
 export const runtime = 'nodejs'
 
@@ -15,6 +16,8 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const authError = requireAuthCookie(request)
+  if (authError) return authError
   try {
     const body = await request.json()
     if (!body?.courseCode) {
@@ -40,6 +43,8 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
+  const authError = requireAuthCookie(request)
+  if (authError) return authError
   const { searchParams } = new URL(request.url)
   const courseId = searchParams.get('courseId')
   if (!courseId) {

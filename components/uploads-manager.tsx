@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { emitAppStateUpdate } from '@/lib/app-state/client-events'
+import { useAuth } from '@/components/auth-provider'
 
 interface DocumentRecord {
   id: string
@@ -140,6 +141,7 @@ function metadataSummary(document: DocumentRecord) {
 }
 
 export function UploadsManager() {
+  const { requireAuth } = useAuth()
   const [documents, setDocuments] = useState<DocumentRecord[]>([])
   const [showForm, setShowForm] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -344,6 +346,7 @@ export function UploadsManager() {
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
+    if (requireAuth('Sign in to upload files and build your curriculum library.')) return
     if (!stagedFiles.length) {
       setError('Select at least one file before uploading.')
       return
@@ -427,6 +430,7 @@ export function UploadsManager() {
   }
 
   const handleDelete = async (documentId: string) => {
+    if (requireAuth('Sign in to manage your uploaded files.')) return
     try {
       const response = await fetch(`/api/app-state/documents?documentId=${encodeURIComponent(documentId)}`, {
         method: 'DELETE'
@@ -456,7 +460,7 @@ export function UploadsManager() {
               MukBooks now reads uploaded resources from the shared AppState database so files remain available after refresh, restart and new Tutor conversations.
             </p>
           </div>
-          <Button onClick={() => setShowForm((current) => !current)}>{showForm ? 'Close upload form' : 'Upload unit resources'}</Button>
+          <Button onClick={() => { if (!showForm && requireAuth('Sign in to upload files and build your curriculum library.')) return; setShowForm((current) => !current) }}>{showForm ? 'Close upload form' : 'Upload unit resources'}</Button>
         </div>
 
         <div className="mt-6 grid gap-3 sm:grid-cols-3">

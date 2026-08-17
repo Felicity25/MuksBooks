@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getUserSettings, updateUserSettings } from '@/lib/app-state/service'
+import { requireAuthCookie } from '@/lib/api-auth'
 
 export const runtime = 'nodejs'
 
@@ -14,6 +15,8 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const authError = requireAuthCookie(request)
+  if (authError) return authError
   try {
     const body = await request.json()
     const settings = updateUserSettings('default', body || {})

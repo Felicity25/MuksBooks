@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { emitAppStateUpdate } from '@/lib/app-state/client-events'
+import { useAuth } from '@/components/auth-provider'
 
 interface StudySession {
   id: string
@@ -16,6 +17,7 @@ interface StudySession {
 }
 
 export function PlannerManager() {
+  const { requireAuth } = useAuth()
   const [sessions, setSessions] = useState<StudySession[]>([])
   const [courseOptions, setCourseOptions] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -105,6 +107,7 @@ export function PlannerManager() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (requireAuth('Sign in to save your planner and study sessions.')) return
     const plannedDate = dateFromDay(formData.day, formData.window)
     const estimatedMinutes = durationFromWindow(formData.window)
 
@@ -135,18 +138,21 @@ export function PlannerManager() {
   }
 
   const handleEdit = (session: StudySession) => {
+    if (requireAuth('Sign in to edit your planner.')) return
     setEditingSession(session)
     setFormData({ title: session.title, unit: session.unit, window: session.window, day: session.day })
     setShowForm(true)
   }
 
   const handleDelete = async (id: string) => {
+    if (requireAuth('Sign in to manage your planner.')) return
     await fetch(`/api/app-state/planner-tasks?taskId=${encodeURIComponent(id)}`, { method: 'DELETE' })
     await loadPlanner()
     emitAppStateUpdate('tasks')
   }
 
   const generateWeekPlan = async () => {
+    if (requireAuth('Sign in to generate and save a personalised week plan.')) return
     const units = courseOptions.length ? courseOptions : ['ETC3430', 'ETC3460', 'BFF5926', 'ETC5512']
     const activities = ['Quiz practice', 'Assignment work', 'Lesson review', 'Problem solving', 'Exam prep']
     const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']

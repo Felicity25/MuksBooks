@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { completePlannerTask, createPlannerTask, deletePlannerTask, listPlannerTasks, upsertCourse } from '@/lib/app-state/service'
+import { requireAuthCookie } from '@/lib/api-auth'
 
 export const runtime = 'nodejs'
 
@@ -9,6 +10,8 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const authError = requireAuthCookie(request)
+  if (authError) return authError
   const body = await request.json()
   if (!body?.title) {
     return NextResponse.json({ ok: false, error: 'title is required' }, { status: 400 })
@@ -42,6 +45,8 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
+  const authError = requireAuthCookie(request)
+  if (authError) return authError
   const body = await request.json()
   if (!body?.taskId) {
     return NextResponse.json({ ok: false, error: 'taskId is required' }, { status: 400 })
@@ -52,6 +57,8 @@ export async function PATCH(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
+  const authError = requireAuthCookie(request)
+  if (authError) return authError
   const { searchParams } = new URL(request.url)
   const taskId = searchParams.get('taskId')
   if (!taskId) {
