@@ -35,7 +35,7 @@ export function AuthPromptModal() {
     setIsLoading(true)
     setMessage(null)
 
-    const redirectTo = `${window.location.origin}/auth/callback`
+    const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(returnPath)}`
     const { data, error } = mode === 'sign-in'
       ? await client.auth.signInWithPassword({ email, password })
       : await client.auth.signUp({ email, password, options: { emailRedirectTo: redirectTo } })

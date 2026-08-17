@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { NewsCard } from '@/components/news/news-card'
-import type { BriefItem, NewsItem } from '@/lib/news/types'
+import { useAuth } from '@/components/auth-provider'
+import type { BriefItem, NewsItem, SavedNewsItem } from '@/lib/news/types'
 
 const CATEGORIES = [
   'All',
@@ -15,7 +16,8 @@ const CATEGORIES = [
   'Pensions',
   'Climate Risk',
   'Careers',
-  'Research'
+  'Research',
+  'Saved'
 ]
 
 const CATEGORY_TO_VALUE: Record<string, string> = {
@@ -55,7 +57,10 @@ interface NewsResponse {
 }
 
 export function NewsPageClient() {
+  const { user, isLoading: authLoading, requireAuth } = useAuth()
   const [data, setData] = useState<NewsResponse>({ items: [], brief: [], sinceYesterday: [], concepts: [], savedIds: [] })
+  const [savedItems, setSavedItems] = useState<SavedNewsItem[]>([])
+  const [savedUrls, setSavedUrls] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [category, setCategory] = useState('All')
@@ -64,6 +69,24 @@ export function NewsPageClient() {
   const [query, setQuery] = useState('')
   const [concept, setConcept] = useState<string | null>(null)
   const [showSinceYesterday, setShowSinceYesterday] = useState(false)
+
+  const loadSaved = useCallback(async () => {
+    if (!user) {
+      setSavedItems([])
+      setSavedUrls([])
+      return
+    }
+
+    const response = await fetch('/api/news/saved', { cache: 'no-store' })
+    const payload = await response.json().catch(() => null)
+    if (!response.ok || !payload?.ok) throw new Error(payload?.error || 'Saved articles could not be loaded.')
+    setSavedItems(payload.items || [])
+    setSavedUrls(payload.savedUrls || [])
+  }, [user])
+
+  useEffect(() => {
+    if (!authLoading) void loadSaved().catch((error) => setErrorMessage(error instanceof Error ? error.message : 'Saved articles could not be loaded.'))
+  }, [authLoading, loadSaved])
 
   const parseNewsResponse = async (res: Response) => {
     const rawBody = await res.text()
@@ -80,6 +103,12 @@ export function NewsPageClient() {
   }
 
   const load = useCallback(() => {
+    if (category === 'Saved') {
+      setLoading(false)
+      setErrorMessage(null)
+      return
+    }
+
     setLoading(true)
     setErrorMessage(null)
 
@@ -137,20 +166,42 @@ export function NewsPageClient() {
     return () => clearTimeout(timeout)
   }, [load, query])
 
-  const savedSet = useMemo(() => new Set(data.savedIds), [data.savedIds])
+  const savedSet = useMemo(() => new Set(savedUrls), [savedUrls])
 
-  const toggleSave = async (newsId: string) => {
-    setData((prev) => {
-      const isSaved = prev.savedIds.includes(newsId)
-      return { ...prev, savedIds: isSaved ? prev.savedIds.filter((id) => id !== newsId) : [...prev.savedIds, newsId] }
-    })
+  const toggleSave = async (article: NewsItem) => {
+    if (requireAuth('Sign in or create a MuksBooks account to keep articles in your personal Saved collection.', '/news')) return
 
-    await fetch('/api/news/saved', {
-      method: 'POST',
+    const isSaved = savedSet.has(article.url)
+    setSavedUrls((previous) => isSaved ? previous.filter((url) => url !== article.url) : [...previous, article.url])
+    if (isSaved) setSavedItems((previous) => previous.filter((item) => item.url !== article.url))
+
+    const response = await fetch('/api/news/saved', {
+      method: isSaved ? 'DELETE' : 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ newsId })
-    }).catch((err) => console.error('Failed to save article:', err))
+      body: JSON.stringify(isSaved ? { url: article.url } : { article })
+    }).catch(() => null)
+
+    if (!response?.ok) {
+      const payload = await response?.json().catch(() => null)
+      await loadSaved().catch(() => undefined)
+      setErrorMessage(payload?.error || (isSaved ? 'The article could not be removed from Saved.' : 'The article could not be saved.'))
+      return
+    }
+
+    await loadSaved().catch(() => undefined)
   }
+
+  const displayedItems = category === 'Saved' ? savedItems : data.items
+  const savedGroups = useMemo(() => {
+    if (category !== 'Saved') return []
+    const groups = new Map<string, SavedNewsItem[]>()
+    savedItems.forEach((item) => {
+      const sortDate = item.publishedAt && !Number.isNaN(new Date(item.publishedAt).getTime()) ? item.publishedAt : item.savedAt
+      const label = new Date(sortDate).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
+      groups.set(label, [...(groups.get(label) || []), item])
+    })
+    return Array.from(groups.entries())
+  }, [category, savedItems])
 
   return (
     <div className="space-y-6 lg:col-span-2">
@@ -162,7 +213,7 @@ export function NewsPageClient() {
         ))}
       </div>
 
-      {data.brief.length > 0 && (
+      {category !== 'Saved' && data.brief.length > 0 && (
         <div className="rounded-3xl border border-sky-200 bg-sky-50 p-5 space-y-2">
           <p className="text-sm font-semibold uppercase tracking-wide text-sky-700">Today's Actuarial Brief</p>
           <p className="text-xs text-sky-600">{data.brief.length} developments worth knowing</p>
@@ -174,7 +225,7 @@ export function NewsPageClient() {
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-4">
+      {category !== 'Saved' && <div className="flex flex-wrap items-center gap-4">
         <div className="flex flex-wrap gap-2">
           {COUNTRIES.map((item) => (
             <Badge key={item} variant={country === item ? 'default' : 'outline'} className="cursor-pointer" onClick={() => setCountry(country === item ? null : item)}>
@@ -192,9 +243,9 @@ export function NewsPageClient() {
         <button className="text-sm font-medium text-sky-700 hover:text-sky-900" onClick={() => setShowSinceYesterday((value) => !value)}>
           {showSinceYesterday ? 'Hide' : 'Show'} since yesterday
         </button>
-      </div>
+      </div>}
 
-      {showSinceYesterday && (
+      {category !== 'Saved' && showSinceYesterday && (
         <div className="rounded-2xl border border-slate-200 p-4 text-sm text-slate-700 space-y-1">
           <p className="font-semibold text-slate-800">Since yesterday</p>
           {data.sinceYesterday.length === 0 ? (
@@ -209,23 +260,23 @@ export function NewsPageClient() {
         </div>
       )}
 
-      <input
+      {category !== 'Saved' && <input
         type="search"
         placeholder="Search company, regulator, topic, actuarial concept, country..."
         value={query}
         onChange={(event) => setQuery(event.target.value)}
         className="w-full rounded-full border border-slate-300 px-4 py-2 text-sm"
-      />
+      />}
 
       {errorMessage && (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
           <p className="font-semibold">News could not be fully loaded right now.</p>
           <p className="mt-1">{errorMessage}</p>
-          <button className="mt-3 text-sm font-medium text-amber-900 underline" onClick={load}>Retry</button>
+          <button className="mt-3 text-sm font-medium text-amber-900 underline" onClick={() => category === 'Saved' ? void loadSaved() : load()}>Retry</button>
         </div>
       )}
 
-      {data.concepts.length > 0 && (
+      {category !== 'Saved' && data.concepts.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {data.concepts.map((item) => (
             <Badge
@@ -240,12 +291,29 @@ export function NewsPageClient() {
         </div>
       )}
 
-      {loading ? (
+      {category === 'Saved' && !user && !authLoading ? (
+        <div className="rounded-2xl border border-dashed border-slate-300 p-8 text-center">
+          <p className="font-semibold text-slate-900">Your saved articles will appear here.</p>
+          <p className="mt-1 text-sm text-slate-500">Sign in to save actuarial news and build your personal reading library.</p>
+          <button className="mt-4 text-sm font-semibold text-sky-700 hover:text-sky-900" onClick={() => requireAuth('Sign in to view your personal Saved collection.', '/news')}>Sign In</button>
+        </div>
+      ) : loading || authLoading ? (
         <div className="text-center">Finding the latest actuarial news...</div>
-      ) : data.items.length === 0 ? (
+      ) : displayedItems.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">
-          <p>No relevant articles were found. Try refreshing or broadening the category.</p>
-          <button className="mt-3 text-sm font-medium text-slate-700 underline" onClick={load}>Retry</button>
+          <p>{category === 'Saved' ? 'Save an article to start your personal reading library.' : 'No relevant articles were found. Try refreshing or broadening the category.'}</p>
+          {category !== 'Saved' && <button className="mt-3 text-sm font-medium text-slate-700 underline" onClick={load}>Retry</button>}
+        </div>
+      ) : category === 'Saved' ? (
+        <div className="space-y-8">
+          {savedGroups.map(([date, items]) => (
+            <section key={date} className="space-y-4">
+              <h2 className="border-b border-slate-200 pb-2 text-sm font-semibold text-slate-700">{date}</h2>
+              <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+                {items.map((item) => <NewsCard key={item.url} item={item} saved onToggleSave={toggleSave} onSelectConcept={setConcept} />)}
+              </div>
+            </section>
+          ))}
         </div>
       ) : (
         <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
@@ -253,7 +321,7 @@ export function NewsPageClient() {
             <NewsCard
               key={item.id}
               item={item}
-              saved={savedSet.has(item.id)}
+              saved={savedSet.has(item.url)}
               onToggleSave={toggleSave}
               onSelectConcept={(selectedConcept) => setConcept(concept === selectedConcept ? null : selectedConcept)}
             />

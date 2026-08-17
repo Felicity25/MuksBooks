@@ -75,6 +75,10 @@ export interface NewsItem {
   confidence: number
 }
 
+export interface SavedNewsItem extends NewsItem {
+  savedAt: string
+}
+
 export interface NewsQueryFilters {
   category?: NewsCategory | 'All'
   country?: NewsCountry

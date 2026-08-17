@@ -39,7 +39,7 @@ export function NewsCard({
 }: {
   item: NewsItem
   saved: boolean
-  onToggleSave: (id: string) => void
+  onToggleSave: (item: NewsItem) => void
   onSelectConcept: (concept: string) => void
 }) {
   const isRegulation = item.category === 'REGULATION'
@@ -128,10 +128,11 @@ export function NewsCard({
         </div>
         <div className="flex items-center gap-3">
           <button
-            onClick={() => onToggleSave(item.id)}
+            onClick={() => onToggleSave(item)}
             className="text-sm font-medium text-slate-600 hover:text-slate-950"
+            aria-label={saved ? `Remove ${item.title} from Saved` : `Save ${item.title}`}
           >
-            {saved ? '★ Saved' : '☆ Save'}
+            {saved ? 'Saved ✓' : '☆ Save'}
           </button>
           <a
             href={item.url}
