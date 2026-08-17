@@ -69,6 +69,25 @@ export function HomeDashboard() {
     ]
   }, [dashboard])
 
+  const masterySummary = useMemo(() => {
+    const activeCourses = (dashboard?.activeCourses || []).filter((course) => Number.isFinite(Number(course.mastery_level)))
+
+    if (activeCourses.length === 0) {
+      return null
+    }
+
+    const masteryValues = activeCourses.map((course) => Math.max(0, Math.min(100, Number(course.mastery_level) || 0)))
+    const overall = Math.round(masteryValues.reduce((sum, value) => sum + value, 0) / masteryValues.length)
+    const strongest = [...activeCourses].sort((left, right) => (Number(right.mastery_level) || 0) - (Number(left.mastery_level) || 0))[0]
+    const weakest = [...activeCourses].sort((left, right) => (Number(left.mastery_level) || 0) - (Number(right.mastery_level) || 0))[0]
+
+    return {
+      overall,
+      strongest,
+      weakest
+    }
+  }, [dashboard])
+
   const generateStudyPlan = () => {
     const weakTopic = dashboard?.weakTopics?.[0]
     const upcomingAssessment = dashboard?.upcomingAssessments?.[0]
@@ -92,12 +111,17 @@ export function HomeDashboard() {
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.18em] text-sky-700">Home dashboard</p>
-            <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">Your semester study control centre</h1>
+            <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">
+              Your semester study control centre
+            </h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
               MuksBooks organises your units, tasks, uploads, planner and mastery progress in one academic workflow.
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
+            <Link href="/settings">
+              <Button variant="outline">Settings / Profile</Button>
+            </Link>
             <Link href="/news">
               <Button variant="secondary">Actuarial News</Button>
             </Link>
@@ -122,6 +146,17 @@ export function HomeDashboard() {
               </Card>
             </Link>
           ))}
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <Link href="/units"><Card className="h-full space-y-2 hover:bg-slate-50 transition-colors"><p className="text-sm font-semibold text-slate-500">Units</p><p className="text-lg font-semibold text-slate-950">Manage your enrolled units</p></Card></Link>
+          <Link href="/planner"><Card className="h-full space-y-2 hover:bg-slate-50 transition-colors"><p className="text-sm font-semibold text-slate-500">Planner</p><p className="text-lg font-semibold text-slate-950">Track tasks and deadlines</p></Card></Link>
+          <Link href="/uploads"><Card className="h-full space-y-2 hover:bg-slate-50 transition-colors"><p className="text-sm font-semibold text-slate-500">Uploads</p><p className="text-lg font-semibold text-slate-950">Upload unit guides and briefs</p></Card></Link>
+          <Link href="/ai-tutor"><Card className="h-full space-y-2 hover:bg-slate-50 transition-colors"><p className="text-sm font-semibold text-slate-500">AI Tutor</p><p className="text-lg font-semibold text-slate-950">Ask for study help</p></Card></Link>
+          <Link href="/news"><Card className="h-full space-y-2 hover:bg-slate-50 transition-colors"><p className="text-sm font-semibold text-slate-500">Actuarial News</p><p className="text-lg font-semibold text-slate-950">Read current industry news</p></Card></Link>
+          <Link href="/semester-timeline"><Card className="h-full space-y-2 hover:bg-slate-50 transition-colors"><p className="text-sm font-semibold text-slate-500">Semester Timeline</p><p className="text-lg font-semibold text-slate-950">See the current Monash teaching week</p></Card></Link>
+          <Link href="/resources"><Card className="h-full space-y-2 hover:bg-slate-50 transition-colors"><p className="text-sm font-semibold text-slate-500">Careers</p><p className="text-lg font-semibold text-slate-950">Explore resources and templates</p></Card></Link>
+          <Link href="/settings"><Card className="h-full space-y-2 hover:bg-slate-50 transition-colors"><p className="text-sm font-semibold text-slate-500">Settings / Profile</p><p className="text-lg font-semibold text-slate-950">Update your name and appearance</p></Card></Link>
         </div>
       </section>
 
@@ -210,27 +245,26 @@ export function HomeDashboard() {
 
         <Card className="space-y-4">
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Mastery pulse</p>
-          <p className="text-sm text-slate-600">Your mastery levels are updated by lessons, quizzes, and feedback. Engage with weak topics this week for an HD target.</p>
-          <div className="space-y-3">
-            <div>
-              <div className="mb-2 flex items-center justify-between text-sm font-medium text-slate-700">
-                <span>Apply independently</span>
-                <span>2 topics</span>
+          {masterySummary ? (
+            <div className="space-y-4">
+              <p className="text-sm text-slate-600">Your unit mastery is based on the levels you saved for each active unit.</p>
+              <div>
+                <div className="mb-2 flex items-center justify-between text-sm font-medium text-slate-700">
+                  <span>Overall mastery</span>
+                  <span>{masterySummary.overall}%</span>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-slate-200">
+                  <div className="h-full rounded-full bg-slate-900" style={{ width: `${masterySummary.overall}%` }} />
+                </div>
               </div>
-              <div className="h-2 overflow-hidden rounded-full bg-slate-200">
-                <div className="h-full w-2/3 rounded-full bg-slate-900" />
-              </div>
-            </div>
-            <div>
-              <div className="mb-2 flex items-center justify-between text-sm font-medium text-slate-700">
-                <span>Exam ready</span>
-                <span>1 topic</span>
-              </div>
-              <div className="h-2 overflow-hidden rounded-full bg-slate-200">
-                <div className="h-full w-1/3 rounded-full bg-sky-700" />
+              <div className="grid gap-3 text-sm text-slate-600">
+                <p><span className="font-semibold text-slate-900">Strongest unit:</span> {masterySummary.strongest?.course_code || 'N/A'} ({Math.round(Number(masterySummary.strongest?.mastery_level) || 0)}%)</p>
+                <p><span className="font-semibold text-slate-900">Needs attention:</span> {masterySummary.weakest?.course_code || 'N/A'} ({Math.round(Number(masterySummary.weakest?.mastery_level) || 0)}%)</p>
               </div>
             </div>
-          </div>
+          ) : (
+            <p className="text-sm text-slate-600">Add your units and update your mastery levels to start tracking your Mastery Pulse.</p>
+          )}
         </Card>
       </section>
     </div>
