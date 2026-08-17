@@ -18,7 +18,7 @@ That experiment became MuksBooks.
 
 ## 🚧 Project status
 
-MuksBooks is an actively developing personal project.
+🚧 MuksBooks is under active development.
 
 It began as a local application built for my own studies and is gradually being developed into a cloud-based platform that can be used across devices.
 
