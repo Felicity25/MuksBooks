@@ -10,7 +10,7 @@ import { onAppStateUpdate } from '@/lib/app-state/client-events'
 interface DashboardData {
   todayTasks: Array<{ id: string; title: string; due_date?: string | null; planned_date?: string | null; course_code?: string | null }>
   upcomingAssessments: Array<{ id: string; name: string; due_date?: string | null; course_code?: string | null; weighting?: number | null }>
-  activeCourses: Array<{ id: string; course_code: string; course_name?: string | null; avg_mastery?: number | null; topic_count?: number | null }>
+  activeCourses: Array<{ id: string; course_code: string; course_name?: string | null; avg_mastery?: number | null; topic_count?: number | null; mastery_level?: number | null }>
   weakTopics: Array<{ id: string; name?: string | null; mastery_score?: number | null; course_code?: string | null }>
   recentResources: Array<{ id: string; filename: string; document_type?: string | null; course_code?: string | null; created_at: string }>
 }
