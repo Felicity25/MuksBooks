@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 import type { User } from '@supabase/supabase-js'
 
@@ -41,10 +41,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [promptState, setPromptState] = useState<AuthPromptState>({
     open: false, reason: '', returnPath: '/', mode: 'sign-in'
   })
-  const clientRef = useRef(createSupabaseBrowserClient())
 
   useEffect(() => {
-    const client = clientRef.current
+    // Initialise client inside useEffect so it always runs in the browser.
+    const client = createSupabaseBrowserClient()
     if (!client) { setIsLoading(false); return }
 
     client.auth.getSession().then(({ data }) => {
@@ -59,14 +59,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe()
   }, [])
 
-  const requireAuth = useCallback((reason = 'Sign in to save your work and access it from any device.', returnPath = typeof window !== 'undefined' ? window.location.pathname : '/') => {
+  const requireAuth = useCallback((
+    reason = 'Sign in to save your work and access it from any device.',
+    returnPath = typeof window !== 'undefined' ? window.location.pathname : '/'
+  ) => {
     if (user) return false
     setPromptState({ open: true, reason, returnPath, mode: 'sign-in' })
     return true
   }, [user])
 
   const signOut = useCallback(async () => {
-    const client = clientRef.current
+    const client = createSupabaseBrowserClient()
     if (client) await client.auth.signOut()
   }, [])
 
