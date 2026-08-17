@@ -101,13 +101,52 @@ export async function listUserTasks() {
   const client = createSupabaseServerClient()
   if (!client) return []
 
-  const { data, error } = await client.from('tasks').select('*').order('created_at', { ascending: false })
+  const { data, error } = await client
+    .from('tasks')
+    .select('id, unit_id, title, description, task_type, status, priority, due_date, planned_date, estimated_minutes, created_by, created_at, updated_at, career_assessment_id, units(code, name)')
+    .order('planned_date', { ascending: true, nullsFirst: false })
+    .order('due_date', { ascending: true, nullsFirst: false })
+    .order('created_at', { ascending: true })
   if (error) return []
   return data ?? []
 }
 
+export async function ensureUserUnitForCode(userId: string, code: string) {
+  const client = createSupabaseServerClient()
+  if (!client) return null
+
+  const normalizedCode = code.trim().toUpperCase()
+  if (!normalizedCode) return null
+
+  const { data: existing, error: existingError } = await client
+    .from('units')
+    .select('id, code, name')
+    .eq('user_id', userId)
+    .eq('code', normalizedCode)
+    .maybeSingle()
+
+  if (existingError && existingError.code !== 'PGRST116') return null
+  if (existing?.id) return existing
+
+  const { data, error } = await client
+    .from('units')
+    .insert({
+      user_id: userId,
+      code: normalizedCode,
+      name: normalizedCode,
+      status: 'active'
+    })
+    .select('id, code, name')
+    .single()
+
+  if (error || !data) return null
+  return data
+}
+
 export async function createUserTask(input: {
+  userId: string
   unit_id?: string | null
+  career_assessment_id?: string | null
   title: string
   description?: string | null
   task_type?: string
@@ -121,7 +160,9 @@ export async function createUserTask(input: {
   if (!client) return null
 
   const { data, error } = await client.from('tasks').insert({
+    user_id: input.userId,
     unit_id: input.unit_id ?? null,
+    career_assessment_id: input.career_assessment_id ?? null,
     title: input.title,
     description: input.description ?? null,
     task_type: input.task_type ?? 'study',
@@ -135,4 +176,74 @@ export async function createUserTask(input: {
 
   if (error || !data) return null
   return data
+}
+
+export async function findUserTaskByCareerAssessment(userId: string, careerAssessmentId: string) {
+  const client = createSupabaseServerClient()
+  if (!client) return null
+
+  const { data, error } = await client
+    .from('tasks')
+    .select('id, user_id, career_assessment_id, due_date, planned_date, status')
+    .eq('user_id', userId)
+    .eq('career_assessment_id', careerAssessmentId)
+    .maybeSingle()
+
+  if (error || !data) return null
+  return data
+}
+
+export async function updateUserTask(input: {
+  userId: string
+  taskId: string
+  due_date?: string | null
+  planned_date?: string | null
+  status?: string
+}) {
+  const client = createSupabaseServerClient()
+  if (!client) return null
+
+  const payload: Record<string, unknown> = {}
+  if (input.due_date !== undefined) payload.due_date = input.due_date
+  if (input.planned_date !== undefined) payload.planned_date = input.planned_date
+  if (input.status !== undefined) payload.status = input.status
+
+  const { data, error } = await client
+    .from('tasks')
+    .update(payload)
+    .eq('id', input.taskId)
+    .eq('user_id', input.userId)
+    .select('id, user_id, career_assessment_id, due_date, planned_date, status')
+    .maybeSingle()
+
+  if (error || !data) return null
+  return data
+}
+
+export async function setUserTaskCompletion(userId: string, taskId: string, completed: boolean) {
+  const status = completed ? 'completed' : 'pending'
+  return updateUserTask({ userId, taskId, status })
+}
+
+export async function deleteUserTask(userId: string, taskId: string) {
+  const client = createSupabaseServerClient()
+  if (!client) return null
+
+  const { data: existing, error: fetchError } = await client
+    .from('tasks')
+    .select('id, user_id, career_assessment_id')
+    .eq('id', taskId)
+    .eq('user_id', userId)
+    .maybeSingle()
+
+  if (fetchError || !existing) return null
+
+  const { error } = await client
+    .from('tasks')
+    .delete()
+    .eq('id', taskId)
+    .eq('user_id', userId)
+
+  if (error) return null
+  return existing
 }
