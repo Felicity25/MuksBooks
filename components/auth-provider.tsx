@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
-import type { User } from '@supabase/supabase-js'
+import type { AuthChangeEvent, Session, User } from '@supabase/supabase-js'
 
 interface AuthPromptState {
   open: boolean
@@ -47,12 +47,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const client = createSupabaseBrowserClient()
     if (!client) { setIsLoading(false); return }
 
-    client.auth.getSession().then((result) => {
+    client.auth.getSession().then((result: { data: { session: Session | null } }) => {
       setUser(result.data.session?.user ?? null)
       setIsLoading(false)
     })
 
-    const { data: { subscription } } = client.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = client.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
       setUser(session?.user ?? null)
     })
 
