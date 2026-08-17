@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -46,6 +46,7 @@ const DISCIPLINES = ['Actuarial', 'Insurance', 'Risk', 'Investments', 'Consultin
 const COUNTRIES = ['Australia', 'South Africa', 'United Kingdom', 'International']
 const CAREER_AREAS = ['All', 'Actuarial', 'Banking', 'Technology']
 const OTHER_COMPANY_VALUE = '__other__'
+const CV_ACCEPTED_EXTENSIONS = ['.pdf', '.doc', '.docx']
 const APPLICATION_STAGES = [
   'Interested', 'Preparing', 'Ready to Apply', 'Applied', 'Online Assessment', 'Video Interview', 'Phone Interview', 'Interview',
   'Assessment Centre', 'Final Interview', 'Offer', 'Accepted', 'Rejected', 'Withdrawn', 'Closed'
@@ -408,6 +409,76 @@ export function CareersManager() {
       const lines = checks.slice(0, 5).map((item: any) => `${item.state}: ${item.requirement}`).join(' | ')
       setMessage(lines || 'CV matching complete.')
     })
+  }
+
+  const cvFileInputRef = useRef<HTMLInputElement>(null)
+  const [cvUploadStatus, setCvUploadStatus] = useState<'idle' | 'uploading' | 'processing' | 'success' | 'error'>('idle')
+  const [cvUploadError, setCvUploadError] = useState<string | null>(null)
+
+  const handleCvUpload = async (file: File) => {
+    const lowerName = file.name.toLowerCase()
+    if (!CV_ACCEPTED_EXTENSIONS.some((ext) => lowerName.endsWith(ext))) {
+      setCvUploadStatus('error')
+      setCvUploadError('Please upload a PDF, DOC, or DOCX file.')
+      return
+    }
+
+    if (isGuest) {
+      await runProtectedAction('Sign in to upload your CV.', async () => {})
+      return
+    }
+
+    setCvUploadStatus('uploading')
+    setCvUploadError(null)
+
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('courseCode', 'CV')
+      formData.append('courseName', 'CV & Career Documents')
+      formData.append('batchName', `CV upload · ${new Date().toISOString().slice(0, 10)}`)
+      formData.append('fileMetadata', JSON.stringify([
+        { fileName: file.name, resourceType: 'CV', duplicateStrategy: 'replace' }
+      ]))
+
+      const uploadResponse = await fetch('/api/course-manager/upload', {
+        method: 'POST',
+        body: formData
+      })
+      const uploadPayload = await uploadResponse.json()
+      if (!uploadResponse.ok || !uploadPayload?.ok) {
+        throw new Error(uploadPayload?.error || 'CV upload failed.')
+      }
+
+      const result = uploadPayload.results?.[0]
+      if (!result?.ok || !result?.documentId) {
+        throw new Error(result?.error || 'CV upload failed.')
+      }
+
+      setCvUploadStatus('processing')
+
+      const registerResponse = await fetch('/api/careers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'register-cv', documentId: result.documentId, label: file.name })
+      })
+      const registerPayload = await registerResponse.json()
+      if (!registerResponse.ok || !registerPayload?.ok) {
+        throw new Error(registerPayload?.error || 'CV processing failed.')
+      }
+
+      setCvUploadStatus('success')
+      setMessage(registerPayload.isPrimary ? 'CV uploaded successfully and set as your Primary CV.' : 'CV uploaded successfully.')
+      await loadCareers()
+      emitAppStateUpdate('planner')
+      emitAppStateUpdate('dashboard')
+    } catch (error) {
+      setCvUploadStatus('error')
+      setCvUploadError(error instanceof Error ? error.message : 'CV upload failed.')
+      return
+    }
+
+    setTimeout(() => setCvUploadStatus('idle'), 4000)
   }
 
   const handleUpdateCareerSetting = async (updates: {
@@ -804,7 +875,34 @@ export function CareersManager() {
 
       {activeTab === 'cv' && (
         <Card className="space-y-4">
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">CV & career profile</p>
+          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">CV & Career Profile</p>
+          <p className="text-sm text-slate-600">Upload your CV so MuksBooks can compare your experience with job requirements.</p>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <input
+              ref={cvFileInputRef}
+              type="file"
+              accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0]
+                event.target.value = ''
+                if (file) void handleCvUpload(file)
+              }}
+            />
+            <Button
+              size="sm"
+              onClick={() => cvFileInputRef.current?.click()}
+              disabled={cvUploadStatus === 'uploading' || cvUploadStatus === 'processing'}
+            >
+              Upload CV
+            </Button>
+            {cvUploadStatus === 'uploading' && <span className="text-sm text-slate-600">Uploading...</span>}
+            {cvUploadStatus === 'processing' && <span className="text-sm text-slate-600">Processing CV...</span>}
+            {cvUploadStatus === 'success' && <span className="text-sm text-emerald-600">CV uploaded successfully</span>}
+            {cvUploadStatus === 'error' && <span className="text-sm text-red-600">{cvUploadError || 'CV upload failed.'}</span>}
+          </div>
+
           {!isLoading && state.cvDocuments.length === 0 && (
             <p className="text-sm text-slate-600">Upload or select a CV to compare your experience with job requirements.</p>
           )}

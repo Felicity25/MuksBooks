@@ -15,6 +15,7 @@ import {
   listDiscoverJobs,
   listFollowing,
   listSavedRoles,
+  registerCvDocument,
   runCvMatch,
   saveRole,
   setCompanyJobMode,
@@ -41,6 +42,7 @@ import {
   listDiscoverJobsSupabase,
   listFollowingSupabase,
   listSavedRolesSupabase,
+  registerCvDocumentSupabase,
   runCvMatchSupabase,
   saveRoleSupabase,
   setPrimaryCvSupabase,
@@ -266,6 +268,23 @@ export async function POST(request: NextRequest) {
         label: body.label
       })
       return NextResponse.json({ ok: true })
+    }
+
+    if (action === 'register-cv') {
+      if (cloudClient) {
+        const localDocument = listCvDocuments(userId!).find((item) => item.documentId === body.documentId) || null
+        const result = await registerCvDocumentSupabase(cloudClient, userId!, {
+          documentId: body.documentId,
+          label: body.label,
+          localDocument
+        })
+        return NextResponse.json({ ok: true, ...result })
+      }
+      const result = registerCvDocument(userId!, {
+        documentId: body.documentId,
+        label: body.label
+      })
+      return NextResponse.json({ ok: true, ...result })
     }
 
     if (action === 'run-cv-match') {

@@ -571,6 +571,7 @@ function migrate(db: any) {
     CREATE INDEX IF NOT EXISTS idx_career_app_events_app ON career_application_events(application_id);
     CREATE INDEX IF NOT EXISTS idx_career_assess_user ON career_assessments(user_id);
     CREATE INDEX IF NOT EXISTS idx_career_assess_planner_task ON career_assessments(planner_task_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_career_cv_documents_user_document ON career_cv_documents(user_id, document_id);
   `)
 }
 

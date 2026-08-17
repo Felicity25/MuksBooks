@@ -987,6 +987,47 @@ export async function setPrimaryCvSupabase(client: SupabaseClient, userId: strin
   if (error) throw new Error(error.message)
 }
 
+/**
+ * Links a freshly uploaded document into career_cv_documents without disturbing
+ * an existing primary CV. Auto-promotes to primary only when the user has no
+ * primary CV yet (e.g. their first CV upload).
+ */
+export async function registerCvDocumentSupabase(client: SupabaseClient, userId: string, input: {
+  documentId: string
+  label?: string
+  localDocument?: any
+}) {
+  const source = input.localDocument || null
+  const raw = [source?.filename, source?.summary, JSON.stringify(source?.extractedProfile || null)].filter(Boolean).join('\n')
+  const profile = raw ? extractCvProfile(raw) : (source?.extractedProfile || null)
+
+  const { data: existingPrimary, error: primaryError } = await client
+    .from('career_cv_documents')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('is_primary', true)
+    .maybeSingle()
+
+  if (primaryError && primaryError.code !== 'PGRST116') throw new Error(primaryError.message)
+  const makePrimary = !existingPrimary
+
+  const { error } = await client.from('career_cv_documents').upsert({
+    id: makeId('cvdoc'),
+    user_id: userId,
+    source_document_id: input.documentId,
+    label: input.label || source?.label || source?.filename || 'CV',
+    filename: source?.filename || input.label || 'CV',
+    summary: source?.summary || null,
+    uploaded_at: source?.uploadDate || null,
+    extracted_profile: profile,
+    is_primary: makePrimary
+  }, { onConflict: 'user_id,source_document_id' })
+
+  if (error) throw new Error(error.message)
+
+  return { isPrimary: makePrimary }
+}
+
 export async function runCvMatchSupabase(client: SupabaseClient, userId: string, input: {
   jobId: string
   cvDocumentId?: string | null

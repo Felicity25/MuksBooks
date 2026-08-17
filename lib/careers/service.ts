@@ -1330,7 +1330,7 @@ export function listCvDocuments(userId: string) {
     SELECT d.*
     FROM documents d
     LEFT JOIN courses c ON c.id = d.course_id
-    WHERE LOWER(d.filename) LIKE '%cv%'
+    WHERE (LOWER(d.filename) LIKE '%cv%' OR LOWER(COALESCE(d.resource_type, '')) = 'cv')
       AND (COALESCE(c.user_id, 'default') = ? OR c.user_id IS NULL)
     ORDER BY COALESCE(d.updated_at, d.created_at) DESC
   `).all(userId) as any[]
@@ -1385,6 +1385,48 @@ export function setPrimaryCv(userId: string, input: {
     now,
     now
   )
+}
+
+/**
+ * Links a freshly uploaded document into career_cv_documents without disturbing
+ * an existing primary CV. Auto-promotes to primary only when the user has no
+ * primary CV yet (e.g. their first CV upload).
+ */
+export function registerCvDocument(userId: string, input: {
+  documentId: string
+  label?: string
+}) {
+  ensureUser(userId)
+  const db = getDb()
+  const doc = db.prepare('SELECT * FROM documents WHERE id = ?').get(input.documentId) as any
+  if (!doc) throw new Error('Document not found.')
+
+  const now = nowIso()
+  const raw = [doc.filename, doc.summary, doc.metadata].filter(Boolean).join('\n')
+  const profile = extractCvProfile(raw)
+
+  const existingPrimary = db.prepare('SELECT id FROM career_cv_documents WHERE user_id = ? AND is_primary = 1 LIMIT 1').get(userId) as any
+  const makePrimary = !existingPrimary
+
+  db.prepare(`
+    INSERT INTO career_cv_documents (id, user_id, document_id, label, is_primary, extracted_profile, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(user_id, document_id) DO UPDATE SET
+      label = excluded.label,
+      extracted_profile = excluded.extracted_profile,
+      updated_at = excluded.updated_at
+  `).run(
+    id('cvdoc'),
+    userId,
+    input.documentId,
+    input.label || doc.filename,
+    makePrimary ? 1 : 0,
+    toJson(profile),
+    now,
+    now
+  )
+
+  return { isPrimary: makePrimary }
 }
 
 function requirementChecks(job: any, profileText: string) {

@@ -18,6 +18,7 @@ export type ResourceType =
   | 'DATASET'
   | 'NOTES'
   | 'REFERENCE_MATERIAL'
+  | 'CV'
   | 'OTHER'
 
 export interface ClassificationResult {
