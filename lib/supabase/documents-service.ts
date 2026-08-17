@@ -119,6 +119,7 @@ export async function persistUploadMetadata(
   if (!client) return null
 
   try {
+    // Try upsert with all new columns (requires 20260820 migration)
     const { data, error } = await client
       .from('uploads')
       .upsert(
@@ -142,11 +143,30 @@ export async function persistUploadMetadata(
       .select('id')
       .maybeSingle()
 
-    if (error) {
-      if (!isMissingRelation(error)) console.error('[Cloud] Upload metadata failed:', error.message)
-      return null
+    if (!error) return data?.id ?? null
+
+    // Fallback: column doesn't exist yet — upsert with only baseline columns
+    if (isMissingRelation(error)) {
+      const { data: fallback, error: fallbackErr } = await client
+        .from('uploads')
+        .upsert(
+          {
+            user_id: userId,
+            storage_path: storagePath,
+            original_filename: params.fileName,
+            mime_type: params.mimeType,
+            file_size: params.sizeBytes
+          },
+          { onConflict: 'user_id, storage_path' }
+        )
+        .select('id')
+        .maybeSingle()
+      if (fallbackErr) console.error('[Cloud] Upload fallback metadata failed:', fallbackErr.message)
+      return fallback?.id ?? null
     }
-    return data?.id ?? null
+
+    console.error('[Cloud] Upload metadata failed:', error.message)
+    return null
   } catch (err) {
     if (!isMissingRelation(err)) console.error('[Cloud] Upload metadata error:', err)
     return null
