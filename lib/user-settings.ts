@@ -173,7 +173,7 @@ export const PROACTIVITY_DEFAULTS: Record<ProactivityLevel, ProactivityControls>
 }
 
 export const DEFAULT_USER_SETTINGS: UserSettings = {
-  theme: 'system',
+  theme: 'light',
   name: '',
   degree: '',
   targetMarks: '',
@@ -195,18 +195,27 @@ export const DEFAULT_USER_SETTINGS: UserSettings = {
 export const GUEST_SETTINGS_KEY = 'muksbooks:user-settings:v2'
 
 export function normalizeUserSettings(value?: Partial<UserSettings> | null): UserSettings {
-  const level = value?.proactivityLevel || DEFAULT_USER_SETTINGS.proactivityLevel
-  const preset = value?.homepagePreset || DEFAULT_USER_SETTINGS.homepagePreset
+  // Strip null/undefined keys first so a present-but-empty field (e.g. a brand-new user's
+  // `theme: undefined`) never clobbers DEFAULT_USER_SETTINGS via object spread.
+  const clean: Partial<UserSettings> = {}
+  if (value) {
+    for (const [key, val] of Object.entries(value)) {
+      if (val !== undefined && val !== null) (clean as Record<string, unknown>)[key] = val
+    }
+  }
+
+  const level = clean.proactivityLevel || DEFAULT_USER_SETTINGS.proactivityLevel
+  const preset = clean.homepagePreset || DEFAULT_USER_SETTINGS.homepagePreset
   const fallbackLayout = HOMEPAGE_PRESETS[preset]
 
   return {
     ...DEFAULT_USER_SETTINGS,
-    ...value,
-    homepageLayout: Array.isArray(value?.homepageLayout) ? value.homepageLayout : fallbackLayout,
-    quickActions: Array.isArray(value?.quickActions) ? value.quickActions : DEFAULT_USER_SETTINGS.quickActions,
+    ...clean,
+    homepageLayout: Array.isArray(clean.homepageLayout) ? clean.homepageLayout : fallbackLayout,
+    quickActions: Array.isArray(clean.quickActions) ? clean.quickActions : DEFAULT_USER_SETTINGS.quickActions,
     proactivityControls: {
       ...PROACTIVITY_DEFAULTS[level],
-      ...(value?.proactivityControls || {})
+      ...(clean.proactivityControls || {})
     }
   }
 }
