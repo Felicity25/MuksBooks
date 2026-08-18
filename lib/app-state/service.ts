@@ -4,6 +4,7 @@ import { promises as fs } from 'fs'
 import { getCurrentMonashCalendar, getCurrentSemesterWeek } from '@/lib/semester-calendar'
 import { getDb, nowIso } from './db'
 import { loadCatalog, saveCatalog } from '@/lib/knowledge-base/catalog'
+import { normalizeUserSettings, type UserSettings } from '@/lib/user-settings'
 
 function id(prefix: string) {
   return `${prefix}_${crypto.randomUUID()}`
@@ -111,17 +112,7 @@ async function ensureCatalogSynced() {
   return catalogSyncPromise
 }
 
-interface StoredSettings {
-  theme: 'light' | 'dark' | 'system'
-  name: string
-  degree: string
-  targetMarks: string
-  feedbackStrictness: 'lenient' | 'normal' | 'strict'
-  pomodoroLength: number
-  studyTimes: string
-}
-
-export function ensureUser(userId: string, defaults?: Partial<StoredSettings>) {
+export function ensureUser(userId: string, defaults?: Partial<UserSettings>) {
   const db = getDb()
   const row = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as any
   if (row) return row
@@ -1281,31 +1272,22 @@ export function archiveCourse(courseId: string) {
   createEvent('COURSE_UPDATED', { courseId, status: 'archived' })
 }
 
-export function getUserSettings(userId = 'default'): StoredSettings {
+export function getUserSettings(userId = 'default'): UserSettings {
   ensureUser(userId)
   const db = getDb()
   const row = db.prepare('SELECT name, preferences FROM users WHERE id = ?').get(userId) as { name?: string | null; preferences?: string | null } | undefined
-  const parsed = parseJson<Partial<StoredSettings>>(row?.preferences || null) || {}
-
-  return {
-    theme: parsed.theme || 'light',
-    name: parsed.name || row?.name || '',
-    degree: parsed.degree || '',
-    targetMarks: parsed.targetMarks || '',
-    feedbackStrictness: parsed.feedbackStrictness || 'normal',
-    pomodoroLength: parsed.pomodoroLength || 25,
-    studyTimes: parsed.studyTimes || ''
-  }
+  const parsed = parseJson<Partial<UserSettings>>(row?.preferences || null) || {}
+  return normalizeUserSettings({ ...parsed, name: parsed.name || row?.name || '' })
 }
 
-export function updateUserSettings(userId: string, updates: Partial<StoredSettings>) {
+export function updateUserSettings(userId: string, updates: Partial<UserSettings>) {
   ensureUser(userId)
   const db = getDb()
   const current = getUserSettings(userId)
-  const merged: StoredSettings = {
+  const merged = normalizeUserSettings({
     ...current,
     ...updates
-  }
+  })
   db.prepare('UPDATE users SET name = ?, preferences = ?, updated_at = ? WHERE id = ?')
     .run(merged.name || 'Student', json(merged), nowIso(), userId)
   createEvent('STUDY_PLAN_UPDATED', { userId, settingsUpdated: true })

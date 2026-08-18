@@ -1,13 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedUser } from '@/lib/supabase/server'
-import { getUnitMastery, setUnitMastery } from '@/lib/app-state/service'
-import { syncCloudMastery } from '@/lib/supabase/documents-service'
+import { getUnitMastery } from '@/lib/app-state/service'
+import { setCloudUnitMastery, listCloudUnits } from '@/lib/supabase/documents-service'
 
 export const runtime = 'nodejs'
 
 export async function GET() {
   try {
     const user = await getAuthenticatedUser()
+    if (user) {
+      const units = await listCloudUnits(user.id)
+      if (units !== null) {
+        return NextResponse.json({
+          ok: true,
+          mastery: units.map((u: any) => ({
+            id: u.id,
+            course_code: u.code,
+            course_name: u.name,
+            mastery_level: u.mastery_level ?? 0,
+            mastery_updated_at: u.updated_at
+          }))
+        })
+      }
+    }
     const mastery = getUnitMastery(user?.id || 'default')
     return NextResponse.json({ ok: true, mastery })
   } catch (error) {
@@ -35,22 +50,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: false, error: 'masteryLevel must be a number from 0 to 100' }, { status: 400 })
     }
 
-    const mastery = setUnitMastery(user.id, courseId, masteryLevel)
+    // courseId here is the unit's Supabase id (as returned by /api/app-state/courses GET).
+    await setCloudUnitMastery(user.id, courseId, masteryLevel)
 
-    // Sync to Supabase mastery_records (requires course code — look up from SQLite)
-    void (async () => {
-      try {
-        // Get the course code from SQLite to use for Supabase lookup
-        const { listCourses } = await import('@/lib/app-state/service')
-        const courses = listCourses(user.id)
-        const course = courses.find((c) => c.id === courseId)
-        if (course?.course_code) {
-          await syncCloudMastery(user.id, course.course_code, masteryLevel)
-        }
-      } catch { /* non-fatal */ }
-    })()
-
-    return NextResponse.json({ ok: true, mastery })
+    return NextResponse.json({ ok: true, mastery: { id: courseId, mastery_level: masteryLevel } })
   } catch (error) {
     console.error('[UnitMastery POST] Failed:', error)
     return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : String(error) }, { status: 500 })

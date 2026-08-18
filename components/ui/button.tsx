@@ -10,7 +10,8 @@ const buttonVariants = cva(
         default: 'bg-slate-950 text-white hover:bg-slate-800',
         secondary: 'bg-white text-slate-950 ring-1 ring-slate-200 hover:bg-slate-50',
         outline: 'bg-transparent text-slate-950 ring-1 ring-slate-200 hover:bg-slate-50',
-        ghost: 'bg-transparent text-slate-700 hover:bg-slate-100'
+        ghost: 'bg-transparent text-slate-700 hover:bg-slate-100',
+        destructive: 'bg-rose-600 text-white hover:bg-rose-700'
       },
       size: {
         default: 'h-11 px-5 text-sm font-medium',

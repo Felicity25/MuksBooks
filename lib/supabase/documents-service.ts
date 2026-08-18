@@ -363,17 +363,22 @@ export async function upsertCloudUnit(
   }
 }
 
-/** List all units for the authenticated user from Supabase. */
-export async function listCloudUnits(userId: string) {
+const UNIT_COLUMNS = 'id, code, name, status, semester, year, color, icon, mastery_level, created_at, updated_at'
+
+/** List active (non-archived) units for the authenticated user from Supabase. */
+export async function listCloudUnits(userId: string, includeArchived = false) {
   const client = createSupabaseServerClient()
   if (!client) return null
 
   try {
-    const { data, error } = await client
+    let query = client
       .from('units')
-      .select('id, code, name, status, semester, created_at, updated_at')
+      .select(UNIT_COLUMNS)
       .eq('user_id', userId)
-      .order('created_at', { ascending: false })
+
+    if (!includeArchived) query = query.neq('status', 'archived')
+
+    const { data, error } = await query.order('created_at', { ascending: false })
 
     if (error) { console.error('[Cloud] List units failed:', error.message); return null }
     return data ?? []
@@ -382,13 +387,99 @@ export async function listCloudUnits(userId: string) {
   }
 }
 
-/** Archive (soft-delete) a unit in Supabase. */
-export async function archiveCloudUnit(userId: string, code: string): Promise<void> {
+/** Fetch a single unit owned by the user. */
+export async function getCloudUnit(userId: string, unitId: string) {
+  const client = createSupabaseServerClient()
+  if (!client) return null
+  try {
+    const { data, error } = await client
+      .from('units')
+      .select(UNIT_COLUMNS)
+      .eq('user_id', userId)
+      .eq('id', unitId)
+      .maybeSingle()
+    if (error) { console.error('[Cloud] Get unit failed:', error.message); return null }
+    return data
+  } catch {
+    return null
+  }
+}
+
+/** Update an existing unit's fields by id (code, name, semester, year, color, icon). */
+export async function updateCloudUnit(
+  userId: string,
+  unitId: string,
+  updates: { code?: string; name?: string; semester?: string | null; year?: number | null; color?: string | null; icon?: string | null }
+): Promise<{ ok: true; unit: Record<string, unknown> } | { ok: false; error: string }> {
+  const client = createSupabaseServerClient()
+  if (!client) return { ok: false, error: 'Cloud unavailable' }
+
+  const patch: Record<string, unknown> = {}
+  if (updates.code !== undefined) patch.code = updates.code.toUpperCase()
+  if (updates.name !== undefined) patch.name = updates.name
+  if (updates.semester !== undefined) patch.semester = updates.semester
+  if (updates.year !== undefined) patch.year = updates.year
+  if (updates.color !== undefined) patch.color = updates.color
+  if (updates.icon !== undefined) patch.icon = updates.icon
+
+  try {
+    const { data, error } = await client
+      .from('units')
+      .update(patch)
+      .eq('user_id', userId)
+      .eq('id', unitId)
+      .select(UNIT_COLUMNS)
+      .maybeSingle()
+
+    if (error) {
+      const message = error.code === '23505' ? 'You already have a unit with that code.' : error.message
+      return { ok: false, error: message }
+    }
+    if (!data) return { ok: false, error: 'Unit not found' }
+    return { ok: true, unit: data }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Unit update failed' }
+  }
+}
+
+/** Archive (soft-delete) a unit by id. Also archives its schedule entries. */
+export async function archiveCloudUnitById(userId: string, unitId: string): Promise<void> {
   const client = createSupabaseServerClient()
   if (!client) return
   try {
-    await client.from('units').update({ status: 'archived' }).eq('user_id', userId).eq('code', code.toUpperCase())
-  } catch { /* non-fatal */ }
+    await client.from('units').update({ status: 'archived' }).eq('user_id', userId).eq('id', unitId)
+    await client.from('unit_schedule_entries').delete().eq('user_id', userId).eq('unit_id', unitId)
+  } catch (err) {
+    if (!isMissingRelation(err)) console.error('[Cloud] Archive unit error:', err)
+  }
+}
+
+/** Set the overall mastery level (0-100) for a unit directly by id. */
+export async function setCloudUnitMastery(userId: string, unitId: string, masteryLevel: number): Promise<void> {
+  const client = createSupabaseServerClient()
+  if (!client) return
+  try {
+    await client.from('units').update({ mastery_level: masteryLevel }).eq('user_id', userId).eq('id', unitId)
+  } catch (err) {
+    console.error('[Cloud] Unit mastery update error:', err)
+  }
+}
+
+/** Find a unit by exact code, or by fuzzy name/code match against uploaded document text. Used for schedule auto-detection. */
+export async function findCloudUnitByCodeOrName(userId: string, candidateCodes: string[], text: string) {
+  const units = await listCloudUnits(userId)
+  if (!units || units.length === 0) return null
+
+  for (const code of candidateCodes) {
+    const match = units.find((u: any) => u.code === code.toUpperCase())
+    if (match) return match
+  }
+
+  const lowerText = text.toLowerCase()
+  const byName = units.find((u: any) => u.name && lowerText.includes(String(u.name).toLowerCase()))
+  if (byName) return byName
+
+  return null
 }
 
 // ─── Mastery ─────────────────────────────────────────────────────────────────
@@ -424,5 +515,154 @@ export async function syncCloudMastery(
     )
   } catch (err) {
     console.error('[Cloud] Mastery sync error:', err)
+  }
+}
+
+// ─── Unit schedule entries (canonical weekly schedule) ─────────────────────
+
+export interface ScheduleEntryInput {
+  id?: string
+  unitId: string
+  weekNumber: number
+  startDate?: string | null
+  endDate?: string | null
+  topic: string
+  additionalTopics?: string[]
+  notes?: string | null
+  sourceUploadId?: string | null
+  extractionConfidence?: number | null
+  isBreak?: boolean
+  sortOrder?: number
+}
+
+const SCHEDULE_COLUMNS = 'id, unit_id, week_number, start_date, end_date, topic, additional_topics, notes, source_upload_id, extraction_confidence, is_break, sort_order, created_at, updated_at'
+
+/** List all schedule entries for a unit, ordered by week/sort. */
+export async function listScheduleEntries(userId: string, unitId: string) {
+  const client = createSupabaseServerClient()
+  if (!client) return null
+  try {
+    const { data, error } = await client
+      .from('unit_schedule_entries')
+      .select(SCHEDULE_COLUMNS)
+      .eq('user_id', userId)
+      .eq('unit_id', unitId)
+      .order('week_number', { ascending: true })
+      .order('sort_order', { ascending: true })
+
+    if (error) { if (!isMissingRelation(error)) console.error('[Cloud] List schedule failed:', error.message); return null }
+    return data ?? []
+  } catch (err) {
+    if (!isMissingRelation(err)) console.error('[Cloud] List schedule error:', err)
+    return null
+  }
+}
+
+/** List schedule entries for every unit owned by the user (used by dashboard/current-week lookups). */
+export async function listAllScheduleEntries(userId: string) {
+  const client = createSupabaseServerClient()
+  if (!client) return null
+  try {
+    const { data, error } = await client
+      .from('unit_schedule_entries')
+      .select(`${SCHEDULE_COLUMNS}, units!inner(code, name, user_id)`)
+      .eq('user_id', userId)
+      .order('week_number', { ascending: true })
+
+    if (error) { if (!isMissingRelation(error)) console.error('[Cloud] List all schedule failed:', error.message); return null }
+    return data ?? []
+  } catch (err) {
+    if (!isMissingRelation(err)) console.error('[Cloud] List all schedule error:', err)
+    return null
+  }
+}
+
+/** Create or update a single schedule entry (edit a week). */
+export async function upsertScheduleEntry(userId: string, entry: ScheduleEntryInput) {
+  const client = createSupabaseServerClient()
+  if (!client) return { ok: false as const, error: 'Cloud unavailable' }
+
+  const row = {
+    ...(entry.id ? { id: entry.id } : {}),
+    user_id: userId,
+    unit_id: entry.unitId,
+    week_number: entry.weekNumber,
+    start_date: entry.startDate ?? null,
+    end_date: entry.endDate ?? null,
+    topic: entry.topic,
+    additional_topics: entry.additionalTopics ?? [],
+    notes: entry.notes ?? null,
+    source_upload_id: entry.sourceUploadId ?? null,
+    extraction_confidence: entry.extractionConfidence ?? null,
+    is_break: entry.isBreak ?? false,
+    sort_order: entry.sortOrder ?? 0
+  }
+
+  try {
+    const { data, error } = await client
+      .from('unit_schedule_entries')
+      .upsert(row, { onConflict: 'id' })
+      .select(SCHEDULE_COLUMNS)
+      .maybeSingle()
+
+    if (error) return { ok: false as const, error: error.message }
+    return { ok: true as const, entry: data }
+  } catch (err) {
+    return { ok: false as const, error: err instanceof Error ? err.message : 'Failed to save schedule entry' }
+  }
+}
+
+/** Delete a single schedule entry (delete a week). */
+export async function deleteScheduleEntry(userId: string, entryId: string): Promise<void> {
+  const client = createSupabaseServerClient()
+  if (!client) return
+  try {
+    await client.from('unit_schedule_entries').delete().eq('user_id', userId).eq('id', entryId)
+  } catch { /* non-fatal */ }
+}
+
+/**
+ * Replace the entire schedule for a unit with a new set of entries (used when saving an
+ * extracted preview, or resetting/re-importing a schedule). Existing entries not present
+ * in the new set are removed; matching ids are updated; new entries are inserted.
+ */
+export async function replaceUnitSchedule(userId: string, unitId: string, entries: ScheduleEntryInput[]) {
+  const client = createSupabaseServerClient()
+  if (!client) return { ok: false as const, error: 'Cloud unavailable' }
+
+  try {
+    const keepIds = entries.filter((e) => e.id).map((e) => e.id as string)
+
+    let deleteQuery = client.from('unit_schedule_entries').delete().eq('user_id', userId).eq('unit_id', unitId)
+    if (keepIds.length > 0) deleteQuery = deleteQuery.not('id', 'in', `(${keepIds.join(',')})`)
+    await deleteQuery
+
+    if (entries.length === 0) return { ok: true as const, entries: [] }
+
+    const rows = entries.map((entry, index) => ({
+      ...(entry.id ? { id: entry.id } : {}),
+      user_id: userId,
+      unit_id: unitId,
+      week_number: entry.weekNumber,
+      start_date: entry.startDate ?? null,
+      end_date: entry.endDate ?? null,
+      topic: entry.topic,
+      additional_topics: entry.additionalTopics ?? [],
+      notes: entry.notes ?? null,
+      source_upload_id: entry.sourceUploadId ?? null,
+      extraction_confidence: entry.extractionConfidence ?? null,
+      is_break: entry.isBreak ?? false,
+      sort_order: entry.sortOrder ?? index
+    }))
+
+    const { data, error } = await client
+      .from('unit_schedule_entries')
+      .upsert(rows, { onConflict: 'id' })
+      .select(SCHEDULE_COLUMNS)
+
+    if (error) return { ok: false as const, error: error.message }
+    return { ok: true as const, entries: data ?? [] }
+  } catch (err) {
+    return { ok: false as const, error: err instanceof Error ? err.message : 'Failed to save schedule' }
   }
 }

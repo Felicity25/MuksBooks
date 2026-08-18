@@ -228,6 +228,12 @@ export function AiTutorChat() {
         if (typeof parsed.topic === 'string') setTopic(parsed.topic)
         if (typeof parsed.mode === 'string') setMode(parsed.mode)
       }
+
+      const query = new URLSearchParams(window.location.search)
+      if (query.get('unit')) setUnit(normalizeUnitCode(query.get('unit') || ''))
+      if (query.get('topic')) setTopic(query.get('topic') || '')
+      if (query.get('prompt')) setInput(query.get('prompt') || '')
+      if (query.get('mode') && modes.includes(query.get('mode') || '')) setMode(query.get('mode') || 'explain')
     } catch (error) {
       console.error('[AI Tutor] Failed to restore saved session', error)
     }

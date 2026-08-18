@@ -9,8 +9,12 @@ import {
   uploadFileToStorage,
   persistUploadMetadata,
   persistDocumentChunks,
-  upsertCloudUnit
+  upsertCloudUnit,
+  findCloudUnitByCodeOrName,
+  listScheduleEntries,
+  replaceUnitSchedule
 } from '@/lib/supabase/documents-service'
+import { extractScheduleFromText } from '@/lib/course-manager/schedule-extractor'
 
 export const runtime = 'nodejs'
 
@@ -200,6 +204,33 @@ export async function POST(request: NextRequest) {
               })
               if (upload.chunkData && upload.chunkData.length > 0) {
                 await persistDocumentChunks(user.id, uploadId, String(upload.documentId), upload.courseCode || targetCourseCode, upload.chunkData)
+              }
+
+              // Detect whether this looks like a unit guide/semester schedule and, if a unit can
+              // be confidently identified and it has no schedule yet, save it automatically.
+              const fullText = (upload.chunkData || []).map((chunk) => chunk.text).join('\n')
+              const scheduleResult = extractScheduleFromText(file.name, fullText)
+              if (scheduleResult.isLikelySchedule && scheduleResult.entries.length > 0) {
+                const matchedUnit = await findCloudUnitByCodeOrName(user.id, scheduleResult.detectedUnitCodes, fullText)
+                if (matchedUnit) {
+                  const existingEntries = await listScheduleEntries(user.id, matchedUnit.id as string)
+                  if (existingEntries !== null && existingEntries.length === 0) {
+                    await replaceUnitSchedule(user.id, matchedUnit.id as string, scheduleResult.entries.map((entry) => ({
+                      unitId: matchedUnit.id as string,
+                      weekNumber: entry.weekNumber,
+                      topic: entry.topic,
+                      additionalTopics: entry.additionalTopics,
+                      isBreak: entry.isBreak,
+                      extractionConfidence: entry.confidence,
+                      sourceUploadId: uploadId
+                    })))
+                    await appendLog('uploads', 'Auto-detected unit schedule from normal upload', {
+                      documentId: upload.documentId,
+                      unitCode: matchedUnit.code,
+                      weeksDetected: scheduleResult.entries.length
+                    })
+                  }
+                }
               }
             } catch (cloudErr) {
               console.error('[Upload] Cloud persistence failed (non-fatal):', cloudErr)

@@ -25,3 +25,8 @@ ETC3420/
 MuksBooks/
 logs/**/*.log
 *.jsonl
+.tmp-home/
+.tmp-home/
+
+.tmp-home/
+.prisma-cache/

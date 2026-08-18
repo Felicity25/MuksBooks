@@ -1,5 +1,5 @@
-import { HomeDashboard } from '@/components/home-dashboard'
+import { PersonalHomeDashboard } from '@/components/dashboard/personal-home-dashboard'
 
 export default function HomePage() {
-  return <HomeDashboard />
+  return <PersonalHomeDashboard />
 }

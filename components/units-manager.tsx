@@ -11,9 +11,23 @@ interface Unit {
   code: string
   name: string
   status: string
+  semester: string
+  year: number | null
+  color: string | null
   topics: number
   masteryLevel: number
 }
+
+const COLOR_OPTIONS = [
+  { value: 'sky', label: 'Sky' },
+  { value: 'emerald', label: 'Emerald' },
+  { value: 'amber', label: 'Amber' },
+  { value: 'rose', label: 'Rose' },
+  { value: 'violet', label: 'Violet' },
+  { value: 'slate', label: 'Slate' }
+]
+
+const emptyForm = { code: '', name: '', status: 'In progress', semester: '', year: new Date().getFullYear(), color: 'sky' }
 
 export function UnitsManager() {
   const { requireAuth } = useAuth()
@@ -21,7 +35,11 @@ export function UnitsManager() {
   const [isLoading, setIsLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editingUnit, setEditingUnit] = useState<Unit | null>(null)
-  const [formData, setFormData] = useState({ code: '', name: '', status: 'In progress', topics: 0 })
+  const [formData, setFormData] = useState(emptyForm)
+  const [error, setError] = useState<string | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<Unit | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   const loadUnits = async () => {
     setIsLoading(true)
@@ -34,6 +52,9 @@ export function UnitsManager() {
           code: course.course_code,
           name: course.course_name || course.course_code,
           status: course.status === 'completed' ? 'Completed' : course.status === 'planned' ? 'Planned' : 'In progress',
+          semester: course.semester || '',
+          year: course.year ?? null,
+          color: course.color ?? null,
           topics: 0,
           masteryLevel: Math.max(0, Math.min(100, Math.round(Number(course.mastery_level ?? 0))))
         }))
@@ -52,35 +73,88 @@ export function UnitsManager() {
     e.preventDefault()
     if (requireAuth('Sign in to create and manage your units.')) return
 
-    await fetch('/api/app-state/courses', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        courseCode: formData.code.toUpperCase(),
-        courseName: formData.name,
-        source: editingUnit ? 'units_edit' : 'units_form'
-      })
-    })
+    setIsSaving(true)
+    setError(null)
 
-    await loadUnits()
-    emitAppStateUpdate('courses')
-    setEditingUnit(null)
-    setFormData({ code: '', name: '', status: 'In progress', topics: 0 })
-    setShowForm(false)
+    try {
+      const response = editingUnit
+        ? await fetch('/api/app-state/courses', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: editingUnit.id,
+              courseCode: formData.code.toUpperCase(),
+              courseName: formData.name,
+              semester: formData.semester || null,
+              year: formData.year || null,
+              color: formData.color || null
+            })
+          })
+        : await fetch('/api/app-state/courses', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              courseCode: formData.code.toUpperCase(),
+              courseName: formData.name,
+              semester: formData.semester || null,
+              year: formData.year || null,
+              color: formData.color || null,
+              source: 'units_form'
+            })
+          })
+
+      const payload = await response.json().catch(() => null)
+      if (!response.ok || !payload?.ok) {
+        setError(payload?.error || 'Failed to save unit. Please try again.')
+        setIsSaving(false)
+        return
+      }
+
+      await loadUnits()
+      emitAppStateUpdate('courses')
+      setEditingUnit(null)
+      setFormData(emptyForm)
+      setShowForm(false)
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   const handleEdit = (unit: Unit) => {
     if (requireAuth('Sign in to edit your units.')) return
+    setError(null)
     setEditingUnit(unit)
-    setFormData({ code: unit.code, name: unit.name, status: unit.status, topics: unit.topics })
+    setFormData({
+      code: unit.code,
+      name: unit.name,
+      status: unit.status,
+      semester: unit.semester,
+      year: unit.year ?? new Date().getFullYear(),
+      color: unit.color || 'sky'
+    })
     setShowForm(true)
   }
 
-  const handleDelete = async (id: string) => {
-    if (requireAuth('Sign in to manage your units.')) return
-    await fetch(`/api/app-state/courses?courseId=${encodeURIComponent(id)}`, { method: 'DELETE' })
-    await loadUnits()
-    emitAppStateUpdate('courses')
+  const confirmDelete = async () => {
+    if (!deleteTarget) return
+    setIsDeleting(true)
+    try {
+      const response = await fetch(`/api/app-state/courses?unitId=${encodeURIComponent(deleteTarget.id)}`, { method: 'DELETE' })
+      const payload = await response.json().catch(() => null)
+      if (!response.ok || !payload?.ok) {
+        setError(payload?.error || 'Failed to delete unit. Please try again.')
+        setIsDeleting(false)
+        setDeleteTarget(null)
+        return
+      }
+      setUnits((prev) => prev.filter((unit) => unit.id !== deleteTarget.id))
+      await loadUnits()
+      emitAppStateUpdate('courses')
+      emitAppStateUpdate('dashboard')
+    } finally {
+      setIsDeleting(false)
+      setDeleteTarget(null)
+    }
   }
 
   const updateMastery = async (unitId: string, masteryLevel: number) => {
@@ -107,12 +181,18 @@ export function UnitsManager() {
       <Card>
         <div className="flex items-center justify-between">
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Active units</p>
-          <Button onClick={() => { if (requireAuth('Sign in to create and manage your units.')) return; setShowForm(true); setEditingUnit(null); setFormData({ code: '', name: '', status: 'In progress', topics: 0 }) }}>
+          <Button onClick={() => { if (requireAuth('Sign in to create and manage your units.')) return; setError(null); setShowForm(true); setEditingUnit(null); setFormData(emptyForm) }}>
             Add Unit
           </Button>
         </div>
+
+        {error && !showForm && (
+          <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div>
+        )}
+
         {showForm && (
           <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+            {error && <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div>}
             <div className="grid gap-4 sm:grid-cols-2">
               <input
                 type="text"
@@ -130,27 +210,32 @@ export function UnitsManager() {
                 className="rounded-md border border-slate-300 px-3 py-2 text-sm"
                 required
               />
-              <select
-                value={formData.status}
-                onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+              <input
+                type="text"
+                placeholder="Semester (e.g. Semester 2)"
+                value={formData.semester}
+                onChange={(e) => setFormData({ ...formData, semester: e.target.value })}
                 className="rounded-md border border-slate-300 px-3 py-2 text-sm"
-              >
-                <option value="In progress">In progress</option>
-                <option value="Completed">Completed</option>
-                <option value="Planned">Planned</option>
-              </select>
+              />
               <input
                 type="number"
-                placeholder="Topics"
-                value={formData.topics}
-                onChange={(e) => setFormData({ ...formData, topics: parseInt(e.target.value) || 0 })}
+                placeholder="Year"
+                value={formData.year}
+                onChange={(e) => setFormData({ ...formData, year: parseInt(e.target.value) || new Date().getFullYear() })}
                 className="rounded-md border border-slate-300 px-3 py-2 text-sm"
-                min="0"
+                min="2000"
               />
+              <select
+                value={formData.color}
+                onChange={(e) => setFormData({ ...formData, color: e.target.value })}
+                className="rounded-md border border-slate-300 px-3 py-2 text-sm sm:col-span-2"
+              >
+                {COLOR_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
             </div>
             <div className="flex gap-2">
-              <Button type="submit">{editingUnit ? 'Update' : 'Add'} Unit</Button>
-              <Button type="button" variant="outline" onClick={() => { setShowForm(false); setEditingUnit(null) }}>
+              <Button type="submit" disabled={isSaving}>{isSaving ? 'Saving...' : `${editingUnit ? 'Update' : 'Add'} Unit`}</Button>
+              <Button type="button" variant="outline" onClick={() => { setShowForm(false); setEditingUnit(null); setError(null) }}>
                 Cancel
               </Button>
             </div>
@@ -164,11 +249,16 @@ export function UnitsManager() {
                 <div>
                   <p className="font-semibold text-slate-950">{unit.code}</p>
                   <p className="text-sm text-slate-600">{unit.name}</p>
+                  {(unit.semester || unit.year) && (
+                    <p className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-400">
+                      {[unit.semester, unit.year].filter(Boolean).join(' · ')}
+                    </p>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">{unit.status}</span>
                   <Button size="sm" variant="outline" onClick={() => handleEdit(unit)}>Edit</Button>
-                  <Button size="sm" variant="outline" onClick={() => handleDelete(unit.id)}>Delete</Button>
+                  <Button size="sm" variant="outline" onClick={() => setDeleteTarget(unit)}>Delete</Button>
                 </div>
               </div>
               <p className="mt-3 text-sm text-slate-600">Weekly topics: {unit.topics}</p>
@@ -199,6 +289,24 @@ export function UnitsManager() {
           ))}
         </div>
       </Card>
+
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-sm" onClick={() => !isDeleting && setDeleteTarget(null)}>
+          <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-lg font-semibold text-slate-950">Delete {deleteTarget.code}?</h2>
+            <p className="mt-2 text-sm text-slate-600">
+              This removes the unit and its semester schedule from Units, Planner, Tutor and Uploads on every device.
+              Uploaded files are kept unless you delete them separately.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <Button type="button" variant="outline" disabled={isDeleting} onClick={() => setDeleteTarget(null)}>Cancel</Button>
+              <Button type="button" variant="destructive" disabled={isDeleting} onClick={() => void confirmDelete()}>
+                {isDeleting ? 'Deleting...' : 'Delete unit'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

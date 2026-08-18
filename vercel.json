@@ -3,6 +3,10 @@
     {
       "path": "/api/news/refresh",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/mass/scheduled",
+      "schedule": "0 * * * *"
     }
   ]
 }
