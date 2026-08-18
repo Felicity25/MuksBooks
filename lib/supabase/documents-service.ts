@@ -832,6 +832,8 @@ export async function deleteCalendarEvent(userId: string, eventId: string): Prom
 
 // ─── Academic assessments ────────────────────────────────────────────────────
 
+const ASSESSMENT_COLUMNS = 'id, unit_id, name, assessment_type, weighting, due_date, due_time_known, estimated_minutes, notes, status, source, created_at, units(code, name)'
+
 /** List academic assessments (assignments, exams) for the user across all units. */
 export async function listCloudAssessments(userId: string) {
   const client = createSupabaseServerClient()
@@ -839,7 +841,7 @@ export async function listCloudAssessments(userId: string) {
   try {
     const { data, error } = await client
       .from('assessments')
-      .select('id, unit_id, name, assessment_type, weighting, due_date, status, units(code, name)')
+      .select(ASSESSMENT_COLUMNS)
       .eq('user_id', userId)
       .order('due_date', { ascending: true, nullsFirst: false })
     if (error) { if (!isMissingRelation(error)) console.error('[Cloud] List assessments failed:', error.message); return null }
@@ -847,5 +849,62 @@ export async function listCloudAssessments(userId: string) {
   } catch (err) {
     if (!isMissingRelation(err)) console.error('[Cloud] List assessments error:', err)
     return null
+  }
+}
+
+export interface CreateAssessmentInput {
+  unitId: string
+  name: string
+  assessmentType: string
+  dueDate: string | null
+  dueTimeKnown: boolean
+  weighting?: number | null
+  estimatedMinutes?: number | null
+  notes?: string | null
+}
+
+/** Manually record an assessment/assignment that wasn't auto-extracted from a unit guide. */
+export async function createUserAssessment(userId: string, input: CreateAssessmentInput) {
+  const client = createSupabaseServerClient()
+  if (!client) return { ok: false as const, error: 'Cloud storage is unavailable.' }
+  try {
+    const { data, error } = await client
+      .from('assessments')
+      .insert({
+        user_id: userId,
+        unit_id: input.unitId,
+        name: input.name,
+        assessment_type: input.assessmentType,
+        due_date: input.dueDate,
+        due_time_known: input.dueTimeKnown,
+        weighting: input.weighting ?? null,
+        estimated_minutes: input.estimatedMinutes ?? null,
+        notes: input.notes ?? null,
+        source: 'manual'
+      })
+      .select(ASSESSMENT_COLUMNS)
+      .single()
+
+    if (error) {
+      const message = (error as { code?: string }).code === '23505'
+        ? 'An assessment with this name already exists for this unit.'
+        : error.message
+      return { ok: false as const, error: message }
+    }
+    return { ok: true as const, assessment: data }
+  } catch (err) {
+    return { ok: false as const, error: err instanceof Error ? err.message : 'Could not save this assessment.' }
+  }
+}
+
+/** Delete a manually recorded (or any owned) assessment. Linked tasks keep their history via ON DELETE SET NULL. */
+export async function deleteUserAssessment(userId: string, assessmentId: string): Promise<boolean> {
+  const client = createSupabaseServerClient()
+  if (!client) return false
+  try {
+    const { error } = await client.from('assessments').delete().eq('user_id', userId).eq('id', assessmentId)
+    return !error
+  } catch {
+    return false
   }
 }
