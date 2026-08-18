@@ -1,5 +1,8 @@
 const nextConfig = {
   reactStrictMode: true,
+  experimental: {
+    serverComponentsExternalPackages: ['node-ical']
+  },
   webpack: (config, { dev }) => {
     if (dev) {
       // Avoid filesystem pack cache writes/reads that can hang on synced folders.

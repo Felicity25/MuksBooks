@@ -73,3 +73,17 @@ html[data-motion='reduced'] *::after {
   background: rgba(15, 23, 42, 0.18);
   border-radius: 9999px;
 }
+
+@media (max-width: 639px) {
+  [role='dialog'][aria-label='Widget settings'] {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  [role='dialog'][aria-label='Widget settings'] > div {
+    max-height: calc(100dvh - 1rem);
+    overflow-y: auto;
+    border-radius: 0.75rem 0.75rem 0 0;
+    padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
+  }
+}

@@ -28,6 +28,7 @@
     "lucide-react": "^0.490.0",
     "mammoth": "^1.12.0",
     "next": "14.2.5",
+    "node-ical": "^0.25.5",
     "openai": "^6.37.0",
     "parse5": "^7.1.2",
     "pdf-parse": "^2.4.5",

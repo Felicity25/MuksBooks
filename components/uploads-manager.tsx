@@ -351,11 +351,6 @@ export function UploadsManager() {
       setError('Select at least one file before uploading.')
       return
     }
-    if (!selectedUnit) {
-      setError('Select a unit for this batch.')
-      return
-    }
-
     setSaving(true)
     setError(null)
     setBatchResult(null)
@@ -365,13 +360,14 @@ export function UploadsManager() {
     try {
       const form = new FormData()
       form.append('forceNewCurriculum', 'false')
-      form.append('courseCode', selectedUnit)
-      form.append('batchName', formData.title.trim() || `${selectedUnit} · ${new Date().toLocaleDateString()} · ${stagedFiles.length} files`)
+      if (selectedUnit) form.append('courseCode', selectedUnit)
+      form.append('batchName', formData.title.trim() || `${selectedUnit || 'Unassigned'} · ${new Date().toLocaleDateString()} · ${stagedFiles.length} files`)
 
       const fileMetadata = stagedFiles.map((entry) => ({
         fileName: entry.file.name,
         relativePath: entry.relativePath,
-        unit: normalizeUnitCode(entry.unit || selectedUnit),
+        unit: normalizeUnitCode(entry.unit || selectedUnit) || undefined,
+        domain: 'academic',
         resourceType: entry.resourceType,
         duplicateStrategy: 'skip'
       }))
@@ -484,7 +480,7 @@ export function UploadsManager() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <label className="block text-sm font-medium text-slate-700">Which unit are these files for?</label>
+                <label className="block text-sm font-medium text-slate-700">Which unit are these files for? <span className="font-normal text-slate-500">Optional</span></label>
                 <select
                   value={selectedUnit}
                   onChange={(event) => {
@@ -493,9 +489,8 @@ export function UploadsManager() {
                     setStagedFiles((current) => current.map((entry) => ({ ...entry, unit: entry.unit || value })))
                   }}
                   className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                  required
                 >
-                  <option value="">Select unit</option>
+                  <option value="">No unit yet</option>
                   {courseOptions.map((course) => (
                     <option key={course.id} value={course.code}>{course.code} - {course.name}</option>
                   ))}
@@ -610,7 +605,7 @@ export function UploadsManager() {
             ) : null}
 
             <div className="flex gap-2">
-              <Button type="submit" disabled={saving || !stagedFiles.length || !selectedUnit}>{saving ? 'Uploading...' : 'Upload & Process Batch'}</Button>
+              <Button type="submit" disabled={saving || !stagedFiles.length}>{saving ? 'Uploading...' : 'Upload & Process Batch'}</Button>
               <Button type="button" variant="outline" onClick={() => { setShowForm(false); setStagedFiles([]) }}>
                 Cancel
               </Button>

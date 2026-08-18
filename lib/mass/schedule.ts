@@ -11,7 +11,7 @@ export function getMassSyncMode(date: Date): MassSyncMode | null {
   )
   const hour = Number(parts.hour)
   const minute = Number(parts.minute)
-  if (minute !== 0) return null
+  if (minute >= 15) return null
   if (hour === 7) return 'delta'
   if (hour === 20) return 'full'
   return null

@@ -18,6 +18,13 @@ interface ScheduleRow {
   endDate: string | null
   topic: string
   additionalTopics: string[]
+  activities: string[]
+  assessmentReferences: string[]
+  periodKind?: string
+  periodLabel?: string | null
+  parser?: string | null
+  originalValues?: Record<string, unknown> | null
+  wasEdited?: boolean
   notes: string | null
   isBreak: boolean
   sourceUploadId?: string | null
@@ -32,6 +39,13 @@ function mapApiRow(row: any): ScheduleRow {
     endDate: row.end_date ?? null,
     topic: row.topic ?? '',
     additionalTopics: Array.isArray(row.additional_topics) ? row.additional_topics : [],
+    activities: Array.isArray(row.activities) ? row.activities : [],
+    assessmentReferences: Array.isArray(row.assessment_references) ? row.assessment_references : [],
+    periodKind: row.period_kind || 'week',
+    periodLabel: row.period_label || `Week ${row.week_number}`,
+    parser: row.parser ?? null,
+    originalValues: row.original_values ?? null,
+    wasEdited: Boolean(row.was_edited),
     notes: row.notes ?? null,
     isBreak: Boolean(row.is_break),
     sourceUploadId: row.source_upload_id ?? null,
@@ -39,7 +53,7 @@ function mapApiRow(row: any): ScheduleRow {
   }
 }
 
-const emptyDraft: ScheduleRow = { weekNumber: 1, startDate: null, endDate: null, topic: '', additionalTopics: [], notes: null, isBreak: false }
+const emptyDraft: ScheduleRow = { weekNumber: 1, startDate: null, endDate: null, topic: '', additionalTopics: [], activities: [], assessmentReferences: [], notes: null, isBreak: false }
 
 export function UnitScheduleManager() {
   const { requireAuth } = useAuth()
@@ -57,6 +71,8 @@ export function UnitScheduleManager() {
   const [isUploading, setIsUploading] = useState(false)
   const [uploadMessage, setUploadMessage] = useState<string | null>(null)
   const [preview, setPreview] = useState<ScheduleRow[] | null>(null)
+  const [previewParser, setPreviewParser] = useState<string | null>(null)
+  const [assessmentProposals, setAssessmentProposals] = useState<Array<{ title: string; weighting: number | null; dueDateText: string | null }>>([])
   const [isSavingPreview, setIsSavingPreview] = useState(false)
 
   useEffect(() => {
@@ -132,6 +148,8 @@ export function UnitScheduleManager() {
           endDate: draft.endDate,
           topic: draft.topic,
           additionalTopics: draft.additionalTopics,
+          activities: draft.activities,
+          assessmentReferences: draft.assessmentReferences,
           notes: draft.notes,
           isBreak: draft.isBreak
         })
@@ -184,6 +202,13 @@ export function UnitScheduleManager() {
         endDate: null,
         topic: e.topic,
         additionalTopics: e.additionalTopics || [],
+        activities: e.activities || [],
+        assessmentReferences: e.assessmentReferences || [],
+        periodKind: e.periodKind || 'week',
+        periodLabel: e.periodLabel || `Week ${e.weekNumber}`,
+        parser: payload.parser || null,
+        originalValues: e,
+        wasEdited: false,
         notes: null,
         isBreak: Boolean(e.isBreak),
         sourceUploadId: e.sourceUploadId ?? null,
@@ -195,10 +220,12 @@ export function UnitScheduleManager() {
       rows.forEach((row) => merged.set(row.weekNumber, { ...row }))
       extracted.forEach((row) => {
         const existing = merged.get(row.weekNumber)
-        merged.set(row.weekNumber, existing ? { ...existing, topic: row.topic, additionalTopics: row.additionalTopics, isBreak: row.isBreak, sourceUploadId: row.sourceUploadId, extractionConfidence: row.extractionConfidence } : row)
+        merged.set(row.weekNumber, existing ? { ...existing, topic: row.topic, additionalTopics: row.additionalTopics, activities: row.activities, assessmentReferences: row.assessmentReferences, isBreak: row.isBreak, sourceUploadId: row.sourceUploadId, extractionConfidence: row.extractionConfidence, parser: row.parser, originalValues: row.originalValues } : row)
       })
 
       setPreview(Array.from(merged.values()).sort((a, b) => a.weekNumber - b.weekNumber))
+      setPreviewParser(payload.parser || 'unknown')
+      setAssessmentProposals(payload.assessments || [])
     } finally {
       setIsUploading(false)
     }
@@ -233,13 +260,17 @@ export function UnitScheduleManager() {
     setPreview((prev) => {
       if (!prev) return prev
       const next = [...prev]
-      next[index] = { ...next[index], ...changes }
+      next[index] = { ...next[index], ...changes, wasEdited: true }
       return next
     })
   }
 
   const removePreviewRow = (index: number) => {
     setPreview((prev) => (prev ? prev.filter((_, i) => i !== index) : prev))
+  }
+
+  const addPreviewRow = () => {
+    setPreview((prev) => [...(prev || []), { ...emptyDraft, weekNumber: Math.max(-1, ...(prev || []).map((row) => row.weekNumber)) + 1 }])
   }
 
   if (!isLoading && units.length === 0) {
@@ -297,21 +328,23 @@ export function UnitScheduleManager() {
       {preview && (
         <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4">
           <div className="flex items-center justify-between">
-            <p className="text-sm font-semibold text-slate-950">Review extracted schedule ({preview.length} weeks)</p>
+            <div><p className="text-sm font-semibold text-slate-950">Review extracted schedule ({preview.length} periods)</p><p className="mt-1 text-xs text-slate-600">Parser: {previewParser || 'unknown'} · Edit every value before confirmation.</p></div>
             <div className="flex gap-2">
-              <Button size="sm" variant="outline" onClick={() => setPreview(null)}>Discard</Button>
-              <Button size="sm" onClick={() => void savePreview()} disabled={isSavingPreview}>{isSavingPreview ? 'Saving...' : 'Save schedule'}</Button>
+              <Button size="sm" variant="outline" onClick={() => setPreview(null)}>Try Parsing Again</Button>
+              <Button size="sm" variant="outline" onClick={addPreviewRow}>Add Row</Button>
+              <Button size="sm" onClick={() => void savePreview()} disabled={isSavingPreview}>{isSavingPreview ? 'Saving...' : 'Confirm & Save'}</Button>
             </div>
           </div>
           <div className="mt-3 space-y-2">
             {preview.map((row, index) => (
-              <div key={`${row.id || 'new'}-${index}`} className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-3 sm:flex-row sm:items-center">
+              <div key={`${row.id || 'new'}-${index}`} className="grid gap-2 rounded-xl border border-slate-200 bg-white p-3 sm:grid-cols-[5rem_1fr_auto]">
                 <input
                   type="number"
                   value={row.weekNumber}
                   onChange={(e) => updatePreviewRow(index, { weekNumber: parseInt(e.target.value) || row.weekNumber })}
                   className="w-20 rounded-md border border-slate-300 px-2 py-1 text-sm"
                   aria-label="Week number"
+                  min={0}
                 />
                 <input
                   type="text"
@@ -324,10 +357,14 @@ export function UnitScheduleManager() {
                   <input type="checkbox" checked={row.isBreak} onChange={(e) => updatePreviewRow(index, { isBreak: e.target.checked })} />
                   Break/no class
                 </label>
+                <input type="text" value={row.additionalTopics.join(', ')} onChange={(e) => updatePreviewRow(index, { additionalTopics: e.target.value.split(',').map((item) => item.trim()).filter(Boolean) })} className="rounded-md border border-slate-300 px-2 py-1 text-sm sm:col-start-2" placeholder="Additional topics" />
+                <input type="text" value={row.activities.join(', ')} onChange={(e) => updatePreviewRow(index, { activities: e.target.value.split(',').map((item) => item.trim()).filter(Boolean) })} className="rounded-md border border-slate-300 px-2 py-1 text-sm sm:col-start-2" placeholder="Activities" />
+                <input type="text" value={row.assessmentReferences.join(', ')} onChange={(e) => updatePreviewRow(index, { assessmentReferences: e.target.value.split(',').map((item) => item.trim()).filter(Boolean) })} className="rounded-md border border-slate-300 px-2 py-1 text-sm sm:col-start-2" placeholder="Assessment references" />
                 <Button size="sm" variant="ghost" onClick={() => removePreviewRow(index)}>Remove</Button>
               </div>
             ))}
           </div>
+          {assessmentProposals.length ? <div className="mt-4 border-t border-sky-200 pt-3"><p className="text-sm font-semibold text-slate-900">Assessment proposals</p><div className="mt-2 flex flex-wrap gap-2">{assessmentProposals.map((assessment, index) => <span key={`${assessment.title}-${index}`} className="rounded-md bg-white px-2 py-1 text-xs text-slate-700">{assessment.title}{assessment.weighting !== null ? ` · ${assessment.weighting}%` : ''}{assessment.dueDateText ? ` · ${assessment.dueDateText}` : ''}</span>)}</div></div> : null}
         </div>
       )}
 
@@ -341,7 +378,7 @@ export function UnitScheduleManager() {
               value={draft.weekNumber}
               onChange={(e) => setDraft({ ...draft, weekNumber: parseInt(e.target.value) || 1 })}
               className="rounded-md border border-slate-300 px-3 py-2 text-sm"
-              min={1}
+              min={0}
             />
             <input
               type="text"
@@ -376,6 +413,8 @@ export function UnitScheduleManager() {
           </div>
         </div>
       )}
+
+      {!preview && <Button size="sm" variant="outline" onClick={() => setDraft({ ...emptyDraft, weekNumber: 0 })}>Enter Manually</Button>}
 
       <div className="space-y-2">
         {!isLoading && rows.length === 0 && !preview ? (

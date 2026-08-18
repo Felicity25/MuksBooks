@@ -1,14 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getUserSettings, updateUserSettings } from '@/lib/app-state/service'
 import { createSupabaseServerClient, getAuthenticatedUser } from '@/lib/supabase/server'
-import { normalizeUserSettings, type UserSettings } from '@/lib/user-settings'
+import { normalizeUserSettings, parseUserSettingsUpdate, type UserSettings } from '@/lib/user-settings'
 
 export const runtime = 'nodejs'
 
 export async function GET() {
   try {
     const user = await getAuthenticatedUser()
-    const userId = user?.id || 'default'
+    if (!user) {
+      return NextResponse.json({ ok: false, error: 'Authentication required', code: 'UNAUTHENTICATED' }, { status: 401 })
+    }
     const client = createSupabaseServerClient()
 
     if (user && client) {
@@ -40,7 +42,7 @@ export async function GET() {
       return NextResponse.json({ ok: true, settings })
     }
 
-    const settings = getUserSettings(userId)
+    const settings = getUserSettings(user.id)
     return NextResponse.json({ ok: true, settings })
   } catch (error) {
     console.error('[Settings GET] Failed:', error)
@@ -56,8 +58,10 @@ export async function POST(request: NextRequest) {
     }
 
     const client = createSupabaseServerClient()
-    const body = await request.json() as Partial<UserSettings>
-    const settings = updateUserSettings(user.id, body || {})
+    const body = await request.json().catch(() => null)
+    const parsed = parseUserSettingsUpdate(body)
+    if (!parsed.valid) return NextResponse.json({ ok: false, error: parsed.error }, { status: 400 })
+    const settings = updateUserSettings(user.id, parsed.data)
 
     if (client) {
       const profileResult = await client.from('profiles').upsert(

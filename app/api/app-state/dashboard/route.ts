@@ -3,14 +3,16 @@ import { getDashboard } from '@/lib/app-state/service'
 import { getAuthenticatedUser } from '@/lib/supabase/server'
 import { getCurrentSemesterWeek } from '@/lib/semester-calendar'
 import { getSemesterCalendarSnapshot } from '@/lib/semester-calendar-server'
-import { listCloudUnits, listAllScheduleEntries } from '@/lib/supabase/documents-service'
+import { listCloudUnits, listAllScheduleEntries, listCalendarEvents } from '@/lib/supabase/documents-service'
+import { getPlanningContext } from '@/lib/planning/context'
+import { generatePlannerRecommendations } from '@/lib/planning/recommendations'
 
 export const runtime = 'nodejs'
 
 export async function GET() {
   try {
     const user = await getAuthenticatedUser()
-    const data = getDashboard(user?.id || 'default')
+    const data = { ...getDashboard(user?.id || 'default'), todayClasses: [] as any[], academicRecommendations: [] as any[] }
 
     const snapshot = await getSemesterCalendarSnapshot(new Date(), { allowRefresh: true })
     const current = getCurrentSemesterWeek(new Date(), snapshot.calendar)
@@ -27,6 +29,15 @@ export async function GET() {
     // Once authenticated, Supabase units are the source of truth — override the SQLite-derived
     // active course list so a deleted/renamed unit is reflected immediately on Home.
     if (user) {
+      const planningContext = await getPlanningContext(user.id)
+      data.academicRecommendations = generatePlannerRecommendations(planningContext)
+      const todayStart = new Date()
+      todayStart.setHours(0, 0, 0, 0)
+      const todayEnd = new Date(todayStart)
+      todayEnd.setDate(todayEnd.getDate() + 1)
+      const calendarEvents = await listCalendarEvents(user.id, todayStart.toISOString(), todayEnd.toISOString())
+      data.todayClasses = (calendarEvents || []).filter((event: any) => !event.is_assessment)
+
       const cloudUnits = await listCloudUnits(user.id)
       if (cloudUnits !== null) {
         const allEntries = await listAllScheduleEntries(user.id)

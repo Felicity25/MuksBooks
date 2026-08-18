@@ -9,10 +9,7 @@ import {
   uploadFileToStorage,
   persistUploadMetadata,
   persistDocumentChunks,
-  upsertCloudUnit,
-  findCloudUnitByCodeOrName,
-  listScheduleEntries,
-  replaceUnitSchedule
+  upsertCloudUnit
 } from '@/lib/supabase/documents-service'
 import { extractScheduleFromText } from '@/lib/course-manager/schedule-extractor'
 
@@ -57,6 +54,7 @@ export async function POST(request: NextRequest) {
       relativePath?: string
       unit?: string
       resourceType?: string
+      domain?: 'academic' | 'career' | 'personal' | 'other'
       topic?: string
       week?: number
       semester?: string
@@ -76,29 +74,31 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const targetCourseCode = (courseCode || fileMetadata[0]?.unit || 'UNCLASSIFIED').toUpperCase()
-    const course = upsertCourse({
+    const targetCourseCode = (courseCode || fileMetadata[0]?.unit || '').toUpperCase()
+    const defaultDomain = fileMetadata[0]?.domain || (fileMetadata[0]?.resourceType === 'CV' ? 'career' : 'academic')
+    const isBatchUnitBound = defaultDomain === 'academic' && Boolean(targetCourseCode) && targetCourseCode !== 'UNCLASSIFIED' && targetCourseCode !== 'CV'
+    const course = isBatchUnitBound ? upsertCourse({
       courseCode: targetCourseCode,
       courseName,
       semester,
       university,
       source: 'batch_upload',
       userId: user.id
-    })
+    }) : null
 
     const totalBytes = files.reduce((acc, file) => acc + file.size, 0)
     const batch = batchIdFromClient
       ? getUploadBatch(batchIdFromClient) || createUploadBatch({
           userId: user.id,
-          courseId: course.id,
-          name: batchName || `${targetCourseCode} · ${new Date().toISOString().slice(0, 10)} · ${files.length} files`,
+          courseId: course?.id,
+          name: batchName || `${targetCourseCode || 'Unassigned'} · ${new Date().toISOString().slice(0, 10)} · ${files.length} files`,
           totalFiles: files.length,
           totalBytes
         })
       : createUploadBatch({
           userId: user.id,
-          courseId: course.id,
-          name: batchName || `${targetCourseCode} · ${new Date().toISOString().slice(0, 10)} · ${files.length} files`,
+          courseId: course?.id,
+          name: batchName || `${targetCourseCode || 'Unassigned'} · ${new Date().toISOString().slice(0, 10)} · ${files.length} files`,
           totalFiles: files.length,
           totalBytes
         })
@@ -121,7 +121,7 @@ export async function POST(request: NextRequest) {
       return addBatchFile({
         batchId,
         userId: user.id,
-        courseId: course.id,
+        courseId: course?.id,
         originalFilename: file.name,
         displayName: file.name,
         relativePath: metadata?.relativePath,
@@ -147,6 +147,9 @@ export async function POST(request: NextRequest) {
       })
 
       try {
+        const domain = metadata?.domain || (metadata?.resourceType === 'CV' ? 'career' : 'academic')
+        const unitCode = (metadata?.unit || courseCode || '').toUpperCase()
+        const isUnitBound = domain === 'academic' && Boolean(unitCode) && unitCode !== 'UNCLASSIFIED' && unitCode !== 'CV'
         updateBatchFileStatus({ batchFileId: batchFile.id, status: 'UPLOADING' })
         const buffer = Buffer.from(await file.arrayBuffer())
 
@@ -162,8 +165,9 @@ export async function POST(request: NextRequest) {
           batchId,
           batchFileId: batchFile.id,
           relativePath: metadata?.relativePath,
+          domain,
           metadata: {
-            courseCode: (metadata?.unit || courseCode || targetCourseCode).toUpperCase(),
+            courseCode: isUnitBound ? unitCode : 'UNCLASSIFIED',
             courseName,
             semester: metadata?.semester || semester,
             university
@@ -190,47 +194,25 @@ export async function POST(request: NextRequest) {
           void (async () => {
             try {
               const storagePath = await uploadFileToStorage(user.id, String(upload.documentId), file.name, buffer, file.type || 'application/octet-stream')
-              await upsertCloudUnit(user.id, upload.courseCode || targetCourseCode, courseName || upload.courseCode || targetCourseCode, semester)
+              const cloudUnit = isUnitBound
+                ? await upsertCloudUnit(user.id, unitCode, courseName || unitCode, semester)
+                : null
               const uploadId = await persistUploadMetadata(user.id, String(upload.documentId), storagePath ?? `pending/${upload.documentId}/${file.name}`, {
                 fileName: file.name,
                 mimeType: file.type || 'application/octet-stream',
                 sizeBytes: file.size,
-                courseCode: upload.courseCode || targetCourseCode,
+                courseCode: isUnitBound ? unitCode : '',
                 fileHash: typeof upload.fileHash === 'string' ? upload.fileHash : '',
                 chunkCount: upload.chunks ?? 0,
-                documentType: upload.documentType,
+                documentType: domain === 'career' && metadata?.resourceType === 'CV' ? 'CV' : upload.documentType,
                 week: metadata?.week ?? undefined,
-                resourceType: metadata?.resourceType ?? undefined
+                resourceType: metadata?.resourceType ?? undefined,
+                topic: metadata?.topic || classified.topic || undefined,
+                domain,
+                unitId: cloudUnit?.id ?? null
               })
               if (upload.chunkData && upload.chunkData.length > 0) {
-                await persistDocumentChunks(user.id, uploadId, String(upload.documentId), upload.courseCode || targetCourseCode, upload.chunkData)
-              }
-
-              // Detect whether this looks like a unit guide/semester schedule and, if a unit can
-              // be confidently identified and it has no schedule yet, save it automatically.
-              const fullText = (upload.chunkData || []).map((chunk) => chunk.text).join('\n')
-              const scheduleResult = extractScheduleFromText(file.name, fullText)
-              if (scheduleResult.isLikelySchedule && scheduleResult.entries.length > 0) {
-                const matchedUnit = await findCloudUnitByCodeOrName(user.id, scheduleResult.detectedUnitCodes, fullText)
-                if (matchedUnit) {
-                  const existingEntries = await listScheduleEntries(user.id, matchedUnit.id as string)
-                  if (existingEntries !== null && existingEntries.length === 0) {
-                    await replaceUnitSchedule(user.id, matchedUnit.id as string, scheduleResult.entries.map((entry) => ({
-                      unitId: matchedUnit.id as string,
-                      weekNumber: entry.weekNumber,
-                      topic: entry.topic,
-                      additionalTopics: entry.additionalTopics,
-                      isBreak: entry.isBreak,
-                      extractionConfidence: entry.confidence,
-                      sourceUploadId: uploadId
-                    })))
-                    await appendLog('uploads', 'Auto-detected unit schedule from normal upload', {
-                      documentId: upload.documentId,
-                      unitCode: matchedUnit.code,
-                      weeksDetected: scheduleResult.entries.length
-                    })
-                  }
-                }
+                await persistDocumentChunks(user.id, uploadId, String(upload.documentId), isUnitBound ? unitCode : '', upload.chunkData)
               }
             } catch (cloudErr) {
               console.error('[Upload] Cloud persistence failed (non-fatal):', cloudErr)
@@ -238,6 +220,9 @@ export async function POST(request: NextRequest) {
           })()
         }
 
+        const scheduleProposal = !upload.duplicated && upload.chunkData
+          ? extractScheduleFromText(file.name, upload.chunkData.map((chunk) => chunk.text).join('\n'))
+          : null
         results.push({
           fileName: file.name,
           batchFileId: batchFile.id,
@@ -245,7 +230,12 @@ export async function POST(request: NextRequest) {
           duplicated: Boolean(upload.duplicated),
           documentId: upload.documentId,
           chunks: upload.chunks,
-          courseCode: upload.courseCode
+          courseCode: isUnitBound ? unitCode : null,
+          domain,
+          unitAssignmentProposal: !isUnitBound && scheduleProposal?.detectedUnitCodes.length
+            ? { detectedUnitCodes: scheduleProposal.detectedUnitCodes }
+            : null,
+          scheduleProposal: scheduleProposal?.isLikelySchedule ? scheduleProposal : null
         })
       } catch (fileError: any) {
         updateBatchFileStatus({

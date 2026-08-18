@@ -113,13 +113,16 @@ export async function persistUploadMetadata(
     processingStatus?: string
     week?: number | null
     resourceType?: string | null
+    topic?: string | null
+    domain?: 'academic' | 'career' | 'personal' | 'other'
+    unitId?: string | null
   }
 ): Promise<string | null> {
   const client = createSupabaseServerClient()
   if (!client) return null
 
   try {
-    // Try upsert with all new columns (requires 20260820 migration)
+    // Try upsert with all new columns (requires 20260820 + 20260826 migrations)
     const { data, error } = await client
       .from('uploads')
       .upsert(
@@ -136,7 +139,10 @@ export async function persistUploadMetadata(
           document_type: params.documentType ?? 'study_material',
           processing_status: params.processingStatus ?? 'tutor_ready',
           week: params.week ?? null,
-          resource_type: params.resourceType ?? null
+          resource_type: params.resourceType ?? null,
+          topic: params.topic ?? null,
+          domain: params.domain ?? 'academic',
+          unit_id: params.unitId ?? null
         },
         { onConflict: 'document_id' }
       )
@@ -181,7 +187,7 @@ export async function listCloudDocuments(userId: string) {
   try {
     const { data, error } = await client
       .from('uploads')
-      .select('id, document_id, original_filename, mime_type, file_size, document_type, processing_status, course_code, chunk_count, week, resource_type, created_at')
+      .select('id, document_id, original_filename, mime_type, file_size, document_type, processing_status, course_code, chunk_count, week, resource_type, topic, domain, unit_id, created_at')
       .eq('user_id', userId)
       .not('document_id', 'is', null)
       .order('created_at', { ascending: false })
@@ -454,6 +460,51 @@ export async function archiveCloudUnitById(userId: string, unitId: string): Prom
   }
 }
 
+export async function inspectBogusUnits(userId: string) {
+  const client = createSupabaseServerClient()
+  if (!client) return null
+  const units = await listCloudUnits(userId, true)
+  if (!units) return null
+  const candidates = units.filter((unit: any) => ['CV', 'UNCLASSIFIED'].includes(String(unit.code).toUpperCase()))
+
+  return Promise.all(candidates.map(async (unit: any) => {
+    const [uploads, schedules, assessments, mastery, calendar] = await Promise.all([
+      client.from('uploads').select('id, domain, document_type', { count: 'exact' }).eq('user_id', userId).eq('unit_id', unit.id),
+      client.from('unit_schedule_entries').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('unit_id', unit.id),
+      client.from('assessments').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('unit_id', unit.id),
+      client.from('mastery_records').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('unit_id', unit.id),
+      client.from('calendar_events').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('unit_id', unit.id)
+    ])
+    const uploadRows = uploads.data || []
+    const legitimateUploads = uploadRows.filter((upload: any) => upload.domain === 'academic' && upload.document_type !== 'CV').length
+    return {
+      id: unit.id,
+      code: unit.code,
+      name: unit.name,
+      careerUploads: uploadRows.filter((upload: any) => upload.domain === 'career' || upload.document_type === 'CV').length,
+      legitimateUploads,
+      scheduleEntries: schedules.count || 0,
+      assessments: assessments.count || 0,
+      masteryRecords: mastery.count || 0,
+      calendarEvents: calendar.count || 0,
+      safeToArchive: legitimateUploads === 0 && (schedules.count || 0) === 0 && (assessments.count || 0) === 0 && (mastery.count || 0) === 0 && (calendar.count || 0) === 0
+    }
+  }))
+}
+
+export async function cleanupBogusUnit(userId: string, unitId: string) {
+  const client = createSupabaseServerClient()
+  if (!client) return { ok: false as const, error: 'Cloud unavailable' }
+  const candidates = await inspectBogusUnits(userId)
+  const candidate = candidates?.find((unit) => unit.id === unitId)
+  if (!candidate) return { ok: false as const, error: 'Cleanup candidate not found' }
+  if (!candidate.safeToArchive) return { ok: false as const, error: 'Unit has legitimate academic dependencies and was not changed' }
+
+  await client.from('uploads').update({ unit_id: null, domain: 'career' }).eq('user_id', userId).eq('unit_id', unitId).eq('document_type', 'CV')
+  await client.from('units').update({ status: 'archived' }).eq('user_id', userId).eq('id', unitId)
+  return { ok: true as const, unit: candidate }
+}
+
 /** Set the overall mastery level (0-100) for a unit directly by id. */
 export async function setCloudUnitMastery(userId: string, unitId: string, masteryLevel: number): Promise<void> {
   const client = createSupabaseServerClient()
@@ -480,6 +531,88 @@ export async function findCloudUnitByCodeOrName(userId: string, candidateCodes: 
   if (byName) return byName
 
   return null
+}
+
+// ─── Calendar events (imported class timetable) ────────────────────────────
+
+export interface CalendarEventInput {
+  sourceUid: string
+  recurrenceId?: string | null
+  title: string
+  description?: string | null
+  location?: string | null
+  startsAt: string
+  endsAt: string
+  timezone?: string | null
+  unitId?: string | null
+  unitCode?: string | null
+  activityType?: string | null
+  isAssessment?: boolean
+  source?: string
+}
+
+const CALENDAR_COLUMNS = 'id, unit_id, source_uid, recurrence_id, title, description, location, starts_at, ends_at, timezone, unit_code, activity_type, is_assessment, source, created_at, updated_at'
+
+export async function replaceImportedCalendarEvents(userId: string, events: CalendarEventInput[]) {
+  const client = createSupabaseServerClient()
+  if (!client) return { ok: false as const, error: 'Cloud unavailable' }
+  const sourceUids = Array.from(new Set(events.map((event) => event.sourceUid).filter(Boolean)))
+
+  try {
+    if (sourceUids.length) {
+      const { error: deleteError } = await client
+        .from('calendar_events')
+        .delete()
+        .eq('user_id', userId)
+        .in('source_uid', sourceUids)
+      if (deleteError) return { ok: false as const, error: deleteError.message }
+    }
+
+    if (!events.length) return { ok: true as const, events: [] }
+    const rows = events.map((event) => ({
+      user_id: userId,
+      unit_id: event.unitId ?? null,
+      source_uid: event.sourceUid,
+      recurrence_id: event.recurrenceId ?? null,
+      title: event.title,
+      description: event.description ?? null,
+      location: event.location ?? null,
+      starts_at: event.startsAt,
+      ends_at: event.endsAt,
+      timezone: event.timezone ?? null,
+      unit_code: event.unitCode ?? null,
+      activity_type: event.activityType ?? null,
+      is_assessment: event.isAssessment ?? false,
+      source: event.source ?? 'ical'
+    }))
+    const { data, error } = await client.from('calendar_events').insert(rows).select(CALENDAR_COLUMNS)
+    if (error) return { ok: false as const, error: error.message }
+    return { ok: true as const, events: data ?? [] }
+  } catch (error) {
+    return { ok: false as const, error: error instanceof Error ? error.message : 'Calendar import failed' }
+  }
+}
+
+export async function listCalendarEvents(userId: string, start: string, end: string) {
+  const client = createSupabaseServerClient()
+  if (!client) return null
+  try {
+    const { data, error } = await client
+      .from('calendar_events')
+      .select(CALENDAR_COLUMNS)
+      .eq('user_id', userId)
+      .lte('starts_at', end)
+      .gte('ends_at', start)
+      .order('starts_at', { ascending: true })
+    if (error) {
+      if (!isMissingRelation(error)) console.error('[Cloud] List calendar events failed:', error.message)
+      return null
+    }
+    return data ?? []
+  } catch (error) {
+    if (!isMissingRelation(error)) console.error('[Cloud] List calendar events error:', error)
+    return null
+  }
 }
 
 // ─── Mastery ─────────────────────────────────────────────────────────────────
@@ -528,6 +661,13 @@ export interface ScheduleEntryInput {
   endDate?: string | null
   topic: string
   additionalTopics?: string[]
+  activities?: string[]
+  assessmentReferences?: string[]
+  periodKind?: string
+  periodLabel?: string | null
+  parser?: string | null
+  originalValues?: Record<string, unknown> | null
+  wasEdited?: boolean
   notes?: string | null
   sourceUploadId?: string | null
   extractionConfidence?: number | null
@@ -535,7 +675,7 @@ export interface ScheduleEntryInput {
   sortOrder?: number
 }
 
-const SCHEDULE_COLUMNS = 'id, unit_id, week_number, start_date, end_date, topic, additional_topics, notes, source_upload_id, extraction_confidence, is_break, sort_order, created_at, updated_at'
+const SCHEDULE_COLUMNS = 'id, unit_id, week_number, period_kind, period_label, start_date, end_date, topic, additional_topics, activities, assessment_references, notes, source_upload_id, extraction_confidence, parser, original_values, was_edited, is_break, sort_order, created_at, updated_at'
 
 /** List all schedule entries for a unit, ordered by week/sort. */
 export async function listScheduleEntries(userId: string, unitId: string) {
@@ -591,9 +731,16 @@ export async function upsertScheduleEntry(userId: string, entry: ScheduleEntryIn
     end_date: entry.endDate ?? null,
     topic: entry.topic,
     additional_topics: entry.additionalTopics ?? [],
+    activities: entry.activities ?? [],
+    assessment_references: entry.assessmentReferences ?? [],
+    period_kind: entry.periodKind ?? 'week',
+    period_label: entry.periodLabel ?? `Week ${entry.weekNumber}`,
     notes: entry.notes ?? null,
     source_upload_id: entry.sourceUploadId ?? null,
     extraction_confidence: entry.extractionConfidence ?? null,
+    parser: entry.parser ?? null,
+    original_values: entry.originalValues ?? null,
+    was_edited: entry.wasEdited ?? false,
     is_break: entry.isBreak ?? false,
     sort_order: entry.sortOrder ?? 0
   }
@@ -648,9 +795,16 @@ export async function replaceUnitSchedule(userId: string, unitId: string, entrie
       end_date: entry.endDate ?? null,
       topic: entry.topic,
       additional_topics: entry.additionalTopics ?? [],
+      activities: entry.activities ?? [],
+      assessment_references: entry.assessmentReferences ?? [],
+      period_kind: entry.periodKind ?? 'week',
+      period_label: entry.periodLabel ?? `Week ${entry.weekNumber}`,
       notes: entry.notes ?? null,
       source_upload_id: entry.sourceUploadId ?? null,
       extraction_confidence: entry.extractionConfidence ?? null,
+      parser: entry.parser ?? null,
+      original_values: entry.originalValues ?? null,
+      was_edited: entry.wasEdited ?? false,
       is_break: entry.isBreak ?? false,
       sort_order: entry.sortOrder ?? index
     }))
@@ -664,5 +818,34 @@ export async function replaceUnitSchedule(userId: string, unitId: string, entrie
     return { ok: true as const, entries: data ?? [] }
   } catch (err) {
     return { ok: false as const, error: err instanceof Error ? err.message : 'Failed to save schedule' }
+  }
+}
+
+/** Delete a single calendar event by id. */
+export async function deleteCalendarEvent(userId: string, eventId: string): Promise<void> {
+  const client = createSupabaseServerClient()
+  if (!client) return
+  try {
+    await client.from('calendar_events').delete().eq('user_id', userId).eq('id', eventId)
+  } catch { /* non-fatal */ }
+}
+
+// ─── Academic assessments ────────────────────────────────────────────────────
+
+/** List academic assessments (assignments, exams) for the user across all units. */
+export async function listCloudAssessments(userId: string) {
+  const client = createSupabaseServerClient()
+  if (!client) return null
+  try {
+    const { data, error } = await client
+      .from('assessments')
+      .select('id, unit_id, name, assessment_type, weighting, due_date, status, units(code, name)')
+      .eq('user_id', userId)
+      .order('due_date', { ascending: true, nullsFirst: false })
+    if (error) { if (!isMissingRelation(error)) console.error('[Cloud] List assessments failed:', error.message); return null }
+    return data ?? []
+  } catch (err) {
+    if (!isMissingRelation(err)) console.error('[Cloud] List assessments error:', err)
+    return null
   }
 }

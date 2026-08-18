@@ -8,6 +8,7 @@ import type { CatalogDocument, ChunkRecord, CourseMetadata } from '@/lib/knowled
 import { addKnowledgeChunk, createOrUpdateDocument, extractAssessmentsFromText, extractWeeklyTopicsFromText, upsertCourse } from '@/lib/app-state/service'
 import { publishEvent } from '@/lib/app-state/events'
 import { extractTextFromUpload } from './extractors'
+import { isAcademicUnitBinding, type DocumentDomain } from './document-domain'
 
 function normalizeCode(value?: string) {
   return value?.toUpperCase().replace(/\s+/g, '')
@@ -71,6 +72,7 @@ export interface UploadPayload {
   relativePath?: string
   sizeBytes?: number
   metadata?: Partial<CourseMetadata>
+  domain?: DocumentDomain
   classification?: {
     resourceType?: string
     topic?: string
@@ -101,21 +103,23 @@ export async function ingestUpload(payload: UploadPayload) {
   const catalog = await loadCatalog()
   const fileHash = hashBuffer(payload.content)
   const existing = catalog.documents.find((doc) => doc.fileHash === fileHash && doc.status === 'active')
+  const requestedCode = normalizeCode(payload.metadata?.courseCode)
+  const isUnitBound = isAcademicUnitBinding(payload.domain || 'academic', requestedCode)
 
   if (existing) {
     const existingMetadata = existing.metadata || { courseCode: 'UNCLASSIFIED' }
-    const existingCourse = upsertCourse({
-      courseCode: normalizeCode(existingMetadata.courseCode) || 'UNCLASSIFIED',
-      courseName: existingMetadata.courseName,
-      university: existingMetadata.university,
-      semester: existingMetadata.semester,
+    const existingCourse = isUnitBound ? upsertCourse({
+      courseCode: requestedCode as string,
+      courseName: payload.metadata?.courseName || existingMetadata.courseName,
+      university: payload.metadata?.university || existingMetadata.university,
+      semester: payload.metadata?.semester || existingMetadata.semester,
       source: 'catalog_duplicate_recovery',
       userId: payload.userId || 'default'
-    })
+    }) : null
 
     createOrUpdateDocument({
       id: existing.documentId,
-      courseId: existingCourse.id,
+      courseId: existingCourse?.id,
       batchId: payload.batchId,
       batchFileId: payload.batchFileId,
       filename: existing.fileName,
@@ -151,17 +155,19 @@ export async function ingestUpload(payload: UploadPayload) {
   const metadata: CourseMetadata = {
     ...detected,
     ...payload.metadata,
-    courseCode: normalizeCode(payload.metadata?.courseCode || detected.courseCode) || 'UNCLASSIFIED'
+    courseCode: isUnitBound ? requestedCode as string : 'UNCLASSIFIED',
+    domain: payload.domain || 'academic',
+    documentType: payload.classification?.resourceType === 'CV' ? 'CV' : payload.metadata?.documentType || detected.documentType
   }
 
-  const appCourse = upsertCourse({
+  const appCourse = isUnitBound ? upsertCourse({
     courseCode: metadata.courseCode,
     courseName: payload.metadata?.courseName,
     university: metadata.university,
     semester: metadata.semester,
     source: 'document_analysis',
     userId: payload.userId || 'default'
-  })
+  }) : null
 
   const newCurriculumVersion = `v_${Date.now()}`
   if (payload.forceNewCurriculum) {
@@ -196,7 +202,7 @@ export async function ingestUpload(payload: UploadPayload) {
 
   createOrUpdateDocument({
     id: documentId,
-    courseId: appCourse.id,
+    courseId: appCourse?.id,
     batchId: payload.batchId,
     batchFileId: payload.batchFileId,
     filename: payload.fileName,
@@ -231,13 +237,15 @@ export async function ingestUpload(payload: UploadPayload) {
     const enrichedMetadata: CourseMetadata = {
       ...detectCourseMetadata(payload.fileName, extractedText, payload.mimeType),
       ...payload.metadata,
-      courseCode: normalizeCode(payload.metadata?.courseCode || metadata.courseCode) || 'UNCLASSIFIED'
+      courseCode: isUnitBound ? requestedCode as string : 'UNCLASSIFIED',
+      domain: payload.domain || 'academic',
+      documentType: payload.classification?.resourceType === 'CV' ? 'CV' : payload.metadata?.documentType || metadata.documentType
     }
 
     await fs.writeFile(extractedPath, extractedText, 'utf8')
     createOrUpdateDocument({
       id: documentId,
-      courseId: appCourse.id,
+      courseId: appCourse?.id,
       batchId: payload.batchId,
       batchFileId: payload.batchFileId,
       filename: payload.fileName,
@@ -329,7 +337,7 @@ export async function ingestUpload(payload: UploadPayload) {
       addKnowledgeChunk({
         id: chunkId,
         documentId,
-        courseId: appCourse.id,
+        courseId: appCourse?.id,
         chunkIndex: index,
         text: block.text,
         section: block.title,
@@ -338,12 +346,14 @@ export async function ingestUpload(payload: UploadPayload) {
       })
     })
 
-    extractWeeklyTopicsFromText(appCourse.id, extractedText, documentId)
-    extractAssessmentsFromText(appCourse.id, extractedText, documentId)
+    if (appCourse) {
+      extractWeeklyTopicsFromText(appCourse.id, extractedText, documentId)
+      extractAssessmentsFromText(appCourse.id, extractedText, documentId)
+    }
 
     createOrUpdateDocument({
       id: documentId,
-      courseId: appCourse.id,
+      courseId: appCourse?.id,
       batchId: payload.batchId,
       batchFileId: payload.batchFileId,
       filename: payload.fileName,
@@ -370,7 +380,7 @@ export async function ingestUpload(payload: UploadPayload) {
     })
 
     publishEvent('DOCUMENT_UPLOADED', {
-      courseId: appCourse.id,
+      courseId: appCourse?.id,
       courseCode: enrichedMetadata.courseCode,
       documentId,
       chunks: chunkIds.length
@@ -387,7 +397,7 @@ export async function ingestUpload(payload: UploadPayload) {
   } catch (error: any) {
     createOrUpdateDocument({
       id: documentId,
-      courseId: appCourse.id,
+      courseId: appCourse?.id,
       batchId: payload.batchId,
       batchFileId: payload.batchFileId,
       filename: payload.fileName,

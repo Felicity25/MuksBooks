@@ -4,6 +4,7 @@ import { getAuthenticatedUser } from '@/lib/supabase/server'
 import { ingestUpload } from '@/lib/course-manager/service'
 import { extractTextFromUpload } from '@/lib/course-manager/extractors'
 import { extractScheduleFromText, type ExtractedScheduleEntry } from '@/lib/course-manager/schedule-extractor'
+import { extractScheduleWithAi } from '@/lib/course-manager/schedule-ai-fallback'
 import { appendLog } from '@/lib/logging'
 import { getCloudUnit, uploadFileToStorage, persistUploadMetadata } from '@/lib/supabase/documents-service'
 
@@ -50,6 +51,8 @@ export async function POST(request: NextRequest) {
 
     const mergedByWeek = new Map<number, PreviewEntry>()
     const fileSummaries: Array<{ fileName: string; ok: boolean; weeksFound: number; error?: string }> = []
+    const assessmentProposals: Array<{ title: string; weighting: number | null; dueDateText: string | null; sourceText: string }> = []
+    const parsers = new Set<string>()
     let anySucceeded = false
 
     for (const file of files) {
@@ -85,14 +88,25 @@ export async function POST(request: NextRequest) {
               fileHash: typeof upload.fileHash === 'string' ? upload.fileHash : '',
               chunkCount: upload.chunks ?? 0,
               documentType: 'Unit guide',
-              processingStatus: 'tutor_ready'
+              processingStatus: 'tutor_ready',
+              domain: 'academic',
+              unitId: unit.id as string
             })
           } catch (cloudErr) {
             console.error('[Schedule upload] Cloud persistence failed (non-fatal):', cloudErr)
           }
         }
 
-        const result = extractScheduleFromText(file.name, extractedText)
+        let result = extractScheduleFromText(file.name, extractedText)
+        if (result.entries.length < 3 || result.confidence < 0.65) {
+          const fallback = await extractScheduleWithAi(file.name, extractedText)
+          if (fallback?.entries.length) {
+            result = { ...result, ...fallback, isLikelySchedule: true, confidence: 0.72, parser: 'heading' }
+            parsers.add('ai-fallback')
+          }
+        }
+        parsers.add(result.parser)
+        assessmentProposals.push(...result.assessments)
 
         for (const entry of result.entries) {
           const existing = mergedByWeek.get(entry.weekNumber)
@@ -100,6 +114,8 @@ export async function POST(request: NextRequest) {
             mergedByWeek.set(entry.weekNumber, { ...entry, sourceUploadId: cloudUploadId })
           } else {
             existing.additionalTopics.push(entry.topic, ...entry.additionalTopics)
+            existing.activities.push(...entry.activities)
+            existing.assessmentReferences.push(...entry.assessmentReferences)
             existing.confidence = Math.max(existing.confidence, entry.confidence)
           }
         }
@@ -130,6 +146,8 @@ export async function POST(request: NextRequest) {
         ok: true,
         partial: true,
         entries: [],
+        assessments: assessmentProposals,
+        parser: Array.from(parsers).join(', ') || 'none',
         files: fileSummaries,
         message: 'The document was uploaded but no weekly schedule could be detected. You can add weeks manually below.'
       })
@@ -140,6 +158,8 @@ export async function POST(request: NextRequest) {
       partial: entries.length < 8,
       unit: { id: unit.id, code: unit.code, name: unit.name },
       entries,
+      assessments: assessmentProposals,
+      parser: Array.from(parsers).join(', ') || 'none',
       files: fileSummaries
     })
   } catch (error: any) {

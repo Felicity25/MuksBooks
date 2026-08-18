@@ -434,11 +434,9 @@ export function CareersManager() {
     try {
       const formData = new FormData()
       formData.append('file', file)
-      formData.append('courseCode', 'CV')
-      formData.append('courseName', 'CV & Career Documents')
       formData.append('batchName', `CV upload · ${new Date().toISOString().slice(0, 10)}`)
       formData.append('fileMetadata', JSON.stringify([
-        { fileName: file.name, resourceType: 'CV', duplicateStrategy: 'replace' }
+        { fileName: file.name, domain: 'career', documentType: 'CV', resourceType: 'CV', duplicateStrategy: 'replace' }
       ]))
 
       const uploadResponse = await fetch('/api/course-manager/upload', {

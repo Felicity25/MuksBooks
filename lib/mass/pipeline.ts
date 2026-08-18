@@ -278,8 +278,9 @@ export async function syncMassPulse(mode: 'full' | 'delta') {
 }
 
 export async function listMassPulse(client: SupabaseClient): Promise<MassPulseItem[]> {
-  const now = new Date().toISOString()
-  const { data, error } = await client.from('mass_items').select('*').or(`ends_at.is.null,ends_at.gte.${now}`).order('starts_at', { ascending: true, nullsFirst: false }).order('first_seen_at', { ascending: false }).limit(50)
+  const now = new Date()
+  const startsAtCutoff = new Date(now.getTime() - 6 * 60 * 60 * 1000).toISOString()
+  const { data, error } = await client.from('mass_items').select('*').or(`ends_at.gte.${now.toISOString()},and(ends_at.is.null,or(starts_at.is.null,starts_at.gte.${startsAtCutoff}))`).order('starts_at', { ascending: true, nullsFirst: false }).order('first_seen_at', { ascending: false }).limit(50)
   if (error) throw new Error(error.message)
   return (data || []).map((row: any) => ({ id: row.id, externalId: row.external_id, title: row.title, url: row.canonical_url, sourceId: '', sourceName: '', sourceUrl: '', sourceType: '', contentHash: row.content_hash, category: row.category, description: row.description, startsAt: row.starts_at, endsAt: row.ends_at, registrationDeadline: row.registration_deadline, location: row.location, organisation: row.organisation, relevantAreas: row.relevant_areas || [], isMassProjects: Boolean(row.is_mass_projects), whyRelevant: row.why_relevant, firstSeenAt: row.first_seen_at, lastSeenAt: row.last_seen_at, retrievedAt: row.retrieved_at, publishedAt: row.published_at, sources: row.source_urls || [] }))
 }

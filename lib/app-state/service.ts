@@ -377,7 +377,7 @@ export function upsertCourse(input: {
 
 export function createUploadBatch(input: {
   userId?: string
-  courseId: string
+  courseId?: string
   name: string
   totalFiles: number
   totalBytes?: number
@@ -396,7 +396,7 @@ export function createUploadBatch(input: {
   `).run(
     batchId,
     input.userId || 'default',
-    input.courseId,
+    input.courseId || null,
     input.name,
     'QUEUED',
     Math.max(0, input.totalFiles),
@@ -452,7 +452,7 @@ export function getUploadBatch(batchId: string) {
 export function addBatchFile(input: {
   batchId: string
   userId?: string
-  courseId: string
+  courseId?: string
   originalFilename: string
   displayName?: string
   relativePath?: string
@@ -479,7 +479,7 @@ export function addBatchFile(input: {
     batchFileId,
     input.batchId,
     input.userId || 'default',
-    input.courseId,
+    input.courseId || null,
     input.originalFilename,
     input.displayName || input.originalFilename,
     input.relativePath || null,

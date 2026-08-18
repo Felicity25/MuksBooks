@@ -60,7 +60,7 @@ export function SettingsManager() {
     setDraft(next)
     setSaving(true)
     try {
-      setDraft(await saveSettings(next))
+      setDraft(await saveSettings(updates))
       setMessage(confirmation)
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Settings could not be saved.')

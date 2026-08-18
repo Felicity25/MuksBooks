@@ -6,6 +6,8 @@ export interface SuggestionInput {
   weakTopics: Array<{ id: string; name?: string | null; course_code?: string | null }>
   careerItems: Array<{ title: string; deadline_at_utc: string }>
   massItems: Array<{ id: string; title: string; category: string; startsAt?: string | null; url: string }>
+  classes: Array<{ id: string; title: string; starts_at: string; unit_code?: string | null; activity_type?: string | null }>
+  currentTopics: Array<{ name?: string | null; course_code?: string | null }>
 }
 
 export interface RankedSuggestion {
@@ -25,6 +27,19 @@ function daysUntil(value?: string | null) {
 
 export function rankSuggestions(input: SuggestionInput, level: ProactivityLevel, controls: ProactivityControls) {
   const items: RankedSuggestion[] = []
+
+  for (const classEvent of input.classes) {
+    const topic = input.currentTopics.find((item) => item.course_code && item.course_code === classEvent.unit_code)
+    items.push({
+      id: `class-${classEvent.id}`,
+      title: `Prepare for ${classEvent.title}`,
+      detail: `${new Date(classEvent.starts_at).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' })}${topic?.name ? ` · Current topic: ${topic.name}` : ''}`,
+      href: '/semester-timeline',
+      actionLabel: 'View class',
+      score: 94,
+      kind: 'class'
+    })
+  }
 
   if (controls.assessmentPreparation) {
     for (const assessment of input.assessments) {
