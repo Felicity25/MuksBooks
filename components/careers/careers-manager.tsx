@@ -637,7 +637,7 @@ export function CareersManager() {
 
   const followingEmpty = !isLoading && state.following.length === 0
 
-  const activeDiscover = state.discover.filter((job: any) => ['OPEN_NOW', 'CLOSING_SOON', 'STALE_UNVERIFIED'].includes(job.opportunityStatus))
+  const activeDiscover = state.discover.filter((job: any) => ['CURRENTLY_LISTED', 'LIKELY_OPEN', 'CLOSING_SOON', 'STALE_UNVERIFIED'].includes(job.opportunityStatus))
   const previousDiscover = state.discover.filter((job: any) => ['CLOSED_OR_EXPIRED', 'LISTING_UNAVAILABLE'].includes(job.opportunityStatus))
   const discoverEmpty = !isLoading && activeDiscover.length === 0
 
