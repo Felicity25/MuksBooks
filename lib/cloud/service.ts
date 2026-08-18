@@ -103,7 +103,7 @@ export async function listUserTasks() {
 
   const { data, error } = await client
     .from('tasks')
-    .select('id, unit_id, title, description, task_type, status, priority, due_date, planned_date, estimated_minutes, created_by, created_at, updated_at, career_assessment_id, units(code, name)')
+    .select('id, unit_id, title, description, task_type, status, priority, due_date, planned_date, estimated_minutes, created_by, created_at, updated_at, career_assessment_id, assessment_id, units(code, name)')
     .order('planned_date', { ascending: true, nullsFirst: false })
     .order('due_date', { ascending: true, nullsFirst: false })
     .order('created_at', { ascending: true })
@@ -147,6 +147,7 @@ export async function createUserTask(input: {
   userId: string
   unit_id?: string | null
   career_assessment_id?: string | null
+  assessment_id?: string | null
   title: string
   description?: string | null
   task_type?: string
@@ -163,6 +164,7 @@ export async function createUserTask(input: {
     user_id: input.userId,
     unit_id: input.unit_id ?? null,
     career_assessment_id: input.career_assessment_id ?? null,
+    assessment_id: input.assessment_id ?? null,
     title: input.title,
     description: input.description ?? null,
     task_type: input.task_type ?? 'study',

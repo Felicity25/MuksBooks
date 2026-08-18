@@ -28,7 +28,8 @@ function mapCloudTask(task: any) {
     generated_by: task.created_by,
     created_at: task.created_at,
     updated_at: task.updated_at,
-    career_assessment_id: task.career_assessment_id || null
+    career_assessment_id: task.career_assessment_id || null,
+    assessment_id: task.assessment_id || null
   }
 }
 
@@ -73,6 +74,7 @@ export async function POST(request: NextRequest) {
       userId: user.id,
       unit_id: courseId || null,
       career_assessment_id: body.careerAssessmentId || null,
+      assessment_id: body.assessmentId || null,
       title: body.title,
       description: body.description,
       task_type: body.taskType,
