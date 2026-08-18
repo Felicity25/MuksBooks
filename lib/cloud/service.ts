@@ -249,3 +249,71 @@ export async function deleteUserTask(userId: string, taskId: string) {
   if (error) return null
   return existing
 }
+
+export async function createStudySession(input: {
+  userId: string
+  unitId?: string | null
+  taskId?: string | null
+  title: string
+  startedAt: string
+  endedAt: string
+  durationMinutes: number
+  notes?: string | null
+}) {
+  const client = createSupabaseServerClient()
+  if (!client) return null
+
+  const { data, error } = await client
+    .from('study_sessions')
+    .insert({
+      user_id: input.userId,
+      unit_id: input.unitId ?? null,
+      task_id: input.taskId ?? null,
+      title: input.title,
+      started_at: input.startedAt,
+      ended_at: input.endedAt,
+      duration_minutes: Math.max(0, Math.round(input.durationMinutes)),
+      notes: input.notes ?? null
+    })
+    .select('id, unit_id, task_id, title, started_at, ended_at, duration_minutes, created_at')
+    .single()
+
+  if (error || !data) return null
+  return data
+}
+
+export async function listStudySessions(userId: string, limit = 20) {
+  const client = createSupabaseServerClient()
+  if (!client) return []
+
+  const { data, error } = await client
+    .from('study_sessions')
+    .select('id, unit_id, task_id, title, started_at, ended_at, duration_minutes, created_at, units(code, name), tasks(title)')
+    .eq('user_id', userId)
+    .order('started_at', { ascending: false })
+    .limit(Math.max(1, Math.min(limit, 100)))
+
+  if (error) return []
+  return data ?? []
+}
+
+export async function getTodayStudySummary(userId: string) {
+  const client = createSupabaseServerClient()
+  if (!client) return { focusedMinutes: 0, sessionCount: 0 }
+
+  const start = new Date()
+  start.setHours(0, 0, 0, 0)
+
+  const { data, error } = await client
+    .from('study_sessions')
+    .select('duration_minutes')
+    .eq('user_id', userId)
+    .gte('started_at', start.toISOString())
+
+  if (error || !data) return { focusedMinutes: 0, sessionCount: 0 }
+
+  return {
+    focusedMinutes: data.reduce((sum, row: any) => sum + (Number(row.duration_minutes) || 0), 0),
+    sessionCount: data.length
+  }
+}

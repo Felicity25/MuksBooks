@@ -31,6 +31,17 @@ export async function GET() {
     if (user) {
       const planningContext = await getPlanningContext(user.id)
       data.academicRecommendations = generatePlannerRecommendations(planningContext)
+      data.upcomingAssessments = [...planningContext.assessments]
+        .filter((assessment) => assessment.dueDate)
+        .sort((a, b) => new Date(a.dueDate as string).getTime() - new Date(b.dueDate as string).getTime())
+        .slice(0, 10)
+        .map((assessment) => ({
+          id: assessment.id,
+          name: assessment.name,
+          due_date: assessment.dueDate,
+          course_code: assessment.unitCode,
+          weighting: assessment.weighting
+        }))
       const todayStart = new Date()
       todayStart.setHours(0, 0, 0, 0)
       const todayEnd = new Date(todayStart)

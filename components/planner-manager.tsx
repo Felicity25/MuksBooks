@@ -38,8 +38,20 @@ interface Recommendation {
   estimatedMinutes: number
   askTutorHref: string | null
   openDocumentId: string | null
-  suggestedTask: { title: string; courseCode: string | null; taskType: string; estimatedMinutes: number; priority: number }
+  durationOptionsMinutes?: number[]
+  suggestedTask: { title: string; courseCode: string | null; taskType: string; estimatedMinutes: number; priority: number; plannedDate?: string | null; assessmentId?: string | null }
 }
+
+interface Assessment {
+  id: string
+  unitCode: string | null
+  name: string
+  assessmentType: string
+  dueDate: string | null
+  weighting: number | null
+}
+
+const ASSESSMENT_TYPE_OPTIONS = ['Assignment', 'Quiz', 'Test', 'Mid-semester test', 'Presentation', 'Report', 'Project', 'Exam', 'Other']
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
@@ -54,8 +66,23 @@ export function PlannerManager() {
   const [editingSession, setEditingSession] = useState<StudySession | null>(null)
   const [formData, setFormData] = useState({ title: '', unit: '', window: '', day: 'Monday' })
   const [acceptedIds, setAcceptedIds] = useState<Set<string>>(new Set())
+  const [selectedDurations, setSelectedDurations] = useState<Record<string, number>>({})
   const [timetableUnit, setTimetableUnit] = useState('')
   const [timetableStatus, setTimetableStatus] = useState<string | null>(null)
+  const [assessments, setAssessments] = useState<Assessment[]>([])
+  const [showAssessmentForm, setShowAssessmentForm] = useState(false)
+  const [assessmentStatus, setAssessmentStatus] = useState<string | null>(null)
+  const [assessmentForm, setAssessmentForm] = useState({
+    unit: '',
+    name: '',
+    assessmentType: 'Assignment',
+    customType: '',
+    dueDate: '',
+    dueTime: '',
+    weighting: '',
+    estimatedHours: '',
+    notes: ''
+  })
 
   const dayNames = DAY_NAMES
 
@@ -99,13 +126,19 @@ export function PlannerManager() {
   const loadPlanner = useCallback(async () => {
     setIsLoading(true)
     try {
-      const [taskResponse, contextResponse] = await Promise.all([
+      const [taskResponse, contextResponse, assessmentsResponse] = await Promise.all([
         fetch('/api/app-state/planner-tasks', { cache: 'no-store' }),
-        fetch('/api/app-state/planner-context', { cache: 'no-store' })
+        fetch('/api/app-state/planner-context', { cache: 'no-store' }),
+        fetch('/api/app-state/assessments', { cache: 'no-store' })
       ])
 
       const taskPayload = await taskResponse.json()
       const contextPayload = await contextResponse.json()
+      const assessmentsPayload = await assessmentsResponse.json().catch(() => null)
+
+      if (assessmentsPayload?.ok) {
+        setAssessments(Array.isArray(assessmentsPayload.assessments) ? assessmentsPayload.assessments : [])
+      }
 
       if (contextPayload?.ok) {
         const codes = (contextPayload.data?.courses || []).map((course: any) => course.course_code).filter(Boolean)
@@ -204,21 +237,66 @@ export function PlannerManager() {
     emitAppStateUpdate('tasks')
   }
 
-  const handleAcceptRecommendation = async (recommendation: Recommendation) => {
+  const handleAcceptRecommendation = async (recommendation: Recommendation, overrideMinutes?: number) => {
     if (requireAuth('Sign in to add this to your planner.')) return
+    const estimatedMinutes = overrideMinutes ?? recommendation.suggestedTask.estimatedMinutes
     await fetch('/api/app-state/planner-tasks', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         title: recommendation.suggestedTask.title,
         courseCode: recommendation.suggestedTask.courseCode,
-        estimatedMinutes: recommendation.suggestedTask.estimatedMinutes,
+        estimatedMinutes,
         priority: recommendation.suggestedTask.priority,
         taskType: recommendation.suggestedTask.taskType,
+        plannedDate: recommendation.suggestedTask.plannedDate ?? undefined,
+        assessmentId: recommendation.suggestedTask.assessmentId ?? undefined,
         generatedBy: 'planner_ai'
       })
     })
     setAcceptedIds((prev) => new Set(prev).add(recommendation.id))
+    await loadPlanner()
+    emitAppStateUpdate('planner')
+  }
+
+  const handleAddAssessment = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (requireAuth('Sign in to record assessments and assignments.')) return
+    const resolvedType = assessmentForm.assessmentType === 'Other' ? assessmentForm.customType.trim() : assessmentForm.assessmentType
+    if (!resolvedType) {
+      setAssessmentStatus('Please provide an assessment type.')
+      return
+    }
+    setAssessmentStatus('Saving…')
+    const response = await fetch('/api/app-state/assessments', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        courseCode: assessmentForm.unit,
+        name: assessmentForm.name,
+        assessmentType: resolvedType,
+        dueDate: assessmentForm.dueDate || undefined,
+        dueTime: assessmentForm.dueTime || undefined,
+        weighting: assessmentForm.weighting || undefined,
+        estimatedMinutes: assessmentForm.estimatedHours ? Math.round(Number(assessmentForm.estimatedHours) * 60) : undefined,
+        notes: assessmentForm.notes || undefined
+      })
+    })
+    const payload = await response.json()
+    if (payload?.ok) {
+      setAssessmentStatus(null)
+      setAssessmentForm({ unit: '', name: '', assessmentType: 'Assignment', customType: '', dueDate: '', dueTime: '', weighting: '', estimatedHours: '', notes: '' })
+      setShowAssessmentForm(false)
+      await loadPlanner()
+      emitAppStateUpdate('planner')
+    } else {
+      setAssessmentStatus(payload?.error || 'Could not save this assessment.')
+    }
+  }
+
+  const handleDeleteAssessment = async (id: string) => {
+    if (requireAuth('Sign in to manage your assessments.')) return
+    await fetch(`/api/app-state/assessments?assessmentId=${encodeURIComponent(id)}`, { method: 'DELETE' })
     await loadPlanner()
     emitAppStateUpdate('planner')
   }
@@ -297,6 +375,8 @@ export function PlannerManager() {
           <div className="grid gap-3">
             {recommendations.map((recommendation) => {
               const accepted = acceptedIds.has(recommendation.id)
+              const durationOptions = recommendation.durationOptionsMinutes
+              const selectedMinutes = selectedDurations[recommendation.id] ?? recommendation.estimatedMinutes
               return (
                 <div key={recommendation.id} className="rounded-3xl border border-slate-200 bg-white p-4">
                   <div className="flex items-start justify-between gap-4">
@@ -315,6 +395,17 @@ export function PlannerManager() {
                       </details>
                     </div>
                     <div className="flex shrink-0 flex-col gap-2">
+                      {durationOptions && durationOptions.length > 1 && !accepted && (
+                        <select
+                          value={selectedMinutes}
+                          onChange={(e) => setSelectedDurations((prev) => ({ ...prev, [recommendation.id]: Number(e.target.value) }))}
+                          className="rounded-md border border-slate-300 px-2 py-1 text-xs"
+                        >
+                          {durationOptions.map((minutes) => (
+                            <option key={minutes} value={minutes}>{Math.round((minutes / 60) * 10) / 10}h session</option>
+                          ))}
+                        </select>
+                      )}
                       {recommendation.openDocumentId && (
                         <Button size="sm" variant="outline" onClick={() => handleOpenContent(recommendation.openDocumentId as string)}>
                           Open content
@@ -326,7 +417,7 @@ export function PlannerManager() {
                         </Button>
                       )}
                       {recommendation.kind !== 'timetable_nudge' && (
-                        <Button size="sm" disabled={accepted} onClick={() => handleAcceptRecommendation(recommendation)}>
+                        <Button size="sm" disabled={accepted} onClick={() => handleAcceptRecommendation(recommendation, durationOptions ? selectedMinutes : undefined)}>
                           {accepted ? 'Added' : 'Add to planner'}
                         </Button>
                       )}
@@ -363,6 +454,117 @@ export function PlannerManager() {
             className="text-sm"
           />
           {timetableStatus && <span className="text-xs text-slate-500">{timetableStatus}</span>}
+        </div>
+      </Card>
+
+      <Card className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Assessments &amp; assignments</p>
+            <p className="text-xs text-slate-500">Recorded manually — the Planner will suggest work sessions before each deadline.</p>
+          </div>
+          <Button onClick={() => setShowAssessmentForm((prev) => !prev)}>+ Add Assessment/Assignment</Button>
+        </div>
+
+        {showAssessmentForm && (
+          <form onSubmit={handleAddAssessment} className="mt-2 space-y-4 border-t pt-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <input
+                type="text"
+                placeholder="Unit (e.g. ETC3420)"
+                value={assessmentForm.unit}
+                onChange={(e) => setAssessmentForm({ ...assessmentForm, unit: e.target.value })}
+                className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+                list="planner-unit-options"
+                required
+              />
+              <input
+                type="text"
+                placeholder="Assessment name (e.g. Assignment 2)"
+                value={assessmentForm.name}
+                onChange={(e) => setAssessmentForm({ ...assessmentForm, name: e.target.value })}
+                className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+                required
+              />
+              <select
+                value={assessmentForm.assessmentType}
+                onChange={(e) => setAssessmentForm({ ...assessmentForm, assessmentType: e.target.value })}
+                className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+              >
+                {ASSESSMENT_TYPE_OPTIONS.map((type) => <option key={type} value={type}>{type}</option>)}
+              </select>
+              {assessmentForm.assessmentType === 'Other' && (
+                <input
+                  type="text"
+                  placeholder="Custom assessment type"
+                  value={assessmentForm.customType}
+                  onChange={(e) => setAssessmentForm({ ...assessmentForm, customType: e.target.value })}
+                  className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+                  required
+                />
+              )}
+              <input
+                type="date"
+                value={assessmentForm.dueDate}
+                onChange={(e) => setAssessmentForm({ ...assessmentForm, dueDate: e.target.value })}
+                className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+                required
+              />
+              <input
+                type="time"
+                placeholder="Due time (optional)"
+                value={assessmentForm.dueTime}
+                onChange={(e) => setAssessmentForm({ ...assessmentForm, dueTime: e.target.value })}
+                className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+              />
+              <input
+                type="number"
+                min="0"
+                max="100"
+                placeholder="Weight % (optional)"
+                value={assessmentForm.weighting}
+                onChange={(e) => setAssessmentForm({ ...assessmentForm, weighting: e.target.value })}
+                className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+              />
+              <input
+                type="number"
+                min="0"
+                step="0.5"
+                placeholder="Estimated work (hours, optional)"
+                value={assessmentForm.estimatedHours}
+                onChange={(e) => setAssessmentForm({ ...assessmentForm, estimatedHours: e.target.value })}
+                className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+              />
+              <textarea
+                placeholder="Notes (optional)"
+                value={assessmentForm.notes}
+                onChange={(e) => setAssessmentForm({ ...assessmentForm, notes: e.target.value })}
+                className="rounded-md border border-slate-300 px-3 py-2 text-sm sm:col-span-2"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Button type="submit">Save Assessment</Button>
+              <Button type="button" variant="outline" onClick={() => setShowAssessmentForm(false)}>Cancel</Button>
+              {assessmentStatus && <span className="text-xs text-slate-500">{assessmentStatus}</span>}
+            </div>
+          </form>
+        )}
+
+        <div className="space-y-2">
+          {assessments.length === 0 ? <p className="text-sm text-slate-600">No assessments recorded yet.</p> : null}
+          {assessments.map((assessment) => (
+            <div key={assessment.id} className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+              <div>
+                <p className="text-sm font-semibold text-slate-950">{assessment.unitCode ? `${assessment.unitCode} · ` : ''}{assessment.name}</p>
+                <p className="text-xs text-slate-500">
+                  {assessment.assessmentType}
+                  {assessment.dueDate ? ` · Due ${new Date(assessment.dueDate).toLocaleDateString('en-AU')}` : ''}
+                  {assessment.weighting != null ? ` · ${assessment.weighting}%` : ''}
+                </p>
+              </div>
+              <Button size="sm" variant="outline" onClick={() => handleDeleteAssessment(assessment.id)}>Delete</Button>
+            </div>
+          ))}
         </div>
       </Card>
 

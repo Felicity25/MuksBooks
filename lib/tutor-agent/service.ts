@@ -3,6 +3,7 @@ import { searchKnowledgeBase } from '@/lib/knowledge-base/search'
 import { appendLog } from '@/lib/logging'
 import { getLessonContext, listDocuments } from '@/lib/app-state/service'
 import { listCloudDocuments } from '@/lib/supabase/documents-service'
+import type { TutorCitation } from '@/lib/tutor/types'
 
 export interface TutorRetrievalContext {
   availableUnits: string[]
@@ -10,6 +11,7 @@ export interface TutorRetrievalContext {
   relevantChunks: string[]
   uploadedContext: string
   unitContext: string
+  citations: TutorCitation[]
 }
 
 export async function buildTutorRetrievalContext(request: AiTutorRequestBody, userId?: string): Promise<TutorRetrievalContext> {
@@ -49,6 +51,13 @@ export async function buildTutorRetrievalContext(request: AiTutorRequestBody, us
   // Pass userId so search prefers Supabase chunks
   const hits = await searchKnowledgeBase(request.message, chosenUnit, 10, userId)
   const relevantChunks = hits.map((hit) => `${hit.chunk.text.slice(0, 800)}\n[section:${hit.chunk.sectionTitle || 'general'}][score:${hit.score.toFixed(3)}]`)
+  const hitCitations: TutorCitation[] = hits.slice(0, 6).map((hit) => ({
+    id: hit.chunk.chunkId,
+    label: hit.chunk.sectionTitle || 'Knowledge chunk',
+    unit: chosenUnit || null,
+    section: hit.chunk.sectionTitle || null,
+    score: Number(hit.score.toFixed(3))
+  }))
 
   const scopedDocuments = chosenUnit
     ? allDocuments.filter((document) => document.course_code === chosenUnit)
@@ -59,6 +68,14 @@ export async function buildTutorRetrievalContext(request: AiTutorRequestBody, us
         .map((document) => `${document.filename} (${document.course_code || 'unclassified'}; ${document.document_type || 'resource'}; ${document.indexing_status || 'processing'})`)
         .join(' | ')
     : lessonContext.uploadedContext || 'No matching uploaded resource found.'
+
+  const documentCitations: TutorCitation[] = scopedDocuments.slice(0, 6).map((document, index) => ({
+    id: `doc-${index}-${document.filename}`,
+    label: document.filename,
+    unit: document.course_code || chosenUnit || null,
+    section: document.document_type || null,
+    score: null
+  }))
 
   const unitContext = chosenUnit
     ? [
@@ -84,6 +101,7 @@ export async function buildTutorRetrievalContext(request: AiTutorRequestBody, us
     curriculumResourceSummary,
     relevantChunks,
     uploadedContext: lessonContext.uploadedContext || curriculumResourceSummary,
-    unitContext
+    unitContext,
+    citations: [...documentCitations, ...hitCitations]
   }
 }

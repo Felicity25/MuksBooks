@@ -487,6 +487,44 @@ When `OPENAI_API_KEY` is configured, the tutor can use the OpenAI API.
 
 Without an API key, the application can fall back to a structured demo mode.
 
+### Tutor intelligence persistence
+
+The upgraded Tutor now supports:
+
+* Persistent conversations
+* Per-user structured learning memory
+* Source citations from unit uploads
+* Optional BYOK provider credentials (encrypted at rest)
+* Usage telemetry for cost controls
+
+Apply this migration in Supabase:
+
+```text
+supabase/migrations/20260818_tutor_intelligence_upgrade.sql
+```
+
+If the migration is not yet applied, Tutor routes degrade gracefully to baseline conversation/message fields.
+
+### Tutor environment variables
+
+```env
+# Optional but recommended for BYOK secret encryption.
+TUTOR_CREDENTIALS_SECRET=
+
+# Optional 24h per-user Muks AI limits.
+TUTOR_DAILY_TOKEN_LIMIT=
+TUTOR_DAILY_COST_LIMIT_MICROUSD=
+
+# Required for real R execution in isolated sandbox.
+R_EXECUTOR_ENDPOINT=
+R_EXECUTOR_TOKEN=
+```
+
+Security notes:
+
+* BYOK secrets are encrypted server-side and never returned to the browser after submission.
+* R code is executed only through an external isolated sandbox endpoint, not in the Next.js process.
+
 ---
 
 ## 🍎 macOS troubleshooting

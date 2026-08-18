@@ -1,0 +1,64 @@
+import { buildOptimizedPrompt, buildSystemPrompt, type AiTutorRequestBody } from '@/lib/ai-helper'
+import { buildTutorRetrievalContext } from '@/lib/tutor-agent/service'
+import { getLearningProfile, listTutorMessages } from '@/lib/tutor/persistence'
+import { buildLearningHints } from '@/lib/tutor/learning'
+import type { TutorCitation } from '@/lib/tutor/types'
+
+export interface TutorRequest extends AiTutorRequestBody {
+  conversationId?: string
+  sourceScope?: 'unit' | 'selected' | 'single'
+  selectedDocumentIds?: string[]
+}
+
+function compactConversation(messages: Array<{ role: string; content: string }>, limit = 8) {
+  if (messages.length <= limit) return messages
+  return messages.slice(-limit)
+}
+
+export async function buildTutorPromptContext(input: TutorRequest, userId?: string) {
+  const retrievalContext = await buildTutorRetrievalContext(input, userId)
+
+  const conversationMessages = userId && input.conversationId
+    ? await listTutorMessages(userId, input.conversationId)
+    : []
+
+  const compacted = compactConversation(conversationMessages.map((msg) => ({ role: msg.role, content: msg.content })))
+
+  const learningProfile = userId
+    ? await getLearningProfile(userId)
+    : null
+
+  const learningHints = learningProfile ? buildLearningHints(learningProfile) : ''
+
+  const enrichedBody: AiTutorRequestBody = {
+    ...input,
+    unit: input.unit || retrievalContext.availableUnits[0],
+    availableUnits: retrievalContext.availableUnits,
+    curriculumResourceSummary: retrievalContext.curriculumResourceSummary,
+    relevantChunks: retrievalContext.relevantChunks,
+    uploadedContext: retrievalContext.uploadedContext,
+    unitContext: retrievalContext.unitContext,
+    contextSummary: [
+      input.contextSummary,
+      `Curriculum retrieval scope: ${retrievalContext.curriculumResourceSummary}`,
+      retrievalContext.availableUnits.length
+        ? `Active curriculum units: ${retrievalContext.availableUnits.join(', ')}`
+        : 'No active curriculum units found in the Knowledge Base.',
+      compacted.length
+        ? `Conversation summary:\n${compacted.map((item) => `${item.role.toUpperCase()}: ${item.content.slice(0, 240)}`).join('\n')}`
+        : '',
+      learningHints ? `Learning memory hints: ${learningHints}` : ''
+    ].filter(Boolean).join(' ')
+  }
+
+  const systemPrompt = buildSystemPrompt({ unit: enrichedBody.unit, topic: input.topic, mode: input.mode, demoMode: false })
+  const userPrompt = await buildOptimizedPrompt(enrichedBody)
+
+  return {
+    enrichedBody,
+    systemPrompt,
+    userPrompt,
+    learningProfile,
+    citations: retrievalContext.citations as TutorCitation[]
+  }
+}

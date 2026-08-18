@@ -7,6 +7,7 @@ export type RecommendationKind =
   | 'workshop_prep'
   | 'post_class_review'
   | 'assessment_prep'
+  | 'assessment_work_session'
   | 'catch_up'
   | 'deep_dive'
   | 'timetable_nudge'
@@ -23,12 +24,16 @@ export interface PlannerRecommendation {
   estimatedMinutes: number
   askTutorHref: string | null
   openDocumentId: string | null
+  /** Only present for schedulable work sessions: alternative durations (minutes) that still fit the found free slot. */
+  durationOptionsMinutes?: number[]
   suggestedTask: {
     title: string
     courseCode: string | null
     taskType: string
     estimatedMinutes: number
     priority: number
+    plannedDate?: string | null
+    assessmentId?: string | null
   }
 }
 
@@ -73,6 +78,128 @@ function buildAskTutorHref(unitCode: string | null, topic: string | null, prompt
   if (topic) params.set('topic', topic)
   params.set('prompt', prompt)
   return `/ai-tutor?${params.toString()}`
+}
+
+// ─── Assessment work-session scheduling ─────────────────────────────────────
+// Deterministic free-time finder that turns "an assessment is due soon" into concrete,
+// non-overlapping work sessions of at least 60 minutes, sized to real gaps between a
+// student's confirmed classes and already-planned tasks.
+
+interface BusyInterval { start: number; end: number }
+interface FreeSlot { start: Date; end: Date }
+
+const MIN_SESSION_MINUTES = 60
+const MAX_SESSION_MINUTES = 180
+const PREFERRED_SESSION_MINUTES = 120
+const MAX_SESSIONS_PER_ASSESSMENT = 4
+const DURATION_OPTIONS_MINUTES = [60, 90, 120, 150, 180]
+const STUDY_WINDOW_START_HOUR = 8
+const STUDY_WINDOW_END_HOUR = 22
+const SCHEDULING_HORIZON_DAYS = 21
+
+const DEFAULT_ASSESSMENT_MINUTES: Record<string, number> = {
+  exam: 240,
+  'mid-semester test': 180,
+  test: 150,
+  quiz: 90,
+  presentation: 120,
+  report: 180,
+  project: 240,
+  assignment: 180
+}
+
+function defaultEstimateMinutes(assessment: PlanningContext['assessments'][number]): number {
+  const key = (assessment.assessmentType || '').toLowerCase()
+  let base = DEFAULT_ASSESSMENT_MINUTES[key] ?? 120
+  if (typeof assessment.weighting === 'number' && assessment.weighting >= 30) base += 60
+  return base
+}
+
+function scheduledMinutesForAssessment(tasks: PlanningContext['tasks'], assessmentId: string): number {
+  return tasks.filter((task) => task.assessmentId === assessmentId).reduce((sum, task) => sum + (task.estimatedMinutes || 0), 0)
+}
+
+/** Busy intervals a work session must never overlap: confirmed classes plus any already-planned task. */
+function buildBusyIntervals(context: PlanningContext): BusyInterval[] {
+  const intervals: BusyInterval[] = []
+  for (const event of context.calendarEvents) {
+    const start = new Date(event.startsAt).getTime()
+    const end = new Date(event.endsAt).getTime()
+    if (Number.isFinite(start) && Number.isFinite(end) && end > start) intervals.push({ start, end })
+  }
+  for (const task of context.tasks) {
+    if (!task.plannedDate || task.status === 'completed') continue
+    const start = new Date(task.plannedDate).getTime()
+    if (!Number.isFinite(start)) continue
+    const end = start + (task.estimatedMinutes || 45) * 60_000
+    intervals.push({ start, end })
+  }
+  return intervals.sort((a, b) => a.start - b.start)
+}
+
+/** Free gaps (>= minMinutes) within the daily study window, for a single calendar day. */
+function dailyFreeGaps(day: Date, busy: BusyInterval[], rangeStart: Date, rangeEnd: Date): BusyInterval[] {
+  const dayStart = new Date(day)
+  dayStart.setHours(STUDY_WINDOW_START_HOUR, 0, 0, 0)
+  const dayEnd = new Date(day)
+  dayEnd.setHours(STUDY_WINDOW_END_HOUR, 0, 0, 0)
+  const windowStart = Math.max(dayStart.getTime(), rangeStart.getTime())
+  const windowEnd = Math.min(dayEnd.getTime(), rangeEnd.getTime())
+  if (windowEnd <= windowStart) return []
+
+  const dayBusy = busy
+    .filter((interval) => interval.end > windowStart && interval.start < windowEnd)
+    .map((interval) => ({ start: Math.max(interval.start, windowStart), end: Math.min(interval.end, windowEnd) }))
+    .sort((a, b) => a.start - b.start)
+
+  const gaps: BusyInterval[] = []
+  let cursor = windowStart
+  for (const interval of dayBusy) {
+    if (interval.start > cursor) gaps.push({ start: cursor, end: interval.start })
+    cursor = Math.max(cursor, interval.end)
+  }
+  if (cursor < windowEnd) gaps.push({ start: cursor, end: windowEnd })
+  return gaps
+}
+
+/** All free gaps (>= minMinutes) between rangeStart and rangeEnd, across the scheduling horizon. */
+function findFreeGaps(rangeStart: Date, rangeEnd: Date, busy: BusyInterval[], minMinutes: number): BusyInterval[] {
+  const allGaps: BusyInterval[] = []
+  const cursorDay = new Date(rangeStart)
+  cursorDay.setHours(0, 0, 0, 0)
+  for (let i = 0; i < SCHEDULING_HORIZON_DAYS && cursorDay.getTime() <= rangeEnd.getTime(); i++) {
+    const gaps = dailyFreeGaps(cursorDay, busy, rangeStart, rangeEnd).filter((gap) => (gap.end - gap.start) / 60_000 >= minMinutes)
+    allGaps.push(...gaps)
+    cursorDay.setDate(cursorDay.getDate() + 1)
+  }
+  return allGaps
+}
+
+/** Split `remainingMinutes` of work into non-overlapping sessions (>= 60 min) that fit the given free gaps. */
+function scheduleAssessmentSessions(freeGaps: BusyInterval[], remainingMinutes: number): Array<FreeSlot & { minutes: number; maxAvailable: number }> {
+  const sessions: Array<FreeSlot & { minutes: number; maxAvailable: number }> = []
+  let remaining = remainingMinutes
+
+  for (const gap of freeGaps) {
+    if (remaining <= 0 || sessions.length >= MAX_SESSIONS_PER_ASSESSMENT) break
+    const gapMinutes = (gap.end - gap.start) / 60_000
+    if (gapMinutes < MIN_SESSION_MINUTES) continue
+
+    const preferred = Math.min(PREFERRED_SESSION_MINUTES, remaining)
+    const capped = Math.max(MIN_SESSION_MINUTES, Math.min(preferred, gapMinutes, MAX_SESSION_MINUTES))
+    const minutes = Math.max(MIN_SESSION_MINUTES, Math.floor(capped / 30) * 30)
+    const start = new Date(gap.start)
+    const end = new Date(start.getTime() + minutes * 60_000)
+    const maxAvailable = Math.max(minutes, Math.floor(Math.min(gapMinutes, MAX_SESSION_MINUTES) / 30) * 30)
+    sessions.push({ start, end, minutes, maxAvailable })
+    remaining -= minutes
+  }
+
+  return sessions
+}
+
+function formatClockTime(date: Date) {
+  return date.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' })
 }
 
 /**
@@ -190,21 +317,81 @@ export function generatePlannerRecommendations(context: PlanningContext, referen
 
   if (controls.assessmentPreparation) {
     const cutoff = level === 'proactive' ? 21 : level === 'balanced' ? 10 : 4
+    const busy = buildBusyIntervals(context)
+    const horizonEnd = new Date(referenceDate.getTime() + SCHEDULING_HORIZON_DAYS * DAY_MS)
+
     for (const assessment of context.assessments) {
       const days = daysUntil(assessment.dueDate)
       if (days > cutoff || days < -1) continue
-      items.push({
-        id: `assessment-${assessment.id}`,
-        unitCode: assessment.unitCode,
-        title: `Prepare ${assessment.name}`,
-        detail: `${assessment.unitCode || 'Assessment'}${Number.isFinite(days) ? ` · ${Math.max(0, Math.ceil(days))} day(s) remaining` : ''}`,
-        kind: 'assessment_prep',
-        sources: [`Assessment: ${assessment.name}${assessment.dueDate ? ` (due ${new Date(assessment.dueDate).toLocaleDateString('en-AU')})` : ''}`],
-        score: 100 - Math.max(0, days),
-        estimatedMinutes: 45,
-        askTutorHref: buildAskTutorHref(assessment.unitCode, null, `Help me prepare for ${assessment.name} in ${assessment.unitCode || 'this unit'}.`),
-        openDocumentId: null,
-        suggestedTask: { title: `Prepare ${assessment.name}`, courseCode: assessment.unitCode, taskType: 'assessment', estimatedMinutes: 45, priority: 0.9 }
+
+      const dueDate = assessment.dueDate ? new Date(assessment.dueDate) : null
+      const totalMinutes = assessment.estimatedMinutes ?? defaultEstimateMinutes(assessment)
+      const alreadyScheduled = scheduledMinutesForAssessment(context.tasks, assessment.id)
+      const remaining = totalMinutes - alreadyScheduled
+      // Already fully covered by accepted/planned work sessions — nothing more to suggest (avoids duplicates).
+      if (remaining <= 0) continue
+
+      const rangeEnd = dueDate && dueDate.getTime() < horizonEnd.getTime() ? dueDate : horizonEnd
+      const freeGaps = rangeEnd.getTime() > referenceDate.getTime()
+        ? findFreeGaps(referenceDate, rangeEnd, busy, MIN_SESSION_MINUTES)
+        : []
+      const sessions = scheduleAssessmentSessions(freeGaps, remaining)
+
+      if (sessions.length === 0) {
+        items.push({
+          id: `assessment-${assessment.id}`,
+          unitCode: assessment.unitCode,
+          title: `Prepare ${assessment.name}`,
+          detail: `${assessment.unitCode || 'Assessment'}${Number.isFinite(days) ? ` · ${Math.max(0, Math.ceil(days))} day(s) remaining` : ''} · No free time found before the deadline.`,
+          kind: 'assessment_prep',
+          sources: [`Assessment: ${assessment.name}${assessment.dueDate ? ` (due ${new Date(assessment.dueDate).toLocaleDateString('en-AU')})` : ''}`],
+          score: 100 - Math.max(0, days),
+          estimatedMinutes: Math.min(remaining, 60),
+          askTutorHref: buildAskTutorHref(assessment.unitCode, null, `Help me prepare for ${assessment.name} in ${assessment.unitCode || 'this unit'}.`),
+          openDocumentId: null,
+          suggestedTask: { title: `Prepare ${assessment.name}`, courseCode: assessment.unitCode, taskType: 'assessment', estimatedMinutes: Math.min(remaining, 60), priority: 0.9 }
+        })
+        continue
+      }
+
+      sessions.forEach((session, index) => {
+        const isLast = index === sessions.length - 1
+        const verb = index === 0 ? 'Work on' : isLast ? 'Finish/review' : 'Continue'
+        const dayLabel = session.start.toLocaleDateString('en-AU', { weekday: 'long' })
+        const timeLabel = `${formatClockTime(session.start)}\u2013${formatClockTime(session.end)}`
+        const durationOptionsMinutes = Array.from(new Set([
+          ...DURATION_OPTIONS_MINUTES.filter((minutes) => minutes <= session.maxAvailable),
+          session.minutes
+        ])).sort((a, b) => a - b)
+
+        items.push({
+          id: `assessment-session-${assessment.id}-${index}-${session.start.toISOString()}`,
+          unitCode: assessment.unitCode,
+          title: `${verb} ${assessment.unitCode ? `${assessment.unitCode} ` : ''}${assessment.name}`,
+          detail: `${dayLabel} ${timeLabel} · ${Math.round((session.minutes / 60) * 10) / 10}h${assessment.dueDate ? ` · Due ${new Date(assessment.dueDate).toLocaleDateString('en-AU')}` : ''}`,
+          kind: 'assessment_work_session',
+          sources: [
+            `Assessment: ${assessment.name}${assessment.dueDate ? ` (due ${new Date(assessment.dueDate).toLocaleDateString('en-AU')})` : ''}`,
+            assessment.estimatedMinutes
+              ? `You estimated ${Math.round((assessment.estimatedMinutes / 60) * 10) / 10}h of work for this assessment.`
+              : `Estimated based on assessment type${assessment.weighting ? ` and ${assessment.weighting}% weighting` : ''} (no estimate provided).`,
+            'Free time found between your confirmed classes and existing Planner tasks.'
+          ],
+          score: 90 - Math.max(0, days) - index,
+          estimatedMinutes: session.minutes,
+          askTutorHref: buildAskTutorHref(assessment.unitCode, null, `Help me work on ${assessment.name} in ${assessment.unitCode || 'this unit'}.`),
+          openDocumentId: null,
+          durationOptionsMinutes,
+          suggestedTask: {
+            title: `${verb} ${assessment.name}`,
+            courseCode: assessment.unitCode,
+            taskType: 'assessment',
+            estimatedMinutes: session.minutes,
+            priority: 0.85,
+            plannedDate: session.start.toISOString(),
+            assessmentId: assessment.id
+          }
+        })
       })
     }
   }

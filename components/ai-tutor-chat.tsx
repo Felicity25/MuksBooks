@@ -1,480 +1,713 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
+import rehypeKatex from 'rehype-katex'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { useAuth } from '@/components/auth-provider'
+import { useReadAloud } from '@/components/study/read-aloud-provider'
 
-interface Message {
+type TutorCitation = {
+  id: string
+  label: string
+  unit?: string | null
+  section?: string | null
+  score?: number | null
+}
+
+type TutorMessage = {
   id: string
   role: 'user' | 'assistant'
   content: string
-  timestamp: Date
+  createdAt: string
+  citations?: TutorCitation[]
+  metadata?: Record<string, unknown>
 }
 
-interface UnitItem {
-  code: string
-  name: string
-}
-
-interface LessonContextDocument {
+type TutorConversation = {
   id: string
-  filename: string
-  courseCode?: string
-  documentType?: string
-  week?: number
-  processingStatus?: string
-  indexingStatus?: string
+  title: string
+  active_unit_code?: string | null
+  mode?: string | null
+  created_at: string
+  updated_at: string
 }
 
-interface LessonContextResponse {
-  units: UnitItem[]
-  contextSummary: string
-  uploadedContext: string
-  relevantChunks: string[]
-  masterySummary: string
-  taskSummary: string
-  plannerSummary: string
-  settingsSummary: string
-  documents: LessonContextDocument[]
+type UnitOption = { code: string; name: string }
+
+type LearningProfile = {
+  preferred_depth: 'brief' | 'balanced' | 'deep'
+  hint_style: 'progressive' | 'direct' | 'socratic'
+  confidence_r: number
+  recent_topics: string[]
+  repeated_misconceptions: string[]
 }
 
-interface TutorApiContext {
-  unitOptions: UnitOption[]
-  resolvedUnit: string
-  curriculumResourceSummary: string
-  contextSummary: string
-  uploadedContext: string
-  relevantChunks: string[]
-  unitContext: string
-  masterySummary?: string
-  taskSummary?: string
-  plannerSummary?: string
-  settingsSummary?: string
-}
-
-interface TutorSessionSnapshot {
-  messages?: Array<{
-    id: string
-    role: 'user' | 'assistant'
-    content: string
-    timestamp?: string
-  }>
-  input?: string
-  unit?: string
-  topic?: string
-  mode?: string
-}
-
-interface AssignmentReviewItem {
-  id?: string
-  summary: string
-}
-
-interface UnitOption {
-  code: string
-  name: string
+type RLabRunResult = {
+  ok: boolean
+  stdout: string
+  stderr: string
+  durationMs?: number
+  error?: string
 }
 
 function normalizeUnitCode(value?: string) {
   return value?.toUpperCase().replace(/\s+/g, '') || ''
 }
 
-function buildUnitOptions(units: UnitItem[]) {
-  return units
-    .map((unit) => ({
-      code: normalizeUnitCode(unit.code),
-      name: unit.name || normalizeUnitCode(unit.code)
-    }))
-    .filter((unit) => Boolean(unit.code))
-    .sort((a, b) => a.code.localeCompare(b.code))
-}
-
-function buildCurriculumSummary(documents: LessonContextDocument[]) {
-  if (!documents.length) return 'No current uploaded curriculum resources detected.'
-  return documents
-    .map((document) => {
-      const unit = document.courseCode ? `, ${document.courseCode}` : ''
-      const type = document.documentType || 'resource'
-      const status = document.indexingStatus || document.processingStatus || 'processing'
-      const week = document.week ? `, Week ${document.week}` : ''
-      return `${document.filename} (${type}${unit}${week}; ${status})`
-    })
-    .join(' | ')
-}
-
-async function fetchLessonContext(unit?: string, topic?: string): Promise<LessonContextResponse> {
-  const params = new URLSearchParams()
-  if (unit) params.set('unit', unit)
-  if (topic) params.set('topic', topic)
-
-  const query = params.toString()
-  const response = await fetch(`/api/app-state/lesson-context${query ? `?${query}` : ''}`, { cache: 'no-store' })
-  const payload = await response.json()
-
-  if (!response.ok || !payload?.ok) {
-    throw new Error(payload?.error || 'Failed to load Tutor context')
+async function fetchJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
+  const response = await fetch(input, init)
+  const payload = await response.json().catch(() => null)
+  if (!response.ok) {
+    throw new Error(payload?.error || 'Request failed')
   }
-
-  return payload.data as LessonContextResponse
+  return payload as T
 }
 
-async function buildTutorApiContext(unit: string, topic: string): Promise<TutorApiContext> {
-  const requestedUnit = normalizeUnitCode(unit)
-  const context = await fetchLessonContext(requestedUnit || undefined, topic || undefined)
-
-  const unitOptions = buildUnitOptions(context.units || [])
-  const fallbackUnit = unitOptions[0]?.code || ''
-  const selectedExists = requestedUnit && unitOptions.some((option) => option.code === requestedUnit)
-  const resolvedUnit = selectedExists ? requestedUnit : fallbackUnit
-
-  const unitScopedContext = await fetchLessonContext(resolvedUnit || undefined, topic || undefined)
-  const curriculumResourceSummary = buildCurriculumSummary(unitScopedContext.documents || [])
-  const relevantChunks = Array.isArray(unitScopedContext.relevantChunks) ? unitScopedContext.relevantChunks : []
-  const uploadedContext = unitScopedContext.uploadedContext || curriculumResourceSummary
-
-  const unitContext = resolvedUnit
-    ? `Selected unit: ${resolvedUnit}. Curriculum resources used: ${curriculumResourceSummary}`
-    : 'No unit selected. No uploaded curriculum resources detected.'
-
-  return {
-    unitOptions,
-    resolvedUnit,
-    curriculumResourceSummary,
-    contextSummary: unitScopedContext.contextSummary || 'No lesson context available.',
-    uploadedContext,
-    relevantChunks,
-    unitContext,
-    masterySummary: unitScopedContext.masterySummary,
-    taskSummary: unitScopedContext.taskSummary,
-    plannerSummary: unitScopedContext.plannerSummary,
-    settingsSummary: unitScopedContext.settingsSummary
-  }
-}
-
-function normalizeTutorOutput(content: string) {
-  const lines = content.split(/\r?\n/)
-  const transformed: string[] = []
-
-  lines.forEach((line) => {
-    const trimmed = line.trim()
-
-    if (!trimmed) {
-      transformed.push('')
-      return
-    }
-
-    const sectionMatch = trimmed.match(/^Section:\s*(.+)$/i)
-    if (sectionMatch?.[1]) {
-      transformed.push(`\n${sectionMatch[1].toUpperCase()}\n`)
-      return
-    }
-
-    if (/^Title$/i.test(trimmed)) {
-      transformed.push('\nTITLE\n')
-      return
-    }
-
-    transformed.push(line)
-  })
-
-  return transformed.join('\n')
-}
-
-function TutorMessageContent({ content }: { content: string }) {
-  const normalized = normalizeTutorOutput(content)
-
+function MarkdownMessage({ content }: { content: string }) {
   return (
-    <div className="space-y-3 text-sm leading-7 text-slate-700 whitespace-pre-wrap">
-      {normalized}
+    <div className="prose prose-slate max-w-none text-sm leading-7 prose-pre:rounded-2xl prose-pre:border prose-pre:border-slate-200 prose-pre:bg-slate-950 prose-pre:text-slate-100">
+      <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+        {content}
+      </ReactMarkdown>
+    </div>
+  )
+}
+
+function SourceChips({ citations }: { citations?: TutorCitation[] }) {
+  if (!citations?.length) return null
+  return (
+    <div className="mt-3 flex flex-wrap gap-2">
+      {citations.slice(0, 6).map((citation) => (
+        <span key={citation.id} className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-600">
+          {citation.label}
+          {citation.unit ? ` • ${citation.unit}` : ''}
+        </span>
+      ))}
+    </div>
+  )
+}
+
+function ComposerFileList({ files, onRemove }: { files: File[]; onRemove: (name: string) => void }) {
+  if (!files.length) return null
+  return (
+    <div className="mt-2 flex flex-wrap gap-2">
+      {files.map((file) => (
+        <button
+          key={file.name}
+          type="button"
+          onClick={() => onRemove(file.name)}
+          className="rounded-full border border-slate-300 bg-white px-3 py-1 text-xs text-slate-700 hover:border-slate-400"
+        >
+          {file.name} ×
+        </button>
+      ))}
     </div>
   )
 }
 
 export function AiTutorChat() {
-  const [messages, setMessages] = useState<Message[]>([])
+  const { user, requireAuth } = useAuth()
+  const readAloud = useReadAloud()
+
+  const [conversations, setConversations] = useState<TutorConversation[]>([])
+  const [conversationId, setConversationId] = useState<string>('')
+  const [messages, setMessages] = useState<TutorMessage[]>([])
   const [input, setInput] = useState('')
   const [unit, setUnit] = useState('')
   const [topic, setTopic] = useState('')
-  const [mode, setMode] = useState('explain')
+  const [mode, setMode] = useState<'auto' | 'learn' | 'practice' | 'r_lab'>('auto')
   const [isLoading, setIsLoading] = useState(false)
-  const [demoMode, setDemoMode] = useState(false)
-  const [contextSummary, setContextSummary] = useState('')
-  const [uploadedContext, setUploadedContext] = useState('')
-  const [relevantChunks, setRelevantChunks] = useState<string[]>([])
-  const [unitContext, setUnitContext] = useState('')
-  const [resolvedUnit, setResolvedUnit] = useState('')
-  const [curriculumResourceSummary, setCurriculumResourceSummary] = useState('')
+  const [draftAssistant, setDraftAssistant] = useState('')
+  const [activeCitations, setActiveCitations] = useState<TutorCitation[]>([])
+  const [error, setError] = useState<string>('')
   const [unitOptions, setUnitOptions] = useState<UnitOption[]>([])
-  const [masterySummary, setMasterySummary] = useState<string | undefined>(undefined)
-  const [taskSummary, setTaskSummary] = useState<string | undefined>(undefined)
-  const [plannerSummary, setPlannerSummary] = useState<string | undefined>(undefined)
-  const [settingsSummary, setSettingsSummary] = useState<string | undefined>(undefined)
+  const [learningProfile, setLearningProfile] = useState<LearningProfile | null>(null)
+  const [showMemoryPanel, setShowMemoryPanel] = useState(false)
+  const [composerFiles, setComposerFiles] = useState<File[]>([])
+  const [rLabOpen, setRLabOpen] = useState(false)
+  const [rCode, setRCode] = useState('set.seed(123)\nx <- rnorm(200)\nmean(x)\n')
+  const [rOutput, setROutput] = useState<RLabRunResult | null>(null)
+  const [rRunning, setRRunning] = useState(false)
+  const [isListening, setIsListening] = useState(false)
+  const [micStatus, setMicStatus] = useState('')
 
-  const modes = ['explain', 'quiz', 'mark', 'diagnosis', 'plan', 'general']
+  async function copyToClipboard(value: string) {
+    try {
+      await navigator.clipboard.writeText(value)
+      setMicStatus('Copied to clipboard.')
+    } catch {
+      setMicStatus('Copy failed in this browser.')
+    }
+  }
+
+  const modes = useMemo(() => ([
+    { value: 'auto', label: 'Auto' },
+    { value: 'learn', label: 'Learn' },
+    { value: 'practice', label: 'Practice' },
+    { value: 'r_lab', label: 'R Lab' }
+  ]), [])
+
+  const selectedConversation = useMemo(
+    () => conversations.find((conversation) => conversation.id === conversationId),
+    [conversations, conversationId]
+  )
+
+  async function loadUnits() {
+    try {
+      const payload = await fetchJson<{ ok: boolean; data: { units: Array<{ code: string; name: string }> } }>('/api/app-state/lesson-context')
+      const units = Array.isArray(payload?.data?.units) ? payload.data.units : []
+      const options = units
+        .map((item) => ({ code: normalizeUnitCode(item.code), name: item.name || item.code }))
+        .filter((item) => Boolean(item.code))
+      setUnitOptions(options)
+    } catch {
+      setUnitOptions([])
+    }
+  }
+
+  async function loadConversations() {
+    if (!user) return
+    try {
+      const payload = await fetchJson<{ ok: boolean; conversations: TutorConversation[] }>('/api/ai-tutor/conversations', { cache: 'no-store' })
+      setConversations(payload.conversations || [])
+      if (!conversationId && payload.conversations?.[0]?.id) {
+        setConversationId(payload.conversations[0].id)
+      }
+    } catch (loadError: any) {
+      setError(loadError?.message || 'Failed to load conversations')
+    }
+  }
+
+  async function loadMessages(targetConversationId: string) {
+    if (!targetConversationId) {
+      setMessages([])
+      return
+    }
+
+    if (!user) {
+      const stored = localStorage.getItem(`aiTutorMessages:${targetConversationId}`)
+      if (stored) {
+        try {
+          setMessages(JSON.parse(stored) as TutorMessage[])
+          return
+        } catch {
+          setMessages([])
+        }
+      }
+      return
+    }
+
+    try {
+      const payload = await fetchJson<{ ok: boolean; messages: Array<any> }>(`/api/ai-tutor/conversations/${targetConversationId}/messages`, { cache: 'no-store' })
+      setMessages((payload.messages || []).map((item) => ({
+        id: item.id,
+        role: item.role,
+        content: item.content,
+        createdAt: item.created_at,
+        citations: item.citations || [],
+        metadata: item.metadata || {}
+      })))
+    } catch (loadError: any) {
+      setError(loadError?.message || 'Failed to load conversation messages')
+    }
+  }
+
+  async function loadLearningProfile() {
+    if (!user) return
+    try {
+      const payload = await fetchJson<{ ok: boolean; profile: LearningProfile }>('/api/ai-tutor/learning-profile', { cache: 'no-store' })
+      setLearningProfile(payload.profile)
+    } catch {
+      setLearningProfile(null)
+    }
+  }
 
   useEffect(() => {
-    try {
-      const savedSession = localStorage.getItem('aiTutorSession')
-      if (savedSession) {
-        const parsed = JSON.parse(savedSession) as TutorSessionSnapshot
-        if (Array.isArray(parsed.messages)) {
-          setMessages(parsed.messages.map((message) => ({
-            ...message,
-            timestamp: message.timestamp ? new Date(message.timestamp) : new Date()
-          })))
-        }
-        if (typeof parsed.input === 'string') setInput(parsed.input)
-        if (typeof parsed.unit === 'string') setUnit(parsed.unit)
-        if (typeof parsed.topic === 'string') setTopic(parsed.topic)
-        if (typeof parsed.mode === 'string') setMode(parsed.mode)
-      }
-
-      const query = new URLSearchParams(window.location.search)
-      if (query.get('unit')) setUnit(normalizeUnitCode(query.get('unit') || ''))
-      if (query.get('topic')) setTopic(query.get('topic') || '')
-      if (query.get('prompt')) setInput(query.get('prompt') || '')
-      if (query.get('mode') && modes.includes(query.get('mode') || '')) setMode(query.get('mode') || 'explain')
-    } catch (error) {
-      console.error('[AI Tutor] Failed to restore saved session', error)
-    }
+    void loadUnits()
   }, [])
 
   useEffect(() => {
-    const saveSession = () => {
-      try {
-        localStorage.setItem('aiTutorSession', JSON.stringify({
-          messages: messages.map((message) => ({
-            ...message,
-            timestamp: message.timestamp instanceof Date ? message.timestamp.toISOString() : message.timestamp
-          })),
-          input,
-          unit,
-          topic,
-          mode
-        }))
-      } catch (error) {
-        console.error('[AI Tutor] Failed to save session state', error)
-      }
+    if (!user) {
+      const guestConversationId = 'guest-default'
+      setConversations([{ id: guestConversationId, title: 'Guest session', created_at: '', updated_at: '' } as TutorConversation])
+      setConversationId(guestConversationId)
+      void loadMessages(guestConversationId)
+      return
     }
 
-    saveSession()
-  }, [messages, input, unit, topic, mode])
+    void loadConversations()
+    void loadLearningProfile()
+  }, [user])
 
   useEffect(() => {
-    const loadContext = async () => {
-      try {
-        const apiContext = await buildTutorApiContext(unit, topic)
-        setUnitOptions(apiContext.unitOptions)
-        setResolvedUnit(apiContext.resolvedUnit)
-        setCurriculumResourceSummary(apiContext.curriculumResourceSummary)
-        setContextSummary(apiContext.contextSummary)
-        setUploadedContext(apiContext.uploadedContext)
-        setUnitContext(apiContext.unitContext)
-        setRelevantChunks(apiContext.relevantChunks)
-        setMasterySummary(apiContext.masterySummary)
-        setTaskSummary(apiContext.taskSummary)
-        setPlannerSummary(apiContext.plannerSummary)
-        setSettingsSummary(apiContext.settingsSummary)
+    void loadMessages(conversationId)
+  }, [conversationId])
 
-        if (unit && apiContext.resolvedUnit && normalizeUnitCode(unit) !== apiContext.resolvedUnit) {
-          setUnit(apiContext.resolvedUnit)
-        }
-      } catch (error) {
-        console.error('[AI Tutor] Failed to load context from AppState API', error)
-        setCurriculumResourceSummary('No current uploaded curriculum resources detected.')
-        setContextSummary('No persisted AppState context available right now.')
-        setUploadedContext('')
-        setUnitContext('No unit selected. No uploaded curriculum resources detected.')
-        setRelevantChunks([])
-      }
+  async function ensureConversation() {
+    if (conversationId) return conversationId
+    if (!user) {
+      const guestConversationId = 'guest-default'
+      setConversationId(guestConversationId)
+      return guestConversationId
     }
 
-    void loadContext()
-  }, [unit, topic])
+    const created = await fetchJson<{ ok: boolean; conversation: TutorConversation }>('/api/ai-tutor/conversations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: `Tutor ${new Date().toLocaleDateString()}`,
+        activeUnitCode: normalizeUnitCode(unit),
+        mode
+      })
+    })
 
-  const sendMessage = async () => {
-    if (!input.trim()) return
+    setConversations((current) => [created.conversation, ...current])
+    setConversationId(created.conversation.id)
+    return created.conversation.id
+  }
 
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: input,
-      timestamp: new Date()
+  async function sendMessage(regenerateFromUserMessage?: string) {
+    const trimmed = (regenerateFromUserMessage || input).trim()
+    if (!trimmed) return
+
+    if (!user && requireAuth('Sign in to persist tutor memory, conversations and learning profile.')) {
+      // Allow guests to continue in local mode after showing auth prompt.
     }
 
-    setMessages(prev => [...prev, userMessage])
-    setInput('')
+    setError('')
     setIsLoading(true)
+    setDraftAssistant('')
+    setActiveCitations([])
 
     try {
-      const assignmentReviews = JSON.parse(localStorage.getItem('assignmentReviews') || '[]') as AssignmentReviewItem[]
-      const assignmentContext = assignmentReviews.length
-        ? `Assignment review history contains ${assignmentReviews.length} entries.`
-        : undefined
+      const activeConversationId = await ensureConversation()
+      const userMessage: TutorMessage = {
+        id: `u_${Date.now()}`,
+        role: 'user',
+        content: trimmed,
+        createdAt: new Date().toISOString()
+      }
+      setMessages((current) => [...current, userMessage])
+      if (!regenerateFromUserMessage) setInput('')
 
-      const response = await fetch('/api/ai-tutor', {
+      const response = await fetch('/api/ai-tutor/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          message: input,
-          unit: resolvedUnit || normalizeUnitCode(unit),
+          conversationId: activeConversationId,
+          message: trimmed,
+          unit: normalizeUnitCode(unit),
           topic,
-          mode,
-          availableUnits: unitOptions.map((option) => option.code),
-          curriculumResourceSummary,
-          contextSummary,
-          unitContext,
-          uploadedContext,
-          masterySummary,
-          taskSummary,
-          plannerSummary,
-          settingsSummary,
-          assignmentContext,
-          relevantChunks,
+          mode: mode === 'auto' ? 'general' : mode,
+          attachedFiles: composerFiles.map((file) => ({ name: file.name, size: file.size, type: file.type }))
         })
       })
 
-      const data = await response.json()
-      if (data.demoMode) {
-        setDemoMode(true)
+      if (!response.ok || !response.body) {
+        const payload = await response.json().catch(() => null)
+        throw new Error(payload?.error || 'Tutor request failed')
       }
 
-      if (response.ok) {
-        const assistantMessage: Message = {
-          id: (Date.now() + 1).toString(),
-          role: 'assistant',
-          content: data.response,
-          timestamp: new Date()
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let assistantText = ''
+      let receivedMeta: { citations?: TutorCitation[] } = {}
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+
+        while (buffer.includes('\n\n')) {
+          const idx = buffer.indexOf('\n\n')
+          const block = buffer.slice(0, idx)
+          buffer = buffer.slice(idx + 2)
+
+          const eventLine = block.split('\n').find((line) => line.startsWith('event: '))
+          const dataLine = block.split('\n').find((line) => line.startsWith('data: '))
+          if (!eventLine || !dataLine) continue
+
+          const eventType = eventLine.replace('event: ', '').trim()
+          const eventPayload = JSON.parse(dataLine.replace('data: ', '')) as any
+
+          if (eventType === 'chunk') {
+            assistantText += String(eventPayload.text || '')
+            setDraftAssistant(assistantText)
+          }
+          if (eventType === 'meta') {
+            receivedMeta = eventPayload || {}
+            setActiveCitations(Array.isArray(eventPayload?.citations) ? eventPayload.citations : [])
+          }
+          if (eventType === 'error') {
+            throw new Error(String(eventPayload?.error || 'Stream error'))
+          }
         }
-        setMessages(prev => [...prev, assistantMessage])
-      } else {
-        const errorMessage: Message = {
-          id: (Date.now() + 1).toString(),
-          role: 'assistant',
-          content: `Error: ${data.error || 'Something went wrong'}`,
-          timestamp: new Date()
-        }
-        setMessages(prev => [...prev, errorMessage])
       }
-    } catch (error) {
-      const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
+
+      const assistantMessage: TutorMessage = {
+        id: `a_${Date.now()}`,
         role: 'assistant',
-        content: 'Error: Failed to connect to AI Tutor',
-        timestamp: new Date()
+        content: assistantText,
+        createdAt: new Date().toISOString(),
+        citations: receivedMeta.citations || []
       }
-      setMessages(prev => [...prev, errorMessage])
+
+      setMessages((current) => [...current, assistantMessage])
+      setDraftAssistant('')
+
+      if (!user) {
+        localStorage.setItem(`aiTutorMessages:${activeConversationId}`, JSON.stringify([...messages, userMessage, assistantMessage]))
+      }
+
+      if (user) {
+        void loadLearningProfile()
+        void loadConversations()
+      }
+
+      setComposerFiles([])
+    } catch (sendError: any) {
+      setError(sendError?.message || 'Failed to send message')
+      setDraftAssistant('')
     } finally {
       setIsLoading(false)
     }
   }
 
-  return (
-    <div className="space-y-4">
-      {demoMode && (
-        <Card className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-          AI Tutor is running in demo mode because no OpenAI API key is configured. Responses remain structured and useful, but enabling OPENAI_API_KEY will unlock full model performance.
-        </Card>
-      )}
+  async function renameConversation(targetConversation: TutorConversation) {
+    if (!user) return
+    const title = window.prompt('Rename conversation', targetConversation.title || '')
+    if (!title || title.trim() === targetConversation.title) return
 
-      {/* Selectors */}
-      <Card className="p-4">
-        <div className="grid gap-4 sm:grid-cols-3">
-          <div>
-            <label className="block text-sm font-medium text-slate-700">Unit</label>
-            <select
-              value={unit}
-              onChange={(e) => setUnit(e.target.value)}
-              className="mt-1 block w-full rounded-2xl border border-slate-300 px-3 py-2 text-sm shadow-sm outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
-            >
-              <option value="">Auto-detect from uploads</option>
-              {unitOptions.map((option) => (
-                <option key={option.code} value={option.code}>
-                  {option.code} - {option.name}
-                </option>
-              ))}
-            </select>
-            <p className="mt-2 text-xs text-slate-500">The tutor only draws from units found in your current uploaded curriculum resources.</p>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700">Topic</label>
-            <input
-              type="text"
-              value={topic}
-              onChange={(e) => setTopic(e.target.value)}
-              placeholder="e.g., Survival Analysis"
-              className="mt-1 block w-full rounded-2xl border border-slate-300 px-3 py-2 text-sm shadow-sm outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700">Mode</label>
-            <select
-              value={mode}
-              onChange={(e) => setMode(e.target.value)}
-              className="mt-1 block w-full rounded-2xl border border-slate-300 px-3 py-2 text-sm shadow-sm outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
-            >
-              {modes.map(m => <option key={m} value={m}>{m}</option>)}
-            </select>
-          </div>
+    try {
+      await fetchJson(`/api/ai-tutor/conversations/${targetConversation.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: title.trim() })
+      })
+      await loadConversations()
+    } catch (renameError: any) {
+      setError(renameError?.message || 'Rename failed')
+    }
+  }
+
+  async function deleteConversation(targetConversation: TutorConversation) {
+    if (!user) return
+    if (!window.confirm('Delete this conversation and all messages?')) return
+
+    try {
+      await fetchJson(`/api/ai-tutor/conversations/${targetConversation.id}`, { method: 'DELETE' })
+      const remaining = conversations.filter((item) => item.id !== targetConversation.id)
+      setConversations(remaining)
+      setConversationId(remaining[0]?.id || '')
+      setMessages([])
+    } catch (deleteError: any) {
+      setError(deleteError?.message || 'Delete failed')
+    }
+  }
+
+  async function resetLearningMemory() {
+    if (!user) return
+    if (!window.confirm('Reset Tutor learning memory for your account?')) return
+    try {
+      await fetchJson('/api/ai-tutor/learning-profile', { method: 'DELETE' })
+      await loadLearningProfile()
+    } catch (memoryError: any) {
+      setError(memoryError?.message || 'Failed to reset learning memory')
+    }
+  }
+
+  async function runRCode() {
+    setRRunning(true)
+    setROutput(null)
+    try {
+      const payload = await fetchJson<RLabRunResult>('/api/ai-tutor/r-lab/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: rCode,
+          files: []
+        })
+      })
+      setROutput(payload)
+    } catch (runError: any) {
+      setROutput({ ok: false, stdout: '', stderr: '', error: runError?.message || 'R execution failed' })
+    } finally {
+      setRRunning(false)
+    }
+  }
+
+  function startDictation() {
+    const Recognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    if (!Recognition) {
+      setMicStatus('Speech input is not supported in this browser.')
+      return
+    }
+
+    const recognition = new Recognition()
+    recognition.lang = 'en-AU'
+    recognition.interimResults = true
+    recognition.maxAlternatives = 1
+
+    setIsListening(true)
+    setMicStatus('Listening...')
+
+    recognition.onresult = (event: any) => {
+      const transcript = Array.from(event.results)
+        .slice(event.resultIndex)
+        .map((result: any) => result[0]?.transcript || '')
+        .join(' ')
+        .trim()
+      if (!transcript) return
+      setInput((current) => `${current}${current ? ' ' : ''}${transcript}`)
+    }
+
+    recognition.onerror = () => {
+      setMicStatus('Microphone capture failed. You can still type your question.')
+      setIsListening(false)
+    }
+
+    recognition.onend = () => {
+      setIsListening(false)
+      setMicStatus('Dictation ended. Review transcript before sending.')
+    }
+
+    recognition.start()
+  }
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
+      <Card className="p-3">
+        <div className="mb-3 flex items-center justify-between">
+          <p className="text-sm font-semibold text-slate-900">Conversations</p>
+          {user && (
+            <Button size="sm" onClick={() => setConversationId('')}>New</Button>
+          )}
+        </div>
+        <div className="space-y-2">
+          {conversations.map((conversation) => (
+            <div key={conversation.id} className={`rounded-2xl border p-2 ${conversation.id === conversationId ? 'border-slate-900 bg-slate-50' : 'border-slate-200 bg-white'}`}>
+              <button className="w-full text-left" onClick={() => setConversationId(conversation.id)}>
+                <p className="truncate text-sm font-medium text-slate-900">{conversation.title}</p>
+                <p className="text-xs text-slate-500">{conversation.active_unit_code || 'No unit selected'}</p>
+              </button>
+              {user && (
+                <div className="mt-2 flex gap-2">
+                  <button className="text-xs text-slate-500 hover:text-slate-900" onClick={() => renameConversation(conversation)}>Rename</button>
+                  <button className="text-xs text-rose-500 hover:text-rose-700" onClick={() => deleteConversation(conversation)}>Delete</button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-4 border-t border-slate-200 pt-4">
+          <button className="text-xs font-medium text-slate-600 hover:text-slate-900" onClick={() => setShowMemoryPanel((open) => !open)}>
+            {showMemoryPanel ? 'Hide learning memory' : 'Learning memory'}
+          </button>
+          {showMemoryPanel && (
+            <div className="mt-2 space-y-2 text-xs text-slate-600">
+              <p>Depth: {learningProfile?.preferred_depth || 'balanced'}</p>
+              <p>Hint style: {learningProfile?.hint_style || 'progressive'}</p>
+              <p>Recent topics: {learningProfile?.recent_topics?.slice(0, 3).join(', ') || 'None yet'}</p>
+              <p>Misconceptions: {learningProfile?.repeated_misconceptions?.slice(0, 3).join(', ') || 'None tracked'}</p>
+              {user && <button className="text-rose-600 hover:text-rose-700" onClick={resetLearningMemory}>Reset memory</button>}
+            </div>
+          )}
         </div>
       </Card>
 
-      {/* Chat Area */}
-      <Card className="h-[32rem] overflow-y-auto p-4">
-        {messages.length === 0 ? (
-          <div className="flex h-full items-center justify-center rounded-3xl border border-dashed border-slate-200 bg-slate-50 px-6 py-10 text-center">
-            <div className="max-w-md space-y-2">
-              <p className="text-base font-medium text-slate-900">Start a conversation with the AI Tutor</p>
-              <p className="text-sm leading-6 text-slate-500">Choose one of your uploaded units, add a topic if needed, and ask a question. The tutor will use only the current curriculum resources.</p>
+      <div className="space-y-4">
+        <Card className="p-4">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div>
+              <label className="text-sm font-medium text-slate-700">Unit</label>
+              <select
+                value={unit}
+                onChange={(event) => setUnit(event.target.value)}
+                className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
+              >
+                <option value="">Auto from uploads</option>
+                {unitOptions.map((option) => (
+                  <option key={option.code} value={option.code}>{option.code} - {option.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-slate-700">Topic</label>
+              <input
+                value={topic}
+                onChange={(event) => setTopic(event.target.value)}
+                className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
+                placeholder="e.g. conditional expectation"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-slate-700">Mode</label>
+              <select
+                value={mode}
+                onChange={(event) => setMode(event.target.value as typeof mode)}
+                className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
+              >
+                {modes.map((item) => (
+                  <option key={item.value} value={item.value}>{item.label}</option>
+                ))}
+              </select>
             </div>
           </div>
-        ) : (
-          <div className="space-y-5">
-            {messages.map(msg => (
-              <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-3xl rounded-3xl px-4 py-3 shadow-sm ${
-                  msg.role === 'user'
-                    ? 'bg-slate-900 text-white'
-                    : 'border border-slate-200 bg-white text-slate-900'
-                }`}>
-                  {msg.role === 'assistant' ? (
-                    <div className="font-sans">
-                      <TutorMessageContent content={msg.content} />
-                    </div>
-                  ) : (
-                    <p className="whitespace-pre-wrap text-sm leading-7 text-white">{msg.content}</p>
-                  )}
-                </div>
-              </div>
-            ))}
-            {isLoading && (
-              <div className="flex justify-start">
-                <div className="max-w-xs rounded-3xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500 shadow-sm">
-                  Thinking about your unit context...
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </Card>
+        </Card>
 
-      {/* Input */}
-      <Card className="p-4">
-        <div className="flex gap-2">
-          <input
-            type="text"
+        <Card className="h-[34rem] overflow-y-auto p-4">
+          {!messages.length && !draftAssistant ? (
+            <div className="flex h-full items-center justify-center rounded-3xl border border-dashed border-slate-200 bg-slate-50 text-center">
+              <div className="max-w-lg space-y-2 p-6">
+                <p className="text-base font-semibold text-slate-900">Central Tutor is ready</p>
+                <p className="text-sm text-slate-600">Ask about your current unit, request guided practice, or open R Lab to connect concepts to implementation.</p>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {messages.map((message) => (
+                <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-3xl rounded-3xl px-4 py-3 ${message.role === 'user' ? 'bg-slate-900 text-white' : 'border border-slate-200 bg-white text-slate-900'}`}>
+                    {message.role === 'assistant' ? (
+                      <>
+                        <div className="mb-2 flex flex-wrap gap-2">
+                          <Button size="sm" variant="outline" onClick={() => readAloud.speakText(message.content)} aria-label="Read tutor response aloud">Read aloud</Button>
+                          <Button size="sm" variant="outline" onClick={readAloud.readSelection} aria-label="Read selected text aloud">Read selection</Button>
+                          <Button size="sm" variant="outline" onClick={() => { void copyToClipboard(message.content) }} aria-label="Copy tutor response">Copy</Button>
+                        </div>
+                        <MarkdownMessage content={message.content} />
+                        <SourceChips citations={message.citations} />
+                      </>
+                    ) : (
+                      <>
+                        <p className="whitespace-pre-wrap text-sm leading-7">{message.content}</p>
+                        <div className="mt-2 flex gap-3">
+                          <button className="text-xs text-slate-200 hover:text-white" onClick={() => setInput(message.content)}>Edit and resubmit</button>
+                          <button className="text-xs text-slate-200 hover:text-white" onClick={() => void sendMessage(message.content)}>Retry</button>
+                          <button className="text-xs text-slate-200 hover:text-white" onClick={() => { void copyToClipboard(message.content) }}>Copy</button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
+
+              {isLoading && (
+                <div className="flex justify-start">
+                  <div className="max-w-3xl rounded-3xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
+                    <p className="font-medium text-slate-900">Tutor is working</p>
+                    <p className="mt-1 text-xs text-slate-500">Retrieving unit sources, checking learning memory, then generating response.</p>
+                    <div className="mt-2 flex gap-2 text-[11px] text-slate-500">
+                      <span className="rounded-full border border-slate-200 px-2 py-0.5">Retrieval</span>
+                      <span className="rounded-full border border-slate-200 px-2 py-0.5">Memory</span>
+                      <span className="rounded-full border border-slate-200 px-2 py-0.5">Generation</span>
+                    </div>
+                    {draftAssistant ? <MarkdownMessage content={draftAssistant} /> : null}
+                    {draftAssistant ? <SourceChips citations={activeCitations} /> : null}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </Card>
+
+        <Card className="p-4">
+          {error ? <p className="mb-2 text-sm text-rose-600">{error}</p> : null}
+          {micStatus ? <p className="mb-2 text-xs text-slate-500" aria-live="polite">{micStatus}</p> : null}
+          <textarea
             value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
-            placeholder="Ask the AI Tutor..."
-            className="flex-1 rounded-2xl border border-slate-300 px-3 py-2 text-sm shadow-sm outline-none transition placeholder:text-slate-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+            onChange={(event) => setInput(event.target.value)}
+            placeholder="Ask for explanation, guided hint, practice, marking feedback, or R implementation..."
+            rows={4}
+            className="w-full rounded-2xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
             disabled={isLoading}
           />
-          <Button onClick={sendMessage} disabled={isLoading || !input.trim()} className="rounded-2xl px-5">
-            Send
-          </Button>
-        </div>
-      </Card>
+
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <label className="rounded-xl border border-slate-300 px-3 py-2 text-xs text-slate-700 hover:border-slate-500">
+              Attach files
+              <input
+                type="file"
+                multiple
+                className="hidden"
+                onChange={(event) => {
+                  const list = Array.from(event.target.files || [])
+                  setComposerFiles((current) => [...current, ...list].slice(0, 8))
+                }}
+              />
+            </label>
+
+            <button
+              type="button"
+              className="rounded-xl border border-slate-300 px-3 py-2 text-xs text-slate-700 hover:border-slate-500"
+              onClick={startDictation}
+              aria-label={isListening ? 'Microphone is currently active' : 'Start microphone dictation'}
+              disabled={isLoading || isListening}
+            >
+              {isListening ? 'Listening...' : 'Microphone'}
+            </button>
+
+            <button type="button" className="rounded-xl border border-slate-300 px-3 py-2 text-xs text-slate-700 hover:border-slate-500" onClick={readAloud.readSelection}>
+              Read selection
+            </button>
+
+            <Button onClick={() => void sendMessage()} disabled={isLoading || !input.trim()}>
+              Send
+            </Button>
+
+            <Button variant="secondary" onClick={() => setRLabOpen((open) => !open)}>
+              {rLabOpen ? 'Hide R Lab' : 'Open R Lab'}
+            </Button>
+          </div>
+
+          <ComposerFileList
+            files={composerFiles}
+            onRemove={(name) => setComposerFiles((current) => current.filter((file) => file.name !== name))}
+          />
+        </Card>
+
+        {rLabOpen && (
+          <Card className="p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-slate-900">R Lab</p>
+                <p className="text-xs text-slate-500">Run R code in an isolated sandbox and ask Tutor about the results.</p>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="secondary" onClick={() => setRCode('')}>Reset</Button>
+                <Button onClick={() => void runRCode()} disabled={rRunning || !rCode.trim()}>{rRunning ? 'Running...' : 'Run'}</Button>
+              </div>
+            </div>
+
+            <textarea
+              value={rCode}
+              onChange={(event) => setRCode(event.target.value)}
+              rows={10}
+              className="w-full rounded-2xl border border-slate-300 bg-slate-950 px-3 py-3 font-mono text-xs text-slate-100"
+              placeholder="# Write or paste R code here"
+            />
+
+            <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Console output</p>
+              {rOutput ? (
+                <div className="mt-2 space-y-2 text-xs">
+                  <pre className="whitespace-pre-wrap text-slate-800">{rOutput.stdout || '(no stdout)'}</pre>
+                  {rOutput.stderr ? <pre className="whitespace-pre-wrap text-rose-700">{rOutput.stderr}</pre> : null}
+                  {rOutput.error ? <p className="text-rose-700">{rOutput.error}</p> : null}
+                </div>
+              ) : (
+                <p className="mt-2 text-xs text-slate-500">No run executed yet.</p>
+              )}
+            </div>
+          </Card>
+        )}
+      </div>
     </div>
   )
 }

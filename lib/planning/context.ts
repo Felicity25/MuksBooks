@@ -62,7 +62,11 @@ export interface PlanningAssessment {
   unitCode: string | null
   name: string
   assessmentType: string
+  weighting: number | null
   dueDate: string | null
+  dueTimeKnown: boolean
+  estimatedMinutes: number | null
+  notes: string | null
   status: string
   source: 'academic' | 'career'
 }
@@ -78,6 +82,7 @@ export interface PlanningTask {
   dueDate: string | null
   estimatedMinutes: number
   generatedBy: string
+  assessmentId: string | null
 }
 
 export interface PlanningContext {
@@ -220,7 +225,11 @@ export async function getPlanningContext(userId: string | undefined | null): Pro
     unitCode: assessment.units?.code ?? null,
     name: assessment.name,
     assessmentType: assessment.assessment_type || 'assignment',
+    weighting: assessment.weighting != null ? Number(assessment.weighting) : null,
     dueDate: assessment.due_date ?? null,
+    dueTimeKnown: assessment.due_time_known !== false,
+    estimatedMinutes: assessment.estimated_minutes != null ? Number(assessment.estimated_minutes) : null,
+    notes: assessment.notes ?? null,
     status: assessment.status || 'upcoming',
     source: 'academic'
   }))
@@ -235,7 +244,8 @@ export async function getPlanningContext(userId: string | undefined | null): Pro
     plannedDate: task.planned_date ?? null,
     dueDate: task.due_date ?? null,
     estimatedMinutes: task.estimated_minutes ?? 45,
-    generatedBy: task.created_by || 'user'
+    generatedBy: task.created_by || 'user',
+    assessmentId: task.assessment_id ?? null
   }))
 
   void unitById // reserved for future unit-name lookups when rendering suggestions

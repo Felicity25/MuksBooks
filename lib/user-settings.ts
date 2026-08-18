@@ -75,6 +75,20 @@ export interface UserSettings {
   quickActions: QuickActionId[]
   proactivityLevel: ProactivityLevel
   proactivityControls: ProactivityControls
+  focusDurationMinutes: number
+  shortBreakMinutes: number
+  longBreakMinutes: number
+  focusCycleCount: number
+  autoStartBreaks: boolean
+  autoStartFocus: boolean
+  studyBellMuted: boolean
+  studyBellVolume: number
+  focusNotificationsEnabled: boolean
+  speechRate: number
+  speechVoiceURI: string
+  speechVolume: number
+  speechMuted: boolean
+  mathSpeechDetail: 'brief' | 'detailed'
 }
 
 const layout = (items: Array<[WidgetId, WidgetSize]>): WidgetLayoutItem[] =>
@@ -189,7 +203,21 @@ export const DEFAULT_USER_SETTINGS: UserSettings = {
   homepageLayout: HOMEPAGE_PRESETS['academic-weapon'],
   quickActions: ['upload', 'ask-tutor', 'add-task'],
   proactivityLevel: 'balanced',
-  proactivityControls: PROACTIVITY_DEFAULTS.balanced
+  proactivityControls: PROACTIVITY_DEFAULTS.balanced,
+  focusDurationMinutes: 25,
+  shortBreakMinutes: 5,
+  longBreakMinutes: 20,
+  focusCycleCount: 4,
+  autoStartBreaks: false,
+  autoStartFocus: false,
+  studyBellMuted: false,
+  studyBellVolume: 0.6,
+  focusNotificationsEnabled: false,
+  speechRate: 1,
+  speechVoiceURI: '',
+  speechVolume: 0.85,
+  speechMuted: false,
+  mathSpeechDetail: 'brief'
 }
 
 export const GUEST_SETTINGS_KEY = 'muksbooks:user-settings:v2'
@@ -224,7 +252,8 @@ export function parseUserSettingsUpdate(value: unknown): SettingsParseResult {
     font: ['modern', 'readable', 'academic'],
     feedbackStrictness: ['lenient', 'normal', 'strict'],
     proactivityLevel: ['quiet', 'balanced', 'proactive'],
-    homepagePreset: ['academic-weapon', 'study-focus', 'career-focus', 'minimal', 'build-my-own']
+    homepagePreset: ['academic-weapon', 'study-focus', 'career-focus', 'minimal', 'build-my-own'],
+    mathSpeechDetail: ['brief', 'detailed']
   }
 
   for (const [field, allowed] of Object.entries(enums)) {
@@ -236,6 +265,28 @@ export function parseUserSettingsUpdate(value: unknown): SettingsParseResult {
   if ('pomodoroLength' in update && (!Number.isInteger(update.pomodoroLength) || Number(update.pomodoroLength) < 5 || Number(update.pomodoroLength) > 90)) {
     return { valid: false, error: 'pomodoroLength must be an integer from 5 to 90.' }
   }
+  if ('focusDurationMinutes' in update && (!Number.isInteger(update.focusDurationMinutes) || Number(update.focusDurationMinutes) < 5 || Number(update.focusDurationMinutes) > 180)) {
+    return { valid: false, error: 'focusDurationMinutes must be an integer from 5 to 180.' }
+  }
+  if ('shortBreakMinutes' in update && (!Number.isInteger(update.shortBreakMinutes) || Number(update.shortBreakMinutes) < 1 || Number(update.shortBreakMinutes) > 60)) {
+    return { valid: false, error: 'shortBreakMinutes must be an integer from 1 to 60.' }
+  }
+  if ('longBreakMinutes' in update && (!Number.isInteger(update.longBreakMinutes) || Number(update.longBreakMinutes) < 1 || Number(update.longBreakMinutes) > 90)) {
+    return { valid: false, error: 'longBreakMinutes must be an integer from 1 to 90.' }
+  }
+  if ('focusCycleCount' in update && (!Number.isInteger(update.focusCycleCount) || Number(update.focusCycleCount) < 1 || Number(update.focusCycleCount) > 12)) {
+    return { valid: false, error: 'focusCycleCount must be an integer from 1 to 12.' }
+  }
+  for (const field of ['studyBellVolume', 'speechRate', 'speechVolume']) {
+    if (field in update) {
+      const value = Number(update[field])
+      if (!Number.isFinite(value)) return { valid: false, error: `${field} must be a number.` }
+    }
+  }
+  for (const field of ['autoStartBreaks', 'autoStartFocus', 'studyBellMuted', 'focusNotificationsEnabled', 'speechMuted']) {
+    if (field in update && typeof update[field] !== 'boolean') return { valid: false, error: `${field} must be a boolean.` }
+  }
+  if ('speechVoiceURI' in update && typeof update.speechVoiceURI !== 'string') return { valid: false, error: 'speechVoiceURI must be a string.' }
   if ('quickActions' in update) {
     if (!Array.isArray(update.quickActions) || update.quickActions.some((id) => !QUICK_ACTION_IDS.includes(id as QuickActionId))) return { valid: false, error: 'quickActions contains an invalid action.' }
     if (new Set(update.quickActions).size !== update.quickActions.length) return { valid: false, error: 'quickActions contains duplicates.' }
