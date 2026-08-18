@@ -5,7 +5,14 @@ import {
   setUserTaskCompletion,
   updateUserTask
 } from '@/lib/cloud/service'
-import { resolveJobApplicationUrl, isJobListingExpired } from '@/lib/careers/opportunity-utils'
+import {
+  resolveJobApplicationUrl,
+  inferCareerFamilies,
+  getActuarialCareerFit,
+  matchesFilterValue,
+  getOpportunityStatus,
+  isHiddenGemCompany
+} from '@/lib/careers/opportunity-utils'
 
 type SupabaseClient = any
 
@@ -106,31 +113,50 @@ export async function isCareersCloudReady(client: SupabaseClient) {
 export async function listCompaniesSupabase(client: SupabaseClient) {
   const { data, error } = await client
     .from('career_companies')
-    .select('id, name, slug, official_careers_url, profile_created')
+    .select('id, name, slug, official_careers_url, source_type, profile_created')
     .order('name', { ascending: true })
 
   if (error) throw new Error(error.message)
 
   const { data: counts, error: countError } = await client
     .from('career_jobs')
-    .select('company_id, id')
+    .select('company_id, id, job_title, description, requirements, discipline, career_area')
     .eq('is_active', true)
 
   if (countError) throw new Error(countError.message)
 
   const byCompany = new Map<string, number>()
+  const familiesByCompany = new Map<string, Set<string>>()
   for (const row of counts || []) {
     const key = String(row.company_id)
     byCompany.set(key, (byCompany.get(key) || 0) + 1)
+
+    const families = inferCareerFamilies({
+      title: row.job_title,
+      description: row.description,
+      requirements: row.requirements,
+      discipline: row.discipline,
+      careerArea: row.career_area
+    })
+    const bucket = familiesByCompany.get(key) || new Set<string>()
+    for (const family of families) bucket.add(family)
+    familiesByCompany.set(key, bucket)
   }
 
   return (data || []).map((row: any) => ({
     id: row.id,
     name: row.name,
     slug: row.slug,
+    sourceType: row.source_type,
     officialCareersUrl: row.official_careers_url,
     profileCreated: Boolean(row.profile_created),
-    activeJobCount: byCompany.get(String(row.id)) || 0
+    activeJobCount: byCompany.get(String(row.id)) || 0,
+    careerFamilies: Array.from(familiesByCompany.get(String(row.id)) || []),
+    hiddenGem: isHiddenGemCompany({
+      sourceType: row.source_type,
+      activeJobCount: byCompany.get(String(row.id)) || 0,
+      companyName: row.name
+    })
   }))
 }
 
@@ -174,17 +200,37 @@ export async function listDiscoverJobsSupabase(client: SupabaseClient, filters: 
     ].join(' ').toLowerCase()
 
     if (q && !searchHaystack.includes(q)) return false
-    if (roleTypes.length && !roleTypes.includes(normalizeText(row.role_type))) return false
-    if (disciplines.length && !disciplines.includes(normalizeText(row.discipline))) return false
     if (countries.length && !countries.includes(normalizeText(row.country))) return false
     if (companies.length && !companies.includes(normalizeText(company?.name))) return false
-    if (careerAreas.length && !careerAreas.includes(normalizeText(row.career_area))) return false
     return true
   })
 
   return rows
     .map((row: any) => {
       const company = row.career_companies
+      const fit = getActuarialCareerFit({
+        title: row.job_title,
+        description: row.description,
+        requirements: row.requirements,
+        discipline: row.discipline,
+        careerArea: row.career_area
+      })
+      const families = inferCareerFamilies({
+        title: row.job_title,
+        description: row.description,
+        requirements: row.requirements,
+        discipline: row.discipline,
+        careerArea: row.career_area
+      })
+      const status = getOpportunityStatus({
+        closingDate: row.closing_date,
+        applicationUrl: resolveJobApplicationUrl({
+          applicationUrl: row.application_url,
+          sourceUrl: row.source_url,
+          officialCareersUrl: company?.official_careers_url
+        }),
+        lastVerified: row.last_verified
+      })
       return {
         id: row.id,
         companyId: row.company_id,
@@ -216,16 +262,41 @@ export async function listDiscoverJobsSupabase(client: SupabaseClient, filters: 
         internationalStudentInformation: row.international_student_information || 'Not stated',
         dateFound: row.date_found,
         lastVerified: row.last_verified,
-        sourceTimezone: row.source_timezone
+        sourceTimezone: row.source_timezone,
+        careerFamilies: families,
+        careerFitScore: fit.score,
+        careerFitLabel: fit.label,
+        careerFitReason: fit.reason,
+        suitabilityStatus: fit.isRelevant ? 'Recommended' : 'Low relevance',
+        opportunityStatus: status.status,
+        opportunityStatusLabel: status.label
       }
     })
-    .filter((job: { applicationUrl: string | null; closingDate: unknown }) => Boolean(job.applicationUrl) && !isJobListingExpired(job.closingDate as string | null))
+    .filter((job: any) => job.careerFitScore >= 60)
+    .filter((job: any) => {
+      if (roleTypes.length && !matchesFilterValue(job.roleType, roleTypes)) return false
+
+      if (disciplines.length) {
+        const disciplineHit = matchesFilterValue(job.discipline, disciplines)
+          || disciplines.some((value) => job.careerFamilies.some((family: string) => normalizeText(family).includes(value)))
+        if (!disciplineHit) return false
+      }
+
+      if (!careerAreas.length) return true
+      if (careerAreas.includes('recommended for actuarial students')) return job.careerFitScore >= 70
+      if (careerAreas.includes('all quantitative careers')) return job.careerFitScore >= 60
+
+      return careerAreas.some((value) => (
+        normalizeText(job.careerArea) === value
+        || job.careerFamilies.some((family: string) => normalizeText(family) === value)
+      ))
+    })
 }
 
 export async function getCompanyDetailsSupabase(client: SupabaseClient, companyId: string, userId?: string) {
   const { data: company, error } = await client
     .from('career_companies')
-    .select('id, name, slug, official_careers_url, profile_created')
+    .select('id, name, slug, official_careers_url, source_type, profile_created')
     .eq('id', companyId)
     .maybeSingle()
 
@@ -234,7 +305,7 @@ export async function getCompanyDetailsSupabase(client: SupabaseClient, companyI
 
   const { data: jobs, error: jobsError } = await client
     .from('career_jobs')
-    .select('id, job_title, location, role_type, discipline, career_area, application_url, source_url, last_verified')
+    .select('id, job_title, location, role_type, discipline, career_area, application_url, source_url, closing_date, last_verified')
     .eq('company_id', companyId)
     .eq('is_active', true)
     .order('last_verified', { ascending: false, nullsFirst: false })
@@ -272,6 +343,7 @@ export async function getCompanyDetailsSupabase(client: SupabaseClient, companyI
     id: company.id,
     name: company.name,
     slug: company.slug,
+    sourceType: company.source_type,
     officialCareersUrl: company.official_careers_url,
     pageAvailable,
     activeJobCount,
@@ -280,6 +352,18 @@ export async function getCompanyDetailsSupabase(client: SupabaseClient, companyI
     lastSuccessfulCheckAt: check?.last_successful_check_at || null,
     sourceError: check?.error_message || null,
     jobs: (jobs || []).map((job: any) => ({
+      ...(function () {
+        const status = getOpportunityStatus({
+          closingDate: job.closing_date,
+          applicationUrl: resolveJobApplicationUrl({
+            applicationUrl: job.application_url,
+            sourceUrl: job.source_url,
+            officialCareersUrl: company.official_careers_url
+          }),
+          lastVerified: job.last_verified
+        })
+        return { opportunityStatus: status.status, opportunityStatusLabel: status.label }
+      })(),
       id: job.id,
       jobTitle: job.job_title,
       location: job.location,
@@ -660,6 +744,26 @@ export async function updateApplicationSupabase(client: SupabaseClient, userId: 
   })
 
   if (eventError) throw new Error(eventError.message)
+}
+
+export async function deleteApplicationSupabase(client: SupabaseClient, userId: string, applicationId: string) {
+  const { data: existing, error: existingError } = await client
+    .from('career_applications')
+    .select('id')
+    .eq('id', applicationId)
+    .eq('user_id', userId)
+    .maybeSingle()
+
+  if (existingError) throw new Error(existingError.message)
+  if (!existing) throw new Error('Application not found.')
+
+  const { error } = await client
+    .from('career_applications')
+    .delete()
+    .eq('id', applicationId)
+    .eq('user_id', userId)
+
+  if (error) throw new Error(error.message)
 }
 
 export async function listApplicationsSupabase(client: SupabaseClient, userId: string) {

@@ -1,7 +1,14 @@
 import crypto from 'crypto'
 import { getDb, nowIso } from '@/lib/app-state/db'
 import { ensureUser } from '@/lib/app-state/service'
-import { resolveJobApplicationUrl, isJobListingExpired } from '@/lib/careers/opportunity-utils'
+import {
+  resolveJobApplicationUrl,
+  getActuarialCareerFit,
+  inferCareerFamilies,
+  matchesFilterValue,
+  getOpportunityStatus,
+  isHiddenGemCompany
+} from '@/lib/careers/opportunity-utils'
 
 export type CareerStage =
   | 'Interested'
@@ -89,6 +96,24 @@ const TECHNOLOGY_COMPANIES = [
   { name: 'Atlassian', official_careers_url: 'https://www.atlassian.com/company/careers' },
   { name: 'Canva', official_careers_url: 'https://www.canva.com/careers/' },
   { name: 'Accenture', official_careers_url: 'https://www.accenture.com/us-en/careers' }
+]
+
+const EXPANDED_ECOSYSTEM_COMPANIES = [
+  { name: 'Taylor Fry', official_careers_url: 'https://taylorfry.com.au/careers/', source_type: 'SOCIETY_SEED_MASS' },
+  { name: 'Dynamo Analytics', official_careers_url: 'https://www.dynamoanalytics.com/careers', source_type: 'SOCIETY_SEED_MASS' },
+  { name: 'am actuaries', official_careers_url: 'https://www.amact.com.au/', source_type: 'SOCIETY_SEED_MASS' },
+  { name: 'UniSuper', official_careers_url: 'https://www.unisuper.com.au/about-us/careers', source_type: 'SOCIETY_SEED_MASS' },
+  { name: 'Quantium', official_careers_url: 'https://www.quantium.com/careers/', source_type: 'SOCIETY_SEED_MASS' },
+  { name: 'Flow Traders', official_careers_url: 'https://www.flowtraders.com/careers/', source_type: 'SOCIETY_SEED_MASS' },
+  { name: 'IMC', official_careers_url: 'https://www.imc.com/ap/careers/', source_type: 'SOCIETY_SEED_MASS' },
+  { name: 'Akuna Capital', official_careers_url: 'https://akunacapital.com/careers/', source_type: 'SOCIETY_SEED_MASS' },
+  { name: 'Kearney', official_careers_url: 'https://www.kearney.com/careers', source_type: 'SOCIETY_SEED_MASS' },
+  { name: 'Finity', official_careers_url: 'https://finity.com.au/careers/', source_type: 'SOCIETY_SEED_MASS' },
+  { name: 'Gen Re', official_careers_url: 'https://www.genre.com/careers', source_type: 'SOCIETY_SEED_MELBOURNE' },
+  { name: 'RGA', official_careers_url: 'https://www.rgare.com/careers', source_type: 'SOCIETY_SEED_MELBOURNE' },
+  { name: 'APRA', official_careers_url: 'https://www.apra.gov.au/careers', source_type: 'SOCIETY_SEED_MELBOURNE' },
+  { name: 'Reserve Bank of Australia', official_careers_url: 'https://www.rba.gov.au/careers/', source_type: 'SOCIETY_SEED_MELBOURNE' },
+  { name: 'Frontier Advisors', official_careers_url: 'https://frontieradvisors.com.au/careers/', source_type: 'SOCIETY_SEED_MELBOURNE' }
 ]
 
 const ACTUARIAL_JOBS = [
@@ -321,12 +346,171 @@ const TECHNOLOGY_JOBS = [
   }
 ]
 
+const EXPANDED_ECOSYSTEM_JOBS = [
+  {
+    company: 'Taylor Fry',
+    title: 'Graduate Analyst (Actuarial & Analytics)',
+    location: 'Melbourne, Australia',
+    city: 'Melbourne',
+    country: 'Australia',
+    role_type: 'Graduate Program',
+    discipline: 'Actuarial Consulting',
+    careerArea: 'Consulting',
+    requirements: 'Actuarial science, statistics or mathematics degree, modelling and communication skills.',
+    work_rights_information: 'Work rights required at commencement',
+    international_student_information: 'Eligibility unclear - check employer details'
+  },
+  {
+    company: 'Dynamo Analytics',
+    title: 'Actuarial & Data Analytics Graduate',
+    location: 'Sydney, Australia',
+    city: 'Sydney',
+    country: 'Australia',
+    role_type: 'Graduate Role',
+    discipline: 'Data & Analytics',
+    careerArea: 'Data & Analytics',
+    requirements: 'Actuarial, statistics, R or Python, SQL and commercial problem-solving.',
+    work_rights_information: 'Not stated',
+    international_student_information: 'Sponsorship may be available'
+  },
+  {
+    company: 'UniSuper',
+    title: 'Investment Analytics Internship',
+    location: 'Melbourne, Australia',
+    city: 'Melbourne',
+    country: 'Australia',
+    role_type: 'Internship',
+    discipline: 'Investments',
+    careerArea: 'Superannuation',
+    requirements: 'Quantitative degree, investment risk awareness, Excel and communication.',
+    work_rights_information: 'Not stated',
+    international_student_information: 'Not stated'
+  },
+  {
+    company: 'Quantium',
+    title: 'Graduate Decision Scientist',
+    location: 'Sydney, Australia',
+    city: 'Sydney',
+    country: 'Australia',
+    role_type: 'Graduate Program',
+    discipline: 'Data Science',
+    careerArea: 'Data & Analytics',
+    requirements: 'Statistics, econometrics or actuarial studies, Python/R and business communication.',
+    work_rights_information: 'Not stated',
+    international_student_information: 'Not stated'
+  },
+  {
+    company: 'Flow Traders',
+    title: 'Trading Intern',
+    location: 'Singapore',
+    city: 'Singapore',
+    country: 'International',
+    role_type: 'Summer Internship',
+    discipline: 'Trading',
+    careerArea: 'Trading',
+    requirements: 'Probability, statistics, numerical reasoning and fast decision-making.',
+    work_rights_information: 'Relocation and visa requirements apply',
+    international_student_information: 'Eligibility unclear - check employer details'
+  },
+  {
+    company: 'IMC',
+    title: 'Quantitative Trading Intern',
+    location: 'Sydney, Australia',
+    city: 'Sydney',
+    country: 'Australia',
+    role_type: 'Summer Internship',
+    discipline: 'Quantitative Trading',
+    careerArea: 'Quant Finance',
+    requirements: 'Mathematics, probability, statistics and strong coding fundamentals.',
+    work_rights_information: 'Not stated',
+    international_student_information: 'Not stated'
+  },
+  {
+    company: 'Akuna Capital',
+    title: 'Quantitative Research Intern',
+    location: 'Sydney, Australia',
+    city: 'Sydney',
+    country: 'Australia',
+    role_type: 'Winter Internship',
+    discipline: 'Quantitative Research',
+    careerArea: 'Quant Finance',
+    requirements: 'Probability, optimisation, statistical modelling, Python/C++ beneficial.',
+    work_rights_information: 'Not stated',
+    international_student_information: 'Not stated'
+  },
+  {
+    company: 'Kearney',
+    title: 'Strategy Consulting Analyst (Financial Services)',
+    location: 'Melbourne, Australia',
+    city: 'Melbourne',
+    country: 'Australia',
+    role_type: 'Entry-Level',
+    discipline: 'Strategy Consulting',
+    careerArea: 'Consulting',
+    requirements: 'Analytical problem-solving, quantitative reasoning and communication.',
+    work_rights_information: 'Not stated',
+    international_student_information: 'Not stated'
+  },
+  {
+    company: 'Finity',
+    title: 'Actuarial Consultant Graduate',
+    location: 'Sydney, Australia',
+    city: 'Sydney',
+    country: 'Australia',
+    role_type: 'Graduate Role',
+    discipline: 'Actuarial Consulting',
+    careerArea: 'Actuarial',
+    requirements: 'Actuarial studies, insurance understanding, communication and modelling skills.',
+    work_rights_information: 'Not stated',
+    international_student_information: 'Not stated'
+  },
+  {
+    company: 'RGA',
+    title: 'Life Reinsurance Pricing Analyst',
+    location: 'Melbourne, Australia',
+    city: 'Melbourne',
+    country: 'Australia',
+    role_type: 'Graduate Role',
+    discipline: 'Reinsurance',
+    careerArea: 'Insurance',
+    requirements: 'Actuarial or quantitative degree, modelling and life insurance interest.',
+    work_rights_information: 'Not stated',
+    international_student_information: 'Not stated'
+  },
+  {
+    company: 'APRA',
+    title: 'Graduate Program - Policy & Risk Analytics',
+    location: 'Canberra, Australia',
+    city: 'Canberra',
+    country: 'Australia',
+    role_type: 'Graduate Program',
+    discipline: 'Government Regulation',
+    careerArea: 'Government / Regulation',
+    requirements: 'Quantitative degree, risk analysis and public policy interest.',
+    work_rights_information: 'Citizenship / PR may be required',
+    international_student_information: 'Confirmed restricted'
+  },
+  {
+    company: 'Reserve Bank of Australia',
+    title: 'Economic Analyst Cadetship',
+    location: 'Sydney, Australia',
+    city: 'Sydney',
+    country: 'Australia',
+    role_type: 'Cadetship',
+    discipline: 'Economics',
+    careerArea: 'Economics',
+    requirements: 'Econometrics, statistics, economics and data analysis capability.',
+    work_rights_information: 'Citizenship / PR may be required',
+    international_student_information: 'Eligibility unclear - check employer details'
+  }
+]
+
 function ensureDefaultCareerData() {
   const db = getDb()
   const now = nowIso()
 
-  const companies = [...ACTUARIAL_COMPANIES, ...BANKING_COMPANIES, ...TECHNOLOGY_COMPANIES]
-  const jobs = [...ACTUARIAL_JOBS, ...BANKING_JOBS, ...TECHNOLOGY_JOBS]
+  const companies = [...ACTUARIAL_COMPANIES, ...BANKING_COMPANIES, ...TECHNOLOGY_COMPANIES, ...EXPANDED_ECOSYSTEM_COMPANIES]
+  const jobs = [...ACTUARIAL_JOBS, ...BANKING_JOBS, ...TECHNOLOGY_JOBS, ...EXPANDED_ECOSYSTEM_JOBS]
 
   const companyIds = new Map<string, string>()
 
@@ -343,7 +527,7 @@ function ensureDefaultCareerData() {
     db.prepare(`
       INSERT INTO career_companies (id, name, slug, official_careers_url, source_type, profile_created, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(companyId, company.name, slug, company.official_careers_url, 'OFFICIAL', 0, now, now)
+    `).run(companyId, company.name, slug, company.official_careers_url, (company as any).source_type || 'OFFICIAL', 0, now, now)
     companyIds.set(company.name, companyId)
 
     db.prepare(`
@@ -360,7 +544,7 @@ function ensureDefaultCareerData() {
     const existingJob = db.prepare('SELECT id FROM career_jobs WHERE company_id = ? AND external_job_id = ?').get(companyId, externalJobId) as any
     if (existingJob?.id) continue
 
-    const companyRecord = companies.find((item) => item.name === job.company)
+    const companyRecord = companies.find((item) => item.name === job.company) as any
     const jobUrl = companyRecord?.official_careers_url || null
     const jobId = id('carjob')
 
@@ -389,7 +573,7 @@ function ensureDefaultCareerData() {
       null,
       jobUrl,
       jobUrl,
-      'SEED',
+      companyRecord?.source_type || 'OFFICIAL_EMPLOYER',
       job.work_rights_information,
       job.international_student_information,
       now,
@@ -514,16 +698,6 @@ export function listDiscoverJobs(filters: {
     params.push(q, q, q, q)
   }
 
-  if ((filters.roleTypes || []).length) {
-    clauses.push(`LOWER(COALESCE(j.role_type, '')) IN (${(filters.roleTypes || []).map(() => '?').join(',')})`)
-    params.push(...(filters.roleTypes || []).map((value) => normalizeText(value)))
-  }
-
-  if ((filters.disciplines || []).length) {
-    clauses.push(`LOWER(COALESCE(j.discipline, '')) IN (${(filters.disciplines || []).map(() => '?').join(',')})`)
-    params.push(...(filters.disciplines || []).map((value) => normalizeText(value)))
-  }
-
   if ((filters.countries || []).length) {
     clauses.push(`LOWER(COALESCE(j.country, '')) IN (${(filters.countries || []).map(() => '?').join(',')})`)
     params.push(...(filters.countries || []).map((value) => normalizeText(value)))
@@ -534,13 +708,12 @@ export function listDiscoverJobs(filters: {
     params.push(...(filters.companies || []).map((value) => normalizeText(value)))
   }
 
-  if ((filters.careerAreas || []).length) {
-    clauses.push(`LOWER(COALESCE(j.career_area, '')) IN (${(filters.careerAreas || []).map(() => '?').join(',')})`)
-    params.push(...(filters.careerAreas || []).map((value) => normalizeText(value)))
-  }
-
   const where = clauses.length ? ` AND ${clauses.join(' AND ')}` : ''
   const rows = db.prepare(`${baseJobQuery()} ${where} ORDER BY COALESCE(j.last_verified, j.created_at) DESC`).all(...params) as any[]
+
+  const selectedAreas = normalizeArray(filters.careerAreas)
+  const selectedRoles = normalizeArray(filters.roleTypes)
+  const selectedDisciplines = normalizeArray(filters.disciplines)
 
   return rows
     .map((row) => ({
@@ -576,7 +749,62 @@ export function listDiscoverJobs(filters: {
       lastVerified: row.last_verified,
       sourceTimezone: row.source_timezone
     }))
-    .filter((job) => Boolean(job.applicationUrl) && !isJobListingExpired(job.closingDate))
+    .map((job) => {
+      const fit = getActuarialCareerFit({
+        title: job.jobTitle,
+        description: job.description,
+        requirements: job.requirements,
+        discipline: job.discipline,
+        careerArea: job.careerArea
+      })
+      const families = inferCareerFamilies({
+        title: job.jobTitle,
+        description: job.description,
+        requirements: job.requirements,
+        discipline: job.discipline,
+        careerArea: job.careerArea
+      })
+      const status = getOpportunityStatus({
+        closingDate: job.closingDate,
+        applicationUrl: job.applicationUrl,
+        lastVerified: job.lastVerified
+      })
+      return {
+        ...job,
+        careerFamilies: families,
+        careerFitScore: fit.score,
+        careerFitLabel: fit.label,
+        careerFitReason: fit.reason,
+        suitabilityStatus: fit.isRelevant ? 'Recommended' : 'Low relevance',
+        opportunityStatus: status.status,
+        opportunityStatusLabel: status.label
+      }
+    })
+    .filter((job) => job.careerFitScore >= 60)
+    .filter((job) => {
+      if (selectedRoles.length && !matchesFilterValue(job.roleType, selectedRoles)) return false
+      if (selectedDisciplines.length) {
+        const disciplineHit = matchesFilterValue(job.discipline, selectedDisciplines)
+          || selectedDisciplines.some((value) => job.careerFamilies.some((family: string) => family.toLowerCase().includes(value.toLowerCase())))
+        if (!disciplineHit) return false
+      }
+
+      if (!selectedAreas.length) return true
+
+      const normalizedAreas = selectedAreas.map((value) => value.toLowerCase())
+      if (normalizedAreas.includes('recommended for actuarial students')) {
+        return job.careerFitScore >= 70
+      }
+      if (normalizedAreas.includes('all quantitative careers')) {
+        return job.careerFitScore >= 60
+      }
+
+      const matchedArea = normalizedAreas.some((value) =>
+        (job.careerArea || '').toLowerCase() === value
+        || job.careerFamilies.some((family: string) => family.toLowerCase() === value)
+      )
+      return matchedArea
+    })
 }
 
 export function listCompanies() {
@@ -590,14 +818,49 @@ export function listCompanies() {
     ORDER BY c.name ASC
   `).all() as any[]
 
-  return rows.map((row) => ({
-    id: row.id,
-    name: row.name,
-    slug: row.slug,
-    officialCareersUrl: row.official_careers_url,
-    profileCreated: Boolean(row.profile_created),
-    activeJobCount: Number(row.active_job_count || 0)
-  }))
+  const jobs = db.prepare(`
+    SELECT company_id, job_title, description, requirements, discipline, career_area
+    FROM career_jobs
+    WHERE is_active = 1
+  `).all() as any[]
+
+  const jobsByCompany = new Map<string, any[]>()
+  for (const job of jobs) {
+    const bucket = jobsByCompany.get(String(job.company_id)) || []
+    bucket.push(job)
+    jobsByCompany.set(String(job.company_id), bucket)
+  }
+
+  return rows.map((row) => {
+    const companyJobs = jobsByCompany.get(String(row.id)) || []
+    const families = new Set<string>()
+    for (const job of companyJobs) {
+      const inferred = inferCareerFamilies({
+        title: job.job_title,
+        description: job.description,
+        requirements: job.requirements,
+        discipline: job.discipline,
+        careerArea: job.career_area
+      })
+      for (const family of inferred) families.add(family)
+    }
+
+    return {
+      id: row.id,
+      name: row.name,
+      slug: row.slug,
+      sourceType: row.source_type,
+      officialCareersUrl: row.official_careers_url,
+      profileCreated: Boolean(row.profile_created),
+      activeJobCount: Number(row.active_job_count || 0),
+      careerFamilies: Array.from(families),
+      hiddenGem: isHiddenGemCompany({
+        sourceType: row.source_type,
+        activeJobCount: Number(row.active_job_count || 0),
+        companyName: row.name
+      })
+    }
+  })
 }
 
 export function getCompanyDetails(companyId: string, userId?: string) {
@@ -637,6 +900,7 @@ export function getCompanyDetails(companyId: string, userId?: string) {
     id: company.id,
     name: company.name,
     slug: company.slug,
+    sourceType: company.source_type,
     officialCareersUrl: company.official_careers_url,
     pageAvailable,
     activeJobCount,
@@ -645,6 +909,18 @@ export function getCompanyDetails(companyId: string, userId?: string) {
     lastSuccessfulCheckAt: check?.last_successful_check_at || null,
     sourceError: check?.error_message || null,
     jobs: jobs.map((job) => ({
+      ...(function () {
+        const status = getOpportunityStatus({
+          closingDate: job.closing_date,
+          applicationUrl: resolveJobApplicationUrl({
+            applicationUrl: job.application_url,
+            sourceUrl: job.source_url,
+            officialCareersUrl: company.official_careers_url
+          }),
+          lastVerified: job.last_verified
+        })
+        return { opportunityStatus: status.status, opportunityStatusLabel: status.label }
+      })(),
       id: job.id,
       jobTitle: job.job_title,
       location: job.location,
@@ -1277,6 +1553,16 @@ export function updateAssessment(userId: string, assessmentId: string, updates: 
       userId
     )
   }
+}
+
+export function deleteApplication(userId: string, applicationId: string) {
+  const db = getDb()
+  const existing = db.prepare('SELECT id FROM career_applications WHERE id = ? AND user_id = ?').get(applicationId, userId) as any
+  if (!existing) throw new Error('Application not found.')
+
+  db.prepare('DELETE FROM career_application_events WHERE application_id = ? AND user_id = ?').run(applicationId, userId)
+  db.prepare('DELETE FROM career_assessments WHERE application_id = ? AND user_id = ?').run(applicationId, userId)
+  db.prepare('DELETE FROM career_applications WHERE id = ? AND user_id = ?').run(applicationId, userId)
 }
 
 export function syncAssessmentFromPlannerTask(taskId: string) {

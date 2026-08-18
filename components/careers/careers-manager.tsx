@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { useAuth } from '@/components/auth-provider'
 import { emitAppStateUpdate } from '@/lib/app-state/client-events'
 
-type TabKey = 'discover' | 'following' | 'saved' | 'applications' | 'assessments' | 'cv' | 'settings'
+type TabKey = 'discover' | 'employers' | 'following' | 'saved' | 'applications' | 'assessments' | 'cv' | 'settings'
 
 interface CareerState {
   mode: 'guest' | 'authenticated'
@@ -33,6 +33,7 @@ interface CareerState {
 
 const TABS: Array<{ key: TabKey; label: string }> = [
   { key: 'discover', label: 'Discover' },
+  { key: 'employers', label: 'Explore Employers' },
   { key: 'following', label: 'Following' },
   { key: 'saved', label: 'Saved Roles' },
   { key: 'applications', label: 'My Applications' },
@@ -41,10 +42,55 @@ const TABS: Array<{ key: TabKey; label: string }> = [
   { key: 'settings', label: 'Career Settings' }
 ]
 
-const ROLE_TYPES = ['Graduate', 'Internship', 'Vacation Program', 'Entry Level', 'Analyst', 'Actuarial Analyst']
-const DISCIPLINES = ['Actuarial', 'Insurance', 'Risk', 'Investments', 'Consulting', 'Superannuation', 'Finance', 'Data', 'Quantitative', 'Reinsurance']
+const ROLE_TYPES = [
+  'Internship',
+  'Vacation Program',
+  'Winter Internship',
+  'Summer Internship',
+  'Graduate Program',
+  'Graduate Role',
+  'Entry-Level',
+  'Cadetship',
+  'Scholarship / Industry Program',
+  'Insight Program',
+  'Pre-Penultimate Program',
+  'Penultimate Program'
+]
+const DISCIPLINES = [
+  'Actuarial',
+  'Insurance',
+  'Risk',
+  'Investments',
+  'Banking',
+  'Quant Finance',
+  'Trading',
+  'Data & Analytics',
+  'Consulting',
+  'Superannuation',
+  'Finance',
+  'Economics',
+  'Technology / FinTech',
+  'Government / Regulation'
+]
 const COUNTRIES = ['Australia', 'South Africa', 'United Kingdom', 'International']
-const CAREER_AREAS = ['All', 'Actuarial', 'Banking', 'Technology']
+const CAREER_AREAS = [
+  'Recommended for Actuarial Students',
+  'Actuarial',
+  'Insurance',
+  'Risk',
+  'Investments',
+  'Banking',
+  'Quant Finance',
+  'Trading',
+  'Data & Analytics',
+  'Consulting',
+  'Superannuation',
+  'Finance',
+  'Economics',
+  'Technology / FinTech',
+  'Government / Regulation',
+  'All Quantitative Careers'
+]
 const OTHER_COMPANY_VALUE = '__other__'
 const CV_ACCEPTED_EXTENSIONS = ['.pdf', '.doc', '.docx']
 const APPLICATION_STAGES = [
@@ -114,11 +160,12 @@ export function CareersManager() {
   const [isLoading, setIsLoading] = useState(true)
   const [message, setMessage] = useState<string | null>(null)
   const [query, setQuery] = useState('')
+  const [employerQuery, setEmployerQuery] = useState('')
   const [selectedRoleTypes, setSelectedRoleTypes] = useState<string[]>([])
   const [selectedDisciplines, setSelectedDisciplines] = useState<string[]>([])
   const [selectedCountries, setSelectedCountries] = useState<string[]>([])
   const [selectedCompanies, setSelectedCompanies] = useState<string[]>([])
-  const [selectedCareerArea, setSelectedCareerArea] = useState<string>('All')
+  const [selectedCareerArea, setSelectedCareerArea] = useState<string>('Recommended for Actuarial Students')
   const [assessmentForm, setAssessmentForm] = useState({
     companyId: '',
     customCompanyName: '',
@@ -139,7 +186,7 @@ export function CareersManager() {
     if (selectedDisciplines.length) params.set('disciplines', selectedDisciplines.join(','))
     if (selectedCountries.length) params.set('countries', selectedCountries.join(','))
     if (selectedCompanies.length) params.set('companies', selectedCompanies.join(','))
-    if (selectedCareerArea !== 'All') params.set('careerAreas', selectedCareerArea)
+    if (selectedCareerArea) params.set('careerAreas', selectedCareerArea)
     return params.toString()
   }, [query, selectedRoleTypes, selectedDisciplines, selectedCountries, selectedCompanies, selectedCareerArea])
 
@@ -496,11 +543,33 @@ export function CareersManager() {
     })
   }
 
+  const handleDeleteApplication = async (applicationId: string) => {
+    await runProtectedAction('Sign in to manage your applications.', async () => {
+      const response = await fetch(`/api/careers?action=delete-application&applicationId=${encodeURIComponent(applicationId)}`, {
+        method: 'DELETE'
+      })
+      const payload = await response.json()
+      if (!response.ok || !payload?.ok) throw new Error(payload?.error || 'Could not delete application.')
+      setMessage('Application process removed.')
+    })
+  }
+
   const timezoneToUse = state.settings?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
 
   const followingEmpty = !isLoading && state.following.length === 0
 
-  const discoverEmpty = !isLoading && state.discover.length === 0
+  const activeDiscover = state.discover.filter((job: any) => ['OPEN_NOW', 'CLOSING_SOON', 'STALE_UNVERIFIED'].includes(job.opportunityStatus))
+  const previousDiscover = state.discover.filter((job: any) => ['CLOSED_OR_EXPIRED', 'LISTING_UNAVAILABLE'].includes(job.opportunityStatus))
+  const discoverEmpty = !isLoading && activeDiscover.length === 0
+
+  const exploredEmployers = state.companies
+    .filter((company: any) => {
+      if (!employerQuery.trim()) return true
+      const q = employerQuery.trim().toLowerCase()
+      return String(company.name || '').toLowerCase().includes(q)
+        || (Array.isArray(company.careerFamilies) && company.careerFamilies.some((family: string) => family.toLowerCase().includes(q)))
+    })
+  const hiddenGemEmployers = exploredEmployers.filter((company: any) => Boolean(company.hiddenGem))
 
   return (
     <div className="space-y-4 lg:col-span-2">
@@ -557,7 +626,7 @@ export function CareersManager() {
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search Mercer graduate actuarial"
+              placeholder="Search actuarial, risk, quant, banking, analytics or consulting roles"
               className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
             />
           </div>
@@ -601,13 +670,19 @@ export function CareersManager() {
           <div className="space-y-3">
             {isLoading && <p className="text-sm text-slate-600">Loading opportunities...</p>}
             {discoverEmpty && <p className="text-sm text-slate-600">No matching opportunities found. Try adjusting your filters.</p>}
-            {state.discover.map((job) => (
+            {activeDiscover.map((job) => (
               <div key={job.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <p className="text-base font-semibold text-slate-950">{job.jobTitle}</p>
                     <p className="text-sm text-slate-600">{job.company} · {job.location || 'Location not stated'}</p>
                     <p className="mt-2 text-xs uppercase tracking-[0.18em] text-slate-500">{job.roleType || 'Role not stated'} · {job.discipline || 'Discipline not stated'} · {job.country || 'Country not stated'}</p>
+                    <p className="text-xs text-slate-600">Status: {job.opportunityStatusLabel || 'Open now'}</p>
+                    <p className="mt-1 text-sm text-slate-700">Career fit: <span className="font-semibold">{job.careerFitScore ?? '-'}%</span> · {job.careerFitLabel || 'Not scored'}</p>
+                    <p className="text-sm text-slate-700">Why this fits: {job.careerFitReason || 'Quantitative skill overlap detected.'}</p>
+                    {Array.isArray(job.careerFamilies) && job.careerFamilies.length > 0 && (
+                      <p className="text-xs text-slate-500">Career families: {job.careerFamilies.join(' · ')}</p>
+                    )}
                     <p className="mt-2 text-sm text-slate-600">Work rights: {job.workRightsInformation || 'Not stated'}</p>
                     <p className="text-sm text-slate-600">International students: {job.internationalStudentInformation || 'Not stated'}</p>
                     <p className="text-xs text-slate-500">Last verified: {formatDateTime(job.lastVerified, timezoneToUse)}</p>
@@ -621,6 +696,80 @@ export function CareersManager() {
                     <Button size="sm" variant="outline" onClick={() => handleTrackApplication(job.id)}>I've Applied</Button>
                     <Button size="sm" variant="outline" onClick={() => handleFollowCompany(job.companyId)}>Follow Company</Button>
                     <Button size="sm" variant="outline" onClick={() => handleCvMatch(job.id)}>CV Match</Button>
+                  </div>
+                </div>
+              </div>
+            ))}
+
+            {previousDiscover.length > 0 && (
+              <div className="space-y-2 pt-2">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Closed / Previous Opportunities</p>
+                {previousDiscover.map((job: any) => (
+                  <div key={`previous-${job.id}`} className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <p className="text-sm font-semibold text-slate-900">{job.jobTitle}</p>
+                    <p className="text-sm text-slate-600">{job.company} · {job.location || 'Location not stated'}</p>
+                    <p className="text-xs text-slate-500">Status: {job.opportunityStatusLabel || 'Closed / previous opportunity'} · Last verified: {formatDateTime(job.lastVerified, timezoneToUse)}</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {job.applicationUrl && <a href={job.applicationUrl} target="_blank" rel="noreferrer"><Button size="sm" variant="outline">View Employer Careers</Button></a>}
+                      <Button size="sm" variant="outline" onClick={() => handleFollowCompany(job.companyId)}>Follow Company</Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
+
+      {activeTab === 'employers' && (
+        <Card className="space-y-4">
+          <div className="space-y-2">
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Explore Employers</p>
+            <p className="text-sm text-slate-600">Discover employer ecosystems from actuarial society research and broader quantitative pathways, even when no role is currently open.</p>
+            <input
+              value={employerQuery}
+              onChange={(event) => setEmployerQuery(event.target.value)}
+              placeholder="Search employer or career family"
+              className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
+            />
+          </div>
+
+          {hiddenGemEmployers.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Hidden Gems</p>
+              <div className="grid gap-3 md:grid-cols-2">
+                {hiddenGemEmployers.slice(0, 6).map((company: any) => (
+                  <div key={`gem-${company.id}`} className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                    <p className="text-sm font-semibold text-emerald-900">{company.name}</p>
+                    <p className="text-xs text-emerald-800">{(company.careerFamilies || []).join(' · ') || 'Quantitative pathways'}</p>
+                    <p className="mt-1 text-xs text-emerald-700">{company.activeJobCount > 0 ? `${company.activeJobCount} active opportunities detected` : 'No matching current opening detected yet'}</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {company.officialCareersUrl && <a href={company.officialCareersUrl} target="_blank" rel="noreferrer"><Button size="sm" variant="outline">Visit Careers Page</Button></a>}
+                      <Button size="sm" variant="outline" onClick={() => handleFollowCompany(company.id)}>Follow Company</Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-3">
+            {isLoading && <p className="text-sm text-slate-600">Loading employers...</p>}
+            {!isLoading && exploredEmployers.length === 0 && <p className="text-sm text-slate-600">No employers found for this search.</p>}
+            {exploredEmployers.map((company: any) => (
+              <div key={company.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-base font-semibold text-slate-950">{company.name}</p>
+                    <p className="text-sm text-slate-600">Source: {company.sourceType || 'Industry research'} · Active opportunities: {company.activeJobCount ?? 0}</p>
+                    {Array.isArray(company.careerFamilies) && company.careerFamilies.length > 0 && (
+                      <p className="text-xs text-slate-500">Career families: {company.careerFamilies.join(' · ')}</p>
+                    )}
+                    {(company.activeJobCount ?? 0) === 0 && <p className="text-xs text-slate-500">No matching current opening detected. Keep following for updates.</p>}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {company.officialCareersUrl && <a href={company.officialCareersUrl} target="_blank" rel="noreferrer"><Button size="sm" variant="outline">Visit Careers Page</Button></a>}
+                    <Button size="sm" variant="outline" onClick={() => handleFollowCompany(company.id)}>Follow Company</Button>
                   </div>
                 </div>
               </div>
@@ -749,13 +898,18 @@ export function CareersManager() {
                   <p className="text-base font-semibold text-slate-950">{application.title}</p>
                   <p className="text-sm text-slate-600">{application.company || 'Company not stated'} · Applied: {formatDateTime(application.appliedAtUtc, timezoneToUse)}</p>
                 </div>
-                <select
-                  value={application.stage}
-                  onChange={(event) => handleUpdateStage(application.id, event.target.value)}
-                  className="rounded-md border border-slate-300 px-2 py-1 text-sm"
-                >
-                  {APPLICATION_STAGES.map((stage) => <option key={stage} value={stage}>{stage}</option>)}
-                </select>
+                <div className="flex flex-wrap items-center gap-2">
+                  <select
+                    value={application.stage}
+                    onChange={(event) => handleUpdateStage(application.id, event.target.value)}
+                    className="rounded-md border border-slate-300 px-2 py-1 text-sm"
+                  >
+                    {APPLICATION_STAGES.map((stage) => <option key={stage} value={stage}>{stage}</option>)}
+                  </select>
+                  <Button size="sm" variant="outline" onClick={() => handleDeleteApplication(application.id)}>
+                    Delete Process
+                  </Button>
+                </div>
               </div>
 
               <div>

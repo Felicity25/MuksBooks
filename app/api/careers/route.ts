@@ -4,6 +4,7 @@ import {
   addAssessmentToPlanner,
   createApplicationFromJob,
   createAssessment,
+  deleteApplication,
   followCompany,
   getCareerPulse,
   getCareerSettings,
@@ -30,6 +31,7 @@ import {
   addAssessmentToPlannerSupabase,
   createApplicationFromJobSupabase,
   createAssessmentSupabase,
+  deleteApplicationSupabase,
   followCompanySupabase,
   getCareerPulseSupabase,
   getCareerSettingsSupabase,
@@ -458,6 +460,19 @@ export async function DELETE(request: NextRequest) {
         return NextResponse.json({ ok: true })
       }
       unsaveRole(user.id, jobId)
+      return NextResponse.json({ ok: true })
+    }
+
+    if (action === 'delete-application') {
+      const applicationId = searchParams.get('applicationId')
+      if (!applicationId) {
+        return NextResponse.json({ ok: false, error: 'applicationId is required' }, { status: 400 })
+      }
+      if (cloudClient) {
+        await deleteApplicationSupabase(cloudClient, user.id, applicationId)
+        return NextResponse.json({ ok: true })
+      }
+      deleteApplication(user.id, applicationId)
       return NextResponse.json({ ok: true })
     }
 
