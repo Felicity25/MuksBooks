@@ -215,7 +215,7 @@ export function NewsPageClient() {
 
       {category !== 'Saved' && data.brief.length > 0 && (
         <div className="rounded-3xl border border-sky-200 bg-sky-50 p-5 space-y-2">
-          <p className="text-sm font-semibold uppercase tracking-wide text-sky-700">Today's Actuarial Brief</p>
+          <p className="text-sm font-semibold uppercase tracking-wide text-sky-700">Today&apos;s Actuarial Brief</p>
           <p className="text-xs text-sky-600">{data.brief.length} developments worth knowing</p>
           <ol className="list-decimal space-y-1 pl-5 text-sm text-slate-800">
             {data.brief.map((briefItem) => (

@@ -15,7 +15,6 @@ let DatabaseSyncClass: any = null
 function getDatabaseSync(): any {
   if (DatabaseSyncClass) return DatabaseSyncClass
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     DatabaseSyncClass = require('node:sqlite').DatabaseSync
   } catch (err) {
     throw new Error(
