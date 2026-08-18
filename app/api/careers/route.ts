@@ -3,6 +3,7 @@ import { createSupabaseServerClient, getAuthenticatedUser } from '@/lib/supabase
 import {
   addAssessmentToPlanner,
   createApplicationFromJob,
+  createManualApplication,
   createAssessment,
   deleteApplication,
   followCompany,
@@ -30,6 +31,7 @@ import {
 import {
   addAssessmentToPlannerSupabase,
   createApplicationFromJobSupabase,
+  createManualApplicationSupabase,
   createAssessmentSupabase,
   deleteApplicationSupabase,
   followCompanySupabase,
@@ -81,12 +83,13 @@ export async function GET(request: NextRequest) {
     const roleTypes = parseCsv(searchParams.get('roleTypes'))
     const disciplines = parseCsv(searchParams.get('disciplines'))
     const countries = parseCsv(searchParams.get('countries'))
+    const eligibility = parseCsv(searchParams.get('eligibility'))
     const companies = parseCsv(searchParams.get('companies'))
     const careerAreas = parseCsv(searchParams.get('careerAreas'))
 
     const discover = cloudClient
-      ? await listDiscoverJobsSupabase(cloudClient, { q, roleTypes, disciplines, countries, companies, careerAreas })
-      : listDiscoverJobs({ q, roleTypes, disciplines, countries, companies, careerAreas })
+      ? await listDiscoverJobsSupabase(cloudClient, { q, roleTypes, disciplines, countries, eligibility, companies, careerAreas })
+      : listDiscoverJobs({ q, roleTypes, disciplines, countries, eligibility, companies, careerAreas })
     const companyList = cloudClient
       ? await listCompaniesSupabase(cloudClient)
       : listCompanies()
@@ -212,6 +215,38 @@ export async function POST(request: NextRequest) {
         stage: body.stage,
         notes: body.notes,
         appliedAtUtc: body.appliedAtUtc
+      })
+      return NextResponse.json({ ok: true, applicationId })
+    }
+
+    if (action === 'create-manual-application') {
+      if (cloudClient) {
+        const applicationId = await createManualApplicationSupabase(cloudClient, userId!, {
+          companyId: body.companyId || null,
+          customCompanyName: body.customCompanyName || null,
+          roleTitle: body.roleTitle || '',
+          careerFamily: body.careerFamily || null,
+          location: body.location || null,
+          stage: body.stage || 'Applied',
+          appliedAtUtc: body.appliedAtUtc || null,
+          applicationUrl: body.applicationUrl || null,
+          deadlineDateOnly: body.deadlineDateOnly || null,
+          notes: body.notes || null
+        })
+        return NextResponse.json({ ok: true, applicationId })
+      }
+
+      const applicationId = createManualApplication(userId!, {
+        companyId: body.companyId || null,
+        customCompanyName: body.customCompanyName || null,
+        roleTitle: body.roleTitle || '',
+        careerFamily: body.careerFamily || null,
+        location: body.location || null,
+        stage: body.stage || 'Applied',
+        appliedAtUtc: body.appliedAtUtc || null,
+        applicationUrl: body.applicationUrl || null,
+        deadlineDateOnly: body.deadlineDateOnly || null,
+        notes: body.notes || null
       })
       return NextResponse.json({ ok: true, applicationId })
     }

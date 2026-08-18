@@ -684,6 +684,7 @@ export function listDiscoverJobs(filters: {
   roleTypes?: string[]
   disciplines?: string[]
   countries?: string[]
+  eligibility?: string[]
   companies?: string[]
   careerAreas?: string[]
 }) {
@@ -714,6 +715,7 @@ export function listDiscoverJobs(filters: {
   const selectedAreas = normalizeArray(filters.careerAreas)
   const selectedRoles = normalizeArray(filters.roleTypes)
   const selectedDisciplines = normalizeArray(filters.disciplines)
+  const selectedEligibility = normalizeArray(filters.eligibility)
 
   return rows
     .map((row) => ({
@@ -767,7 +769,8 @@ export function listDiscoverJobs(filters: {
       const status = getOpportunityStatus({
         closingDate: job.closingDate,
         applicationUrl: job.applicationUrl,
-        lastVerified: job.lastVerified
+        lastVerified: job.lastVerified,
+        sourceType: job.sourceType
       })
       return {
         ...job,
@@ -787,6 +790,12 @@ export function listDiscoverJobs(filters: {
         const disciplineHit = matchesFilterValue(job.discipline, selectedDisciplines)
           || selectedDisciplines.some((value) => job.careerFamilies.some((family: string) => family.toLowerCase().includes(value.toLowerCase())))
         if (!disciplineHit) return false
+      }
+
+      if (selectedEligibility.length) {
+        const haystack = `${job.workRightsInformation || ''} ${job.internationalStudentInformation || ''}`.toLowerCase()
+        const eligibilityHit = selectedEligibility.some((value) => haystack.includes(value.toLowerCase()))
+        if (!eligibilityHit) return false
       }
 
       if (!selectedAreas.length) return true
@@ -834,6 +843,8 @@ export function listCompanies() {
   return rows.map((row) => {
     const companyJobs = jobsByCompany.get(String(row.id)) || []
     const families = new Set<string>()
+    let fitTotal = 0
+    let fitCount = 0
     for (const job of companyJobs) {
       const inferred = inferCareerFamilies({
         title: job.job_title,
@@ -843,7 +854,20 @@ export function listCompanies() {
         careerArea: job.career_area
       })
       for (const family of inferred) families.add(family)
+
+      const fit = getActuarialCareerFit({
+        title: job.job_title,
+        description: job.description,
+        requirements: job.requirements,
+        discipline: job.discipline,
+        careerArea: job.career_area
+      })
+      fitTotal += fit.score
+      fitCount += 1
     }
+
+    const averageCareerFit = fitCount ? Math.round(fitTotal / fitCount) : 0
+    const careerFamilyCount = families.size
 
     return {
       id: row.id,
@@ -854,10 +878,12 @@ export function listCompanies() {
       profileCreated: Boolean(row.profile_created),
       activeJobCount: Number(row.active_job_count || 0),
       careerFamilies: Array.from(families),
+      averageCareerFit,
       hiddenGem: isHiddenGemCompany({
         sourceType: row.source_type,
         activeJobCount: Number(row.active_job_count || 0),
-        companyName: row.name
+        averageCareerFit,
+        careerFamilyCount
       })
     }
   })
@@ -917,7 +943,8 @@ export function getCompanyDetails(companyId: string, userId?: string) {
             sourceUrl: job.source_url,
             officialCareersUrl: company.official_careers_url
           }),
-          lastVerified: job.last_verified
+          lastVerified: job.last_verified,
+          sourceType: job.source_type
         })
         return { opportunityStatus: status.status, opportunityStatusLabel: status.label }
       })(),
@@ -1231,6 +1258,88 @@ export function createApplicationFromJob(userId: string, input: {
     title: `Application tracked (${stage})`,
     details: `${job.company_name} · ${job.job_title}`,
     eventTimeUtc: input.appliedAtUtc || now
+  })
+
+  return applicationId
+}
+
+export function createManualApplication(userId: string, input: {
+  companyId?: string | null
+  customCompanyName?: string | null
+  roleTitle: string
+  careerFamily?: string | null
+  location?: string | null
+  stage?: CareerStage
+  appliedAtUtc?: string | null
+  applicationUrl?: string | null
+  deadlineDateOnly?: string | null
+  notes?: string | null
+}) {
+  ensureUser(userId)
+  const db = getDb()
+  const now = nowIso()
+  const stage = input.stage || 'Applied'
+
+  const companyId = input.companyId || null
+  const company = companyId
+    ? (db.prepare('SELECT id, name FROM career_companies WHERE id = ?').get(companyId) as any)
+    : null
+  const companyName = (input.customCompanyName || '').trim() || company?.name || 'Other company'
+
+  const roleTitle = input.roleTitle.trim()
+  if (!roleTitle) throw new Error('Role title is required.')
+
+  const appliedAtUtc = input.appliedAtUtc
+    ? new Date(input.appliedAtUtc).toISOString()
+    : now
+
+  const applicationId = id('app')
+  const snapshot = {
+    jobId: null,
+    companyId,
+    company: companyName,
+    jobTitle: roleTitle,
+    location: input.location || null,
+    roleType: stage,
+    discipline: input.careerFamily || null,
+    careerArea: input.careerFamily || null,
+    applicationUrl: input.applicationUrl || null,
+    sourceUrl: null,
+    sourceType: 'MANUAL',
+    closingDate: input.deadlineDateOnly || null,
+    workRightsInformation: 'Not stated',
+    internationalStudentInformation: 'Not stated'
+  }
+
+  db.prepare(`
+    INSERT INTO career_applications (
+      id, user_id, company_id, job_id, job_snapshot, title, stage, outstanding_actions, checklist,
+      notes, applied_at_utc, cv_document_id, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    applicationId,
+    userId,
+    companyId,
+    null,
+    toJson(snapshot),
+    `${companyName} · ${roleTitle}`,
+    stage,
+    toJson([]),
+    toJson(['CV', 'Cover letter', 'Transcript', 'Work rights information']),
+    input.notes || null,
+    appliedAtUtc,
+    null,
+    now,
+    now
+  )
+
+  appendApplicationEvent({
+    applicationId,
+    userId,
+    eventType: 'APPLICATION_CREATED',
+    title: `Manual application added (${stage})`,
+    details: `${companyName} · ${roleTitle}`,
+    eventTimeUtc: appliedAtUtc
   })
 
   return applicationId

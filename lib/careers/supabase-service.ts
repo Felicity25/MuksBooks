@@ -155,7 +155,7 @@ export async function listCompaniesSupabase(client: SupabaseClient) {
     hiddenGem: isHiddenGemCompany({
       sourceType: row.source_type,
       activeJobCount: byCompany.get(String(row.id)) || 0,
-      companyName: row.name
+      careerFamilyCount: (familiesByCompany.get(String(row.id)) || new Set<string>()).size
     })
   }))
 }
@@ -165,6 +165,7 @@ export async function listDiscoverJobsSupabase(client: SupabaseClient, filters: 
   roleTypes?: string[]
   disciplines?: string[]
   countries?: string[]
+  eligibility?: string[]
   companies?: string[]
   careerAreas?: string[]
 }) {
@@ -187,6 +188,7 @@ export async function listDiscoverJobsSupabase(client: SupabaseClient, filters: 
   const roleTypes = (filters.roleTypes || []).map((v) => normalizeText(v))
   const disciplines = (filters.disciplines || []).map((v) => normalizeText(v))
   const countries = (filters.countries || []).map((v) => normalizeText(v))
+  const eligibility = (filters.eligibility || []).map((v) => normalizeText(v))
   const companies = (filters.companies || []).map((v) => normalizeText(v))
   const careerAreas = (filters.careerAreas || []).map((v) => normalizeText(v))
 
@@ -280,6 +282,12 @@ export async function listDiscoverJobsSupabase(client: SupabaseClient, filters: 
         const disciplineHit = matchesFilterValue(job.discipline, disciplines)
           || disciplines.some((value) => job.careerFamilies.some((family: string) => normalizeText(family).includes(value)))
         if (!disciplineHit) return false
+      }
+
+      if (eligibility.length) {
+        const haystack = `${job.workRightsInformation || ''} ${job.internationalStudentInformation || ''}`.toLowerCase()
+        const eligibilityHit = eligibility.some((value) => haystack.includes(value))
+        if (!eligibilityHit) return false
       }
 
       if (!careerAreas.length) return true
@@ -694,6 +702,84 @@ export async function createApplicationFromJobSupabase(client: SupabaseClient, u
     title: `Application tracked (${stage})`,
     details: `${job.career_companies?.name || 'Company'} · ${job.job_title}`,
     event_time_utc: input.appliedAtUtc || now
+  })
+
+  if (eventError) throw new Error(eventError.message)
+  return applicationId
+}
+
+export async function createManualApplicationSupabase(client: SupabaseClient, userId: string, input: {
+  companyId?: string | null
+  customCompanyName?: string | null
+  roleTitle: string
+  careerFamily?: string | null
+  location?: string | null
+  stage?: CareerStage
+  appliedAtUtc?: string | null
+  applicationUrl?: string | null
+  deadlineDateOnly?: string | null
+  notes?: string | null
+}) {
+  const stage = input.stage || 'Applied'
+  const now = new Date().toISOString()
+
+  let companyName = (input.customCompanyName || '').trim()
+  if (!companyName && input.companyId) {
+    const { data: company, error: companyError } = await client
+      .from('career_companies')
+      .select('id, name')
+      .eq('id', input.companyId)
+      .maybeSingle()
+    if (companyError) throw new Error(companyError.message)
+    companyName = company?.name || ''
+  }
+  if (!companyName) companyName = 'Other company'
+
+  const roleTitle = input.roleTitle?.trim()
+  if (!roleTitle) throw new Error('Role title is required.')
+
+  const applicationId = makeId('app')
+  const snapshot = {
+    jobId: null,
+    companyId: input.companyId || null,
+    company: companyName,
+    jobTitle: roleTitle,
+    location: input.location || null,
+    roleType: stage,
+    discipline: input.careerFamily || null,
+    careerArea: input.careerFamily || null,
+    applicationUrl: input.applicationUrl || null,
+    sourceUrl: null,
+    sourceType: 'MANUAL',
+    closingDate: input.deadlineDateOnly || null,
+    workRightsInformation: 'Not stated',
+    internationalStudentInformation: 'Not stated'
+  }
+
+  const { error } = await client.from('career_applications').insert({
+    id: applicationId,
+    user_id: userId,
+    company_id: input.companyId || null,
+    job_id: null,
+    job_snapshot: snapshot,
+    title: `${companyName} · ${roleTitle}`,
+    stage,
+    outstanding_actions: [],
+    checklist: ['CV', 'Cover letter', 'Transcript', 'Work rights information'],
+    notes: input.notes || null,
+    applied_at_utc: input.appliedAtUtc ? new Date(input.appliedAtUtc).toISOString() : now
+  })
+
+  if (error) throw new Error(error.message)
+
+  const { error: eventError } = await client.from('career_application_events').insert({
+    id: makeId('appevt'),
+    application_id: applicationId,
+    user_id: userId,
+    event_type: 'APPLICATION_CREATED',
+    title: `Manual application added (${stage})`,
+    details: `${companyName} · ${roleTitle}`,
+    event_time_utc: input.appliedAtUtc ? new Date(input.appliedAtUtc).toISOString() : now
   })
 
   if (eventError) throw new Error(eventError.message)

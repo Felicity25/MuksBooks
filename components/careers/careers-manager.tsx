@@ -73,6 +73,15 @@ const DISCIPLINES = [
   'Government / Regulation'
 ]
 const COUNTRIES = ['Australia', 'South Africa', 'United Kingdom', 'International']
+const ELIGIBILITY_OPTIONS = [
+  'confirmed eligible',
+  'sponsorship',
+  'work rights',
+  'citizenship',
+  'pr required',
+  'eligibility unclear',
+  'confirmed restricted'
+]
 const CAREER_AREAS = [
   'Recommended for Actuarial Students',
   'Actuarial',
@@ -164,8 +173,10 @@ export function CareersManager() {
   const [selectedRoleTypes, setSelectedRoleTypes] = useState<string[]>([])
   const [selectedDisciplines, setSelectedDisciplines] = useState<string[]>([])
   const [selectedCountries, setSelectedCountries] = useState<string[]>([])
+  const [selectedEligibility, setSelectedEligibility] = useState<string[]>([])
   const [selectedCompanies, setSelectedCompanies] = useState<string[]>([])
   const [selectedCareerArea, setSelectedCareerArea] = useState<string>('Recommended for Actuarial Students')
+  const [filtersExpanded, setFiltersExpanded] = useState(true)
   const [assessmentForm, setAssessmentForm] = useState({
     companyId: '',
     customCompanyName: '',
@@ -178,6 +189,19 @@ export function CareersManager() {
     deadlineDateOnly: '',
     notes: ''
   })
+  const [manualApplicationOpen, setManualApplicationOpen] = useState(false)
+  const [manualApplicationForm, setManualApplicationForm] = useState({
+    companyId: '',
+    customCompanyName: '',
+    roleTitle: '',
+    careerFamily: '',
+    location: '',
+    applicationDate: '',
+    stage: 'Applied',
+    applicationUrl: '',
+    deadlineDateOnly: '',
+    notes: ''
+  })
 
   const qsFilters = useMemo(() => {
     const params = new URLSearchParams()
@@ -185,10 +209,16 @@ export function CareersManager() {
     if (selectedRoleTypes.length) params.set('roleTypes', selectedRoleTypes.join(','))
     if (selectedDisciplines.length) params.set('disciplines', selectedDisciplines.join(','))
     if (selectedCountries.length) params.set('countries', selectedCountries.join(','))
+    if (selectedEligibility.length) params.set('eligibility', selectedEligibility.join(','))
     if (selectedCompanies.length) params.set('companies', selectedCompanies.join(','))
     if (selectedCareerArea) params.set('careerAreas', selectedCareerArea)
     return params.toString()
-  }, [query, selectedRoleTypes, selectedDisciplines, selectedCountries, selectedCompanies, selectedCareerArea])
+  }, [query, selectedRoleTypes, selectedDisciplines, selectedCountries, selectedEligibility, selectedCompanies, selectedCareerArea])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (window.innerWidth < 900) setFiltersExpanded(false)
+  }, [])
 
   const loadCareers = async () => {
     setIsLoading(true)
@@ -341,6 +371,55 @@ export function CareersManager() {
         body: JSON.stringify({ action: 'update-application', applicationId, stage })
       })
       setMessage('Application stage updated.')
+    })
+  }
+
+  const handleCreateManualApplication = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+
+    await runProtectedAction('Sign in to add manual applications.', async () => {
+      const isOtherCompany = manualApplicationForm.companyId === OTHER_COMPANY_VALUE
+      const customCompanyName = manualApplicationForm.customCompanyName.trim()
+      if (isOtherCompany && !customCompanyName) {
+        throw new Error('Please provide the company name when selecting Other.')
+      }
+
+      const response = await fetch('/api/careers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'create-manual-application',
+          companyId: isOtherCompany ? null : (manualApplicationForm.companyId || null),
+          customCompanyName: isOtherCompany ? customCompanyName : null,
+          roleTitle: manualApplicationForm.roleTitle,
+          careerFamily: manualApplicationForm.careerFamily || null,
+          location: manualApplicationForm.location || null,
+          appliedAtUtc: manualApplicationForm.applicationDate ? new Date(manualApplicationForm.applicationDate).toISOString() : null,
+          stage: manualApplicationForm.stage,
+          applicationUrl: manualApplicationForm.applicationUrl || null,
+          deadlineDateOnly: manualApplicationForm.deadlineDateOnly || null,
+          notes: manualApplicationForm.notes || null
+        })
+      })
+      const payload = await response.json()
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || 'Could not create manual application.')
+      }
+
+      setManualApplicationForm({
+        companyId: '',
+        customCompanyName: '',
+        roleTitle: '',
+        careerFamily: '',
+        location: '',
+        applicationDate: '',
+        stage: 'Applied',
+        applicationUrl: '',
+        deadlineDateOnly: '',
+        notes: ''
+      })
+      setManualApplicationOpen(false)
+      setMessage('Manual application added.')
     })
   }
 
@@ -887,7 +966,70 @@ export function CareersManager() {
 
       {activeTab === 'applications' && (
         <Card className="space-y-4">
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">My applications</p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">My applications</p>
+            <Button size="sm" variant="outline" onClick={() => setManualApplicationOpen((current) => !current)}>
+              {manualApplicationOpen ? 'Close Manual Entry' : 'Add Application Manually'}
+            </Button>
+          </div>
+
+          {manualApplicationOpen && (
+            <form onSubmit={handleCreateManualApplication} className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
+              <p className="text-sm font-semibold text-slate-900">+ Add Application</p>
+              <div className="grid gap-3 md:grid-cols-2">
+                <select value={manualApplicationForm.companyId} onChange={(event) => setManualApplicationForm((current) => ({ ...current, companyId: event.target.value }))} className="rounded-md border border-slate-300 px-3 py-2 text-sm">
+                  <option value="">Select company (optional)</option>
+                  {state.companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
+                  <option value={OTHER_COMPANY_VALUE}>Other</option>
+                </select>
+                {manualApplicationForm.companyId === OTHER_COMPANY_VALUE && (
+                  <input
+                    value={manualApplicationForm.customCompanyName}
+                    onChange={(event) => setManualApplicationForm((current) => ({ ...current, customCompanyName: event.target.value }))}
+                    required
+                    placeholder="Company name"
+                    className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+                  />
+                )}
+                <input value={manualApplicationForm.roleTitle} onChange={(event) => setManualApplicationForm((current) => ({ ...current, roleTitle: event.target.value }))} required placeholder="Role title" className="rounded-md border border-slate-300 px-3 py-2 text-sm" />
+                <input value={manualApplicationForm.careerFamily} onChange={(event) => setManualApplicationForm((current) => ({ ...current, careerFamily: event.target.value }))} placeholder="Career family (e.g. Actuarial, Risk, Quant)" className="rounded-md border border-slate-300 px-3 py-2 text-sm" />
+                <input value={manualApplicationForm.location} onChange={(event) => setManualApplicationForm((current) => ({ ...current, location: event.target.value }))} placeholder="Location" className="rounded-md border border-slate-300 px-3 py-2 text-sm" />
+                <select value={manualApplicationForm.stage} onChange={(event) => setManualApplicationForm((current) => ({ ...current, stage: event.target.value }))} className="rounded-md border border-slate-300 px-3 py-2 text-sm">
+                  {APPLICATION_STAGES.map((stage) => <option key={stage} value={stage}>{stage}</option>)}
+                </select>
+                <input type="datetime-local" value={manualApplicationForm.applicationDate} onChange={(event) => setManualApplicationForm((current) => ({ ...current, applicationDate: event.target.value }))} className="rounded-md border border-slate-300 px-3 py-2 text-sm" />
+                <input type="date" value={manualApplicationForm.deadlineDateOnly} onChange={(event) => setManualApplicationForm((current) => ({ ...current, deadlineDateOnly: event.target.value }))} className="rounded-md border border-slate-300 px-3 py-2 text-sm" />
+                <input value={manualApplicationForm.applicationUrl} onChange={(event) => setManualApplicationForm((current) => ({ ...current, applicationUrl: event.target.value }))} placeholder="Application URL" className="md:col-span-2 rounded-md border border-slate-300 px-3 py-2 text-sm" />
+              </div>
+              <textarea value={manualApplicationForm.notes} onChange={(event) => setManualApplicationForm((current) => ({ ...current, notes: event.target.value }))} placeholder="Notes" className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
+              <div className="flex flex-wrap gap-2">
+                <Button type="submit" size="sm">Save Manual Application</Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setManualApplicationForm({
+                      companyId: '',
+                      customCompanyName: '',
+                      roleTitle: '',
+                      careerFamily: '',
+                      location: '',
+                      applicationDate: '',
+                      stage: 'Applied',
+                      applicationUrl: '',
+                      deadlineDateOnly: '',
+                      notes: ''
+                    })
+                    setManualApplicationOpen(false)
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          )}
+
           {!isLoading && state.applications.length === 0 && (
             <p className="text-sm text-slate-600">Track an application to start managing deadlines, assessments and recruitment stages.</p>
           )}

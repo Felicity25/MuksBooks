@@ -24,7 +24,8 @@ export const CAREER_AREAS = [
 export type CareerArea = typeof CAREER_AREAS[number]
 
 export type OpportunityStatus =
-  | 'OPEN_NOW'
+  | 'CURRENTLY_LISTED'
+  | 'LIKELY_OPEN'
   | 'CLOSING_SOON'
   | 'CLOSED_OR_EXPIRED'
   | 'LISTING_UNAVAILABLE'
@@ -230,6 +231,7 @@ export function getOpportunityStatus(input: {
   closingDate?: string | null
   applicationUrl?: string | null
   lastVerified?: string | null
+  sourceType?: string | null
 }) {
   if (!input.applicationUrl) {
     return {
@@ -241,7 +243,7 @@ export function getOpportunityStatus(input: {
   if (isJobListingExpired(input.closingDate)) {
     return {
       status: 'CLOSED_OR_EXPIRED' as OpportunityStatus,
-      label: 'Closed / previous opportunity'
+      label: 'Closed'
     }
   }
 
@@ -252,11 +254,13 @@ export function getOpportunityStatus(input: {
       if (diffMs > 0 && diffMs <= 1000 * 60 * 60 * 24 * 7) {
         return {
           status: 'CLOSING_SOON' as OpportunityStatus,
-          label: 'Closing soon'
+          label: `Closes ${closing.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}`
         }
       }
     }
   }
+
+  const sourceType = (input.sourceType || '').toUpperCase()
 
   if (input.lastVerified) {
     const verifiedAt = new Date(input.lastVerified)
@@ -265,30 +269,45 @@ export function getOpportunityStatus(input: {
       if (staleMs > 1000 * 60 * 60 * 24 * 30) {
         return {
           status: 'STALE_UNVERIFIED' as OpportunityStatus,
-          label: 'Not recently verified'
+          label: 'Unable to verify current status'
         }
+      }
+
+      if (sourceType.includes('OFFICIAL')) {
+        return {
+          status: 'CURRENTLY_LISTED' as OpportunityStatus,
+          label: 'Currently listed'
+        }
+      }
+
+      return {
+        status: 'LIKELY_OPEN' as OpportunityStatus,
+        label: 'Likely open'
       }
     }
   }
 
   return {
-    status: 'OPEN_NOW' as OpportunityStatus,
-    label: 'Open now'
+    status: 'LIKELY_OPEN' as OpportunityStatus,
+    label: 'Likely open'
   }
 }
 
 export function isHiddenGemCompany(input: {
   sourceType?: string | null
   activeJobCount?: number
-  companyName?: string | null
+  averageCareerFit?: number
+  careerFamilyCount?: number
 }) {
   const sourceType = (input.sourceType || '').toUpperCase()
-  const smallFootprint = Number(input.activeJobCount || 0) <= 2
+  const activeJobCount = Number(input.activeJobCount || 0)
+  const averageCareerFit = Number(input.averageCareerFit || 0)
+  const familyCount = Number(input.careerFamilyCount || 0)
+  const smallFootprint = activeJobCount <= 3
   const societySeeded = sourceType.includes('SOCIETY_SEED')
-  const boutiqueSignals = ['taylor fry', 'dynamo', 'finity', 'am actuaries'].some((term) =>
-    (input.companyName || '').toLowerCase().includes(term)
-  )
-  return societySeeded || (smallFootprint && boutiqueSignals)
+
+  // Dynamic rule: strong relevance + smaller visibility + meaningful domain breadth.
+  return (smallFootprint && averageCareerFit >= 72 && familyCount >= 1) || (societySeeded && averageCareerFit >= 68)
 }
 
 /**
