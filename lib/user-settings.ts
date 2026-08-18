@@ -194,6 +194,74 @@ export const DEFAULT_USER_SETTINGS: UserSettings = {
 
 export const GUEST_SETTINGS_KEY = 'muksbooks:user-settings:v2'
 
+const WIDGET_IDS: WidgetId[] = [
+  'suggested-actions', 'todays-classes', 'planner', 'assessments', 'current-week',
+  'semester-timeline', 'units', 'mastery-pulse', 'quick-upload', 'tutor',
+  'distribution', 'resources', 'actuarial-news', 'careers', 'applications',
+  'mass-pulse', 'saved-resources', 'exemption-progress', 'recent-uploads', 'semester-progress'
+]
+const WIDGET_SIZES: WidgetSize[] = ['small', 'medium', 'large', 'wide']
+const QUICK_ACTION_IDS: QuickActionId[] = ['upload', 'ask-tutor', 'add-task', 'careers', 'todays-classes']
+const PROACTIVITY_KEYS: Array<keyof ProactivityControls> = [
+  'lecturePreparation', 'tutorialPreparation', 'workshopPreparation', 'postClassReview',
+  'assessmentPreparation', 'catchUpTasks', 'deepDives', 'textbookResources',
+  'professionalResources', 'distributionOfTheDay', 'internshipsJobs', 'applicationActions',
+  'careerEvents', 'massEvents', 'massProjects', 'massCareers', 'massAcademic'
+]
+
+type SettingsParseResult =
+  | { valid: true; data: Partial<UserSettings> }
+  | { valid: false; error: string }
+
+export function parseUserSettingsUpdate(value: unknown): SettingsParseResult {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return { valid: false, error: 'Settings must be a JSON object.' }
+  const update = value as Record<string, unknown>
+  const enums: Record<string, readonly string[]> = {
+    theme: ['light', 'dark', 'system'],
+    textSize: ['small', 'default', 'large', 'extra-large'],
+    density: ['compact', 'comfortable', 'spacious'],
+    motion: ['normal', 'reduced'],
+    font: ['modern', 'readable', 'academic'],
+    feedbackStrictness: ['lenient', 'normal', 'strict'],
+    proactivityLevel: ['quiet', 'balanced', 'proactive'],
+    homepagePreset: ['academic-weapon', 'study-focus', 'career-focus', 'minimal', 'build-my-own']
+  }
+
+  for (const [field, allowed] of Object.entries(enums)) {
+    if (field in update && !allowed.includes(update[field] as string)) return { valid: false, error: `Invalid ${field}.` }
+  }
+  for (const field of ['name', 'degree', 'targetMarks', 'studyTimes', 'timezone']) {
+    if (field in update && typeof update[field] !== 'string') return { valid: false, error: `${field} must be a string.` }
+  }
+  if ('pomodoroLength' in update && (!Number.isInteger(update.pomodoroLength) || Number(update.pomodoroLength) < 5 || Number(update.pomodoroLength) > 90)) {
+    return { valid: false, error: 'pomodoroLength must be an integer from 5 to 90.' }
+  }
+  if ('quickActions' in update) {
+    if (!Array.isArray(update.quickActions) || update.quickActions.some((id) => !QUICK_ACTION_IDS.includes(id as QuickActionId))) return { valid: false, error: 'quickActions contains an invalid action.' }
+    if (new Set(update.quickActions).size !== update.quickActions.length) return { valid: false, error: 'quickActions contains duplicates.' }
+  }
+  if ('homepageLayout' in update) {
+    if (!Array.isArray(update.homepageLayout)) return { valid: false, error: 'homepageLayout must be an array.' }
+    const seen = new Set<string>()
+    for (const item of update.homepageLayout) {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return { valid: false, error: 'Each homepage widget must be an object.' }
+      const widget = item as Record<string, unknown>
+      if (!WIDGET_IDS.includes(widget.id as WidgetId)) return { valid: false, error: 'homepageLayout contains an invalid widget.' }
+      if (!WIDGET_SIZES.includes(widget.size as WidgetSize)) return { valid: false, error: 'homepageLayout contains an invalid size.' }
+      if (seen.has(widget.id as string)) return { valid: false, error: 'homepageLayout contains duplicate widgets.' }
+      if ('settings' in widget && (!widget.settings || typeof widget.settings !== 'object' || Array.isArray(widget.settings))) return { valid: false, error: 'Widget settings must be an object.' }
+      seen.add(widget.id as string)
+    }
+  }
+  if ('proactivityControls' in update) {
+    if (!update.proactivityControls || typeof update.proactivityControls !== 'object' || Array.isArray(update.proactivityControls)) return { valid: false, error: 'proactivityControls must be an object.' }
+    for (const [key, enabled] of Object.entries(update.proactivityControls)) {
+      if (!PROACTIVITY_KEYS.includes(key as keyof ProactivityControls) || typeof enabled !== 'boolean') return { valid: false, error: 'proactivityControls contains an invalid value.' }
+    }
+  }
+  return { valid: true, data: update as Partial<UserSettings> }
+}
+
 export function normalizeUserSettings(value?: Partial<UserSettings> | null): UserSettings {
   // Strip null/undefined keys first so a present-but-empty field (e.g. a brand-new user's
   // `theme: undefined`) never clobbers DEFAULT_USER_SETTINGS via object spread.
