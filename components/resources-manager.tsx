@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
+import katex from 'katex'
 import {
   ArrowUpRight, Bookmark, BookOpen, Calculator, Check, ChevronRight, FlaskConical,
   GraduationCap, Library, Loader2, RefreshCw, Search, ShieldCheck, Sparkles
@@ -11,7 +12,8 @@ import { useAuth } from '@/components/auth-provider'
 import { ACTUARIAL_RESOURCES, PROFESSIONAL_SUBJECTS, relevanceScore, type ActuarialResource, type ResourceKind } from '@/lib/resources/catalog'
 import {
   DISTRIBUTIONS, defaultParameters, distributionMetricPoints, distributionQuantile,
-  distributionSummary, intervalProbability, simulateDistribution, type DistributionId, type DistributionMetric
+  distributionPlotYMax, distributionSummary, intervalProbability, normalizeParameters,
+  simulateDistribution, type DistributionId, type DistributionMetric
 } from '@/lib/resources/distributions'
 import {
   calculateExemptionEstimate,
@@ -35,18 +37,24 @@ interface SavedResource {
 
 const resourceKinds: Array<'All' | ResourceKind> = ['All', 'Deep Dive', 'Textbook', 'Paper', 'Professional', 'Regulatory']
 
-function compactNumber(value: number) {
+function compactNumber(value: number | null) {
+  if (value === null) return 'Not defined'
   if (!Number.isFinite(value)) return 'Not defined'
   if (Math.abs(value) >= 1000 || (Math.abs(value) > 0 && Math.abs(value) < 0.001)) return value.toExponential(3)
   return Number(value.toFixed(4)).toString()
 }
 
-function DistributionChart({ points, discrete, comparison = [] }: { points: Array<{ x: number; y: number }>; discrete: boolean; comparison?: Array<{ x: number; y: number }> }) {
+function MathFormula({ value, className = '' }: { value: string; className?: string }) {
+  const markup = useMemo(() => katex.renderToString(value, { throwOnError: false, strict: false }), [value])
+  return <span className={className} dangerouslySetInnerHTML={{ __html: markup }} />
+}
+
+function DistributionChart({ points, discrete, comparison = [], fixedYMax }: { points: Array<{ x: number; y: number }>; discrete: boolean; comparison?: Array<{ x: number; y: number }>; fixedYMax?: number }) {
   const width = 720
   const height = 280
   const padding = 32
   const allPoints = [...points, ...comparison]
-  const maxY = Math.max(...allPoints.map((point) => point.y), 0.001)
+  const maxY = Math.max(fixedYMax || 0, ...allPoints.map((point) => point.y), 0.001)
   const minX = Math.min(...allPoints.map((point) => point.x))
   const maxX = Math.max(...allPoints.map((point) => point.x))
   const xScale = (value: number) => padding + (value - minX) / Math.max(maxX - minX, 1) * (width - padding * 2)
@@ -343,6 +351,7 @@ export function ResourcesManager() {
   }), [difficulty, kind, professionalSubject, search])
 
   const points = useMemo(() => distributionMetricPoints(distribution.id, parameters, metric), [distribution, metric, parameters])
+  const plotYMax = useMemo(() => distributionPlotYMax(distribution.id, metric), [distribution.id, metric])
   const comparisonPoints = useMemo(() => {
     if (comparisonId === 'None') return []
     const compared = DISTRIBUTIONS.find((item) => item.id === comparisonId)
@@ -423,13 +432,13 @@ export function ResourcesManager() {
         </div>
         <div className="mt-6 flex gap-2 overflow-x-auto pb-1">{(['density', 'cdf', 'survival', 'hazard'] as DistributionMetric[]).map((item) => <button key={item} onClick={() => setMetric(item)} className={`shrink-0 rounded-full px-3 py-2 text-xs font-semibold uppercase ${metric === item ? 'bg-teal-300 text-slate-950' : 'bg-slate-800 text-slate-300'}`}>{item === 'density' ? distribution.family === 'Discrete' ? 'PMF' : 'PDF' : item}</button>)}</div>
         <div className="mt-5 grid gap-7 lg:grid-cols-[minmax(0,1.65fr)_minmax(270px,0.75fr)]">
-          <div><DistributionChart points={points} comparison={comparisonPoints} discrete={distribution.family === 'Discrete' && metric === 'density'} /><div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><p className="overflow-x-auto font-mono text-xs text-teal-200">{distribution.formula}</p><label className="shrink-0 text-xs text-slate-300">Compare with <select value={comparisonId} onChange={(event) => setComparisonId(event.target.value as 'None' | DistributionId)} className="ml-2 h-8 rounded-md border border-slate-600 bg-slate-900 px-2"><option>None</option>{DISTRIBUTIONS.filter((item) => item.id !== distribution.id).map((item) => <option key={item.id} value={item.id}>{item.name} defaults</option>)}</select></label></div></div>
+          <div><DistributionChart points={points} comparison={comparisonPoints} fixedYMax={plotYMax} discrete={distribution.family === 'Discrete' && metric === 'density'} /><div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0 space-y-1 overflow-x-auto text-xs text-teal-200"><MathFormula value={distribution.latex.density} /><div className="text-slate-300"><MathFormula value={distribution.latex.cdf} /></div></div><label className="shrink-0 text-xs text-slate-300">Compare with <select value={comparisonId} onChange={(event) => setComparisonId(event.target.value as 'None' | DistributionId)} className="ml-2 h-8 rounded-md border border-slate-600 bg-slate-900 px-2"><option>None</option>{DISTRIBUTIONS.filter((item) => item.id !== distribution.id).map((item) => <option key={item.id} value={item.id}>{item.name} defaults</option>)}</select></label></div></div>
           <div className="space-y-5">
-            {distribution.parameters.map((parameter) => <label key={parameter.key} className="block text-sm"><span className="flex justify-between"><span>{parameter.label} ({parameter.symbol})</span><strong>{parameters[parameter.key]}</strong></span><input type="range" min={parameter.min} max={parameter.max} step={parameter.step} value={parameters[parameter.key]} onChange={(event) => setParameters((current) => ({ ...current, [parameter.key]: Number(event.target.value) }))} className="mt-3 w-full accent-teal-400" /></label>)}
-            <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg bg-slate-700 text-sm"><div className="bg-slate-900 p-3"><p className="text-slate-400">Mean</p><p className="mt-1 font-semibold">{compactNumber(summary.mean)}</p></div><div className="bg-slate-900 p-3"><p className="text-slate-400">Variance</p><p className="mt-1 font-semibold">{compactNumber(summary.variance)}</p></div><div className="bg-slate-900 p-3"><p className="text-slate-400">Std. deviation</p><p className="mt-1 font-semibold">{compactNumber(summary.standardDeviation)}</p></div><div className="bg-slate-900 p-3"><p className="text-slate-400">Support</p><p className="mt-1 font-semibold">{summary.support}</p></div></div>
+            {distribution.parameters.map((parameter) => <label key={parameter.key} className="block text-sm"><span className="flex justify-between"><span>{parameter.label} (<MathFormula value={parameter.symbol} />)</span><strong>{parameters[parameter.key]}</strong></span><input type="range" min={parameter.min} max={parameter.max} step={parameter.step} value={parameters[parameter.key]} onChange={(event) => setParameters((current) => normalizeParameters(distribution, { ...current, [parameter.key]: Number(event.target.value) }))} className="mt-3 w-full accent-teal-400" /><span className="mt-1 block text-xs leading-5 text-slate-400">{parameter.description}</span></label>)}
+            <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg bg-slate-700 text-sm"><div className="bg-slate-900 p-3"><p className="text-slate-400">Mean</p><p className="mt-1 font-semibold">{summary.meanNote || compactNumber(summary.mean)}</p><MathFormula value={distribution.latex.mean} className="mt-1 block text-xs text-slate-400" /></div><div className="bg-slate-900 p-3"><p className="text-slate-400">Variance</p><p className="mt-1 font-semibold">{summary.varianceNote || compactNumber(summary.variance)}</p><MathFormula value={distribution.latex.variance} className="mt-1 block text-xs text-slate-400" /></div><div className="bg-slate-900 p-3"><p className="text-slate-400">Std. deviation</p><p className="mt-1 font-semibold">{compactNumber(summary.standardDeviation)}</p></div><div className="bg-slate-900 p-3"><p className="text-slate-400">Support</p><MathFormula value={summary.support} className="mt-1 block font-semibold" /></div></div>
           </div>
         </div>
-        <div className="mt-7 grid gap-4 border-t border-slate-700 pt-6 md:grid-cols-2"><p className="text-sm leading-6 text-slate-300"><strong className="text-white">Actuarial use.</strong> {distribution.actuarialUse}</p><p className="text-sm leading-6 text-slate-300"><strong className="text-white">Watch for.</strong> {distribution.commonMistake}</p></div>
+        <div className="mt-7 grid gap-4 border-t border-slate-700 pt-6 md:grid-cols-2"><div className="text-sm leading-6 text-slate-300"><p><strong className="text-white">Actuarial connection.</strong> {distribution.actuarialUse}</p><div className="mt-2 flex flex-wrap gap-2">{distribution.syllabus.map((subject) => <span key={subject} className="rounded-full bg-slate-800 px-2.5 py-1 text-xs text-teal-200">{subject}</span>)}</div></div><div className="text-sm leading-6 text-slate-300"><p><strong className="text-white">Watch for.</strong> {distribution.commonMistake}</p><p className="mt-2 text-xs text-slate-400"><strong className="text-slate-200">Related:</strong> {distribution.related}</p>{distribution.latex.moment ? <MathFormula value={distribution.latex.moment} className="mt-2 block overflow-x-auto text-xs text-teal-200" /> : null}</div></div>
         <div className="mt-6 grid gap-px overflow-hidden rounded-lg bg-slate-700 lg:grid-cols-3">
           <div className="bg-slate-900 p-5">
             <p className="text-sm font-semibold">Interval probability</p>
