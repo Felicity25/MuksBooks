@@ -381,7 +381,7 @@ export function ResourcesManager() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-12 px-4 py-8 sm:px-6 lg:px-8">
+    <div className="mx-auto w-full min-w-0 max-w-7xl space-y-12 overflow-x-hidden px-4 py-8 sm:px-6 lg:px-8">
       <header className="border-b border-slate-200 pb-8">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl">
@@ -389,7 +389,7 @@ export function ResourcesManager() {
             <h1 className="mt-3 text-4xl font-semibold text-slate-950 sm:text-5xl">Resources</h1>
             <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">Move from this week&apos;s Monash topics into rigorous mathematics, professional syllabi, primary sources and interactive models.</p>
           </div>
-          <div className="grid grid-cols-3 divide-x divide-slate-200 border-y border-slate-200 py-3 text-center lg:min-w-[430px]">
+          <div className="grid min-w-0 grid-cols-3 divide-x divide-slate-200 border-y border-slate-200 py-3 text-center lg:min-w-[430px]">
             <div><p className="text-2xl font-semibold text-slate-950">{dashboard?.activeCourses?.length || 0}</p><p className="text-xs text-slate-500">Active units</p></div>
             <div><p className="text-2xl font-semibold text-slate-950">{dashboard?.currentTopics?.length || 0}</p><p className="text-xs text-slate-500">Weekly topics</p></div>
             <div><p className="text-2xl font-semibold text-slate-950">{savedIds.size}</p><p className="text-xs text-slate-500">Saved</p></div>
@@ -406,7 +406,7 @@ export function ResourcesManager() {
           <div className="grid border-y border-slate-200 lg:grid-cols-[0.75fr_2fr]">
             <div className="border-b border-slate-200 py-6 lg:border-b-0 lg:border-r lg:pr-6">
               <p className="text-xs font-semibold uppercase text-slate-500">Detected topics</p>
-              <div className="mt-4 flex flex-wrap gap-2">{contextTopics.length ? contextTopics.slice(0, 8).map((topic) => <span key={topic} className="rounded-full border border-slate-200 px-3 py-1.5 text-sm text-slate-700">{topic}</span>) : <p className="text-sm leading-6 text-slate-500">Add weekly topics in Units or upload lecture material to personalise this shelf.</p>}</div>
+              <div className="mt-4 flex min-w-0 flex-wrap gap-2">{contextTopics.length ? contextTopics.slice(0, 8).map((topic) => <span key={topic} className="max-w-full break-words rounded-full border border-slate-200 px-3 py-1.5 text-sm text-slate-700">{topic}</span>) : <p className="text-sm leading-6 text-slate-500">Add weekly topics in Units or upload lecture material to personalise this shelf.</p>}</div>
               {!!dashboard?.recentResources?.length && <p className="mt-5 text-xs text-slate-500">Grounded by {dashboard.recentResources.length} recent upload{dashboard.recentResources.length === 1 ? '' : 's'}.</p>}
             </div>
             <div className="grid gap-x-6 py-6 lg:grid-cols-3 lg:pl-6">{recommendations.map((resource) => <ResourceCard key={resource.id} resource={resource} unit={selectedUnit} saved={savedIds.has(resource.id)} onSave={toggleSaved} />)}</div>
