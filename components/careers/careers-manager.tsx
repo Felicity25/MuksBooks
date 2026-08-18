@@ -772,7 +772,7 @@ export function CareersManager() {
                   <div className="flex flex-wrap gap-2">
                     {job.applicationUrl && <a href={job.applicationUrl} target="_blank" rel="noreferrer"><Button size="sm">Apply on Company Website</Button></a>}
                     <Button size="sm" variant="outline" onClick={() => handleSaveRole(job.id)}>Save Role</Button>
-                    <Button size="sm" variant="outline" onClick={() => handleTrackApplication(job.id)}>I've Applied</Button>
+                    <Button size="sm" variant="outline" onClick={() => handleTrackApplication(job.id)}>I&apos;ve Applied</Button>
                     <Button size="sm" variant="outline" onClick={() => handleFollowCompany(job.companyId)}>Follow Company</Button>
                     <Button size="sm" variant="outline" onClick={() => handleCvMatch(job.id)}>CV Match</Button>
                   </div>
@@ -862,7 +862,7 @@ export function CareersManager() {
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Following</p>
           {followingEmpty && (
             <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5">
-              <p className="text-base font-semibold text-slate-900">Follow companies you're interested in</p>
+              <p className="text-base font-semibold text-slate-900">Follow companies you&apos;re interested in</p>
               <p className="mt-1 text-sm text-slate-600">Search employers such as Mercer, Aon, QBE or Deloitte and MuksBooks will keep their opportunities together here.</p>
               <Button className="mt-3" size="sm" onClick={() => setActiveTab('discover')}>Find Companies</Button>
             </div>
@@ -876,7 +876,7 @@ export function CareersManager() {
                   <p className="text-sm text-slate-600">{item.summary}</p>
                   {item.state === 'NO_OPENINGS' && <p className="text-sm text-slate-600">No current openings found.</p>}
                   {item.state === 'NO_MATCHING' && <p className="text-sm text-slate-600">{item.totalOpenings} current roles found, none match your selected preferences.</p>}
-                  {item.state === 'SOURCE_UNAVAILABLE' && <p className="text-sm text-amber-700">We couldn't check listings right now.</p>}
+                  {item.state === 'SOURCE_UNAVAILABLE' && <p className="text-sm text-amber-700">We couldn&apos;t check listings right now.</p>}
                   <p className="text-xs text-slate-500">Last checked: {formatDateTime(item.lastCheckedAt, timezoneToUse)}</p>
                   {item.lastSuccessfulCheckAt && <p className="text-xs text-slate-500">Last successful check: {formatDateTime(item.lastSuccessfulCheckAt, timezoneToUse)}</p>}
                   <p className="text-xs text-slate-500">Following: {[...item.roleTypes, ...item.disciplines, ...item.countries].join(' · ') || 'All roles'}</p>
@@ -938,7 +938,7 @@ export function CareersManager() {
         <Card className="space-y-4">
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Saved roles</p>
           {!isLoading && state.savedRoles.length === 0 && (
-            <p className="text-sm text-slate-600">Save opportunities you're interested in and they will remain here even after the live feed changes.</p>
+            <p className="text-sm text-slate-600">Save opportunities you&apos;re interested in and they will remain here even after the live feed changes.</p>
           )}
           {state.savedRoles.map((saved) => (
             <div key={saved.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
