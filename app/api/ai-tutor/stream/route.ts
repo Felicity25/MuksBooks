@@ -100,6 +100,10 @@ export async function POST(request: NextRequest) {
             metadata: {
               provider,
               model,
+              unitSelectionMode: promptContext.unitSelectionMode,
+              selectedUnitCode: promptContext.selectedUnitCode,
+              detectedUnitCode: promptContext.detectedUnitCode,
+              effectiveUnitCode: promptContext.effectiveUnitCode,
               mode: body.mode || null,
               topic: body.topic || null
             }
@@ -125,7 +129,17 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        controller.enqueue(encoder.encode(sseEvent('meta', { provider, model, citations, done: true })))
+        controller.enqueue(encoder.encode(sseEvent('meta', {
+          provider,
+          model,
+          citations,
+          unitSelectionMode: promptContext.unitSelectionMode,
+          selectedUnitCode: promptContext.selectedUnitCode,
+          detectedUnitCode: promptContext.detectedUnitCode,
+          effectiveUnitCode: promptContext.effectiveUnitCode,
+          detectionConfidence: promptContext.detectionConfidence,
+          done: true
+        })))
         controller.enqueue(encoder.encode(sseEvent('done', { ok: true })))
         controller.close()
       } catch (error: any) {

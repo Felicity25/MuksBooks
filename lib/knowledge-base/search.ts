@@ -69,7 +69,8 @@ export async function searchKnowledgeBase(query: string, courseCode?: string, li
                 relationships: [],
                 embeddingPath: '',
                 sourcePriority: 1,
-                version: 1
+                version: 1,
+                courseCode: c.course_code ?? null
               } as ChunkRecord,
               score: emb.length > 0 ? cosineSimilarity(queryEmbedding, emb) : 0
             }
@@ -90,6 +91,9 @@ export async function searchKnowledgeBase(query: string, courseCode?: string, li
   const queryEmbedding = await embedText(query)
 
   const activeDocuments = catalog.documents.filter((doc) => doc.status === 'active' && doc.metadata.courseCode)
+  const documentCourseMap = new Map(
+    activeDocuments.map((doc) => [doc.documentId, doc.metadata.courseCode?.toUpperCase() || null])
+  )
   const activeDocIds = new Set(
     activeDocuments
       .filter((doc) => !courseCode || doc.metadata.courseCode.toUpperCase() === courseCode.toUpperCase())
@@ -103,7 +107,13 @@ export async function searchKnowledgeBase(query: string, courseCode?: string, li
     try {
       const emb = await loadEmbedding(chunk)
       const score = cosineSimilarity(queryEmbedding, emb) + (1 / chunk.sourcePriority) * 0.02
-      scored.push({ chunk, score })
+      scored.push({
+        chunk: {
+          ...chunk,
+          courseCode: documentCourseMap.get(chunk.documentId) || null
+        } as ChunkRecord,
+        score
+      })
     } catch {
       // skip unreadable embedding
     }

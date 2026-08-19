@@ -70,6 +70,7 @@ export async function createTutorConversation(input: {
   unitId?: string | null
   activeUnitCode?: string | null
   mode?: string | null
+  sourceScope?: Record<string, unknown>
 }) {
   const client = createSupabaseServerClient()
   if (!client) return null
@@ -85,7 +86,7 @@ export async function createTutorConversation(input: {
       unit_id: input.unitId ?? null,
       active_unit_code: input.activeUnitCode ?? null,
       mode: input.mode ?? null,
-      source_scope: {}
+      source_scope: input.sourceScope || {}
     })
     .select('id, user_id, unit_id, active_unit_code, title, mode, source_scope, summary, created_at, updated_at')
     .single()

@@ -33,6 +33,11 @@ type TutorConversation = {
   unit_id?: string | null
   active_unit_code?: string | null
   mode?: string | null
+  source_scope?: {
+    unitSelectionMode?: 'general' | 'auto' | 'manual'
+    selectedUnitCode?: string | null
+    detectedUnitCode?: string | null
+  } | null
   created_at: string
   updated_at: string
 }
@@ -57,6 +62,19 @@ type RLabRunResult = {
 
 function normalizeUnitCode(value?: string) {
   return value?.toUpperCase().replace(/\s+/g, '') || ''
+}
+
+const UNIT_CHOICE_GENERAL = ''
+const UNIT_CHOICE_AUTO = '__AUTO__'
+
+function getUnitSelectionMode(unitChoice: string): 'general' | 'auto' | 'manual' {
+  if (unitChoice === UNIT_CHOICE_AUTO) return 'auto'
+  if (!unitChoice) return 'general'
+  return 'manual'
+}
+
+function getManualUnitCode(unitChoice: string) {
+  return getUnitSelectionMode(unitChoice) === 'manual' ? normalizeUnitCode(unitChoice) : null
 }
 
 async function fetchJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
@@ -118,7 +136,8 @@ export function AiTutorChat() {
   const [conversationId, setConversationId] = useState<string>('')
   const [messages, setMessages] = useState<TutorMessage[]>([])
   const [input, setInput] = useState('')
-  const [unit, setUnit] = useState('')
+  const [selectedUnitChoice, setSelectedUnitChoice] = useState<string>(UNIT_CHOICE_GENERAL)
+  const [detectedUnitCode, setDetectedUnitCode] = useState<string | null>(null)
   const [topic, setTopic] = useState('')
   const [mode, setMode] = useState<'auto' | 'learn' | 'practice' | 'r_lab'>('auto')
   const [isLoading, setIsLoading] = useState(false)
@@ -152,10 +171,60 @@ export function AiTutorChat() {
     { value: 'r_lab', label: 'R Lab' }
   ]), [])
 
-  const selectedConversation = useMemo(
-    () => conversations.find((conversation) => conversation.id === conversationId),
-    [conversations, conversationId]
-  )
+  const unitSelectionMode = useMemo(() => getUnitSelectionMode(selectedUnitChoice), [selectedUnitChoice])
+  const manualUnitCode = useMemo(() => getManualUnitCode(selectedUnitChoice), [selectedUnitChoice])
+
+  const contextLabel = useMemo(() => {
+    if (unitSelectionMode === 'manual') {
+      return `Context: ${manualUnitCode || 'General'}`
+    }
+    if (unitSelectionMode === 'auto') {
+      return `Context: Auto → ${detectedUnitCode || 'General'}`
+    }
+    return 'Context: General'
+  }, [unitSelectionMode, manualUnitCode, detectedUnitCode])
+
+  function applyConversationUnitContext(conversation?: TutorConversation) {
+    if (!conversation) {
+      setSelectedUnitChoice(UNIT_CHOICE_GENERAL)
+      setDetectedUnitCode(null)
+      return
+    }
+
+    const scope = conversation.source_scope || {}
+    const storedMode = scope.unitSelectionMode
+    const storedSelected = normalizeUnitCode(scope.selectedUnitCode || '')
+    const storedDetected = normalizeUnitCode(scope.detectedUnitCode || '') || null
+    const activeUnit = normalizeUnitCode(conversation.active_unit_code || '')
+
+    if (storedMode === 'auto') {
+      setSelectedUnitChoice(UNIT_CHOICE_AUTO)
+      setDetectedUnitCode(storedDetected || null)
+      return
+    }
+
+    if (storedMode === 'manual') {
+      const nextManual = storedSelected || activeUnit
+      setSelectedUnitChoice(nextManual || UNIT_CHOICE_GENERAL)
+      setDetectedUnitCode(null)
+      return
+    }
+
+    if (storedMode === 'general') {
+      setSelectedUnitChoice(UNIT_CHOICE_GENERAL)
+      setDetectedUnitCode(storedDetected || null)
+      return
+    }
+
+    if (activeUnit) {
+      setSelectedUnitChoice(activeUnit)
+      setDetectedUnitCode(null)
+      return
+    }
+
+    setSelectedUnitChoice(UNIT_CHOICE_GENERAL)
+    setDetectedUnitCode(null)
+  }
 
   async function loadUnits() {
     try {
@@ -178,7 +247,7 @@ export function AiTutorChat() {
       if (!conversationId && payload.conversations?.[0]?.id) {
         const firstConversation = payload.conversations[0]
         setConversationId(firstConversation.id)
-        setUnit(normalizeUnitCode(firstConversation.active_unit_code || ''))
+        applyConversationUnitContext(firstConversation)
         if (firstConversation.mode) {
           setMode(firstConversation.mode as typeof mode)
         }
@@ -232,15 +301,22 @@ export function AiTutorChat() {
     }
   }
 
-  async function syncConversationContext(nextConversationId: string, nextUnit: string, nextMode: typeof mode) {
+  async function syncConversationContext(nextConversationId: string, nextUnitChoice: string, nextMode: typeof mode, nextDetectedUnitCode?: string | null) {
     if (!user || !nextConversationId) return
+    const nextSelectionMode = getUnitSelectionMode(nextUnitChoice)
+    const nextManualUnit = getManualUnitCode(nextUnitChoice)
     await fetchJson(`/api/ai-tutor/conversations/${nextConversationId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         unitId: null,
-        activeUnitCode: normalizeUnitCode(nextUnit) || null,
-        mode: nextMode
+        activeUnitCode: nextManualUnit,
+        mode: nextMode,
+        sourceScope: {
+          unitSelectionMode: nextSelectionMode,
+          selectedUnitCode: nextManualUnit,
+          detectedUnitCode: normalizeUnitCode(nextDetectedUnitCode || '') || null
+        }
       })
     })
   }
@@ -271,14 +347,11 @@ export function AiTutorChat() {
     const activeConversation = conversations.find((conversation) => conversation.id === conversationId)
     if (!activeConversation) return
 
-    const activeUnitCode = normalizeUnitCode(activeConversation.active_unit_code || '')
-    if (activeUnitCode && activeUnitCode !== normalizeUnitCode(unit)) {
-      setUnit(activeUnitCode)
-    }
+    applyConversationUnitContext(activeConversation)
     if (activeConversation.mode && activeConversation.mode !== mode) {
       setMode(activeConversation.mode as typeof mode)
     }
-  }, [conversationId, conversations, mode, unit])
+  }, [conversationId, conversations, mode])
 
   async function ensureConversation() {
     if (conversationId) return conversationId
@@ -294,13 +367,20 @@ export function AiTutorChat() {
       body: JSON.stringify({
         title: `Tutor ${new Date().toLocaleDateString()}`,
         unitId: null,
-        activeUnitCode: normalizeUnitCode(unit),
+        activeUnitCode: null,
+        sourceScope: {
+          unitSelectionMode: 'general',
+          selectedUnitCode: null,
+          detectedUnitCode: null
+        },
         mode
       })
     })
 
     setConversations((current) => [created.conversation, ...current])
     setConversationId(created.conversation.id)
+    setSelectedUnitChoice(UNIT_CHOICE_GENERAL)
+    setDetectedUnitCode(null)
     return created.conversation.id
   }
 
@@ -320,7 +400,7 @@ export function AiTutorChat() {
     try {
       const activeConversationId = await ensureConversation()
       if (user) {
-        await syncConversationContext(activeConversationId, unit, mode)
+        await syncConversationContext(activeConversationId, selectedUnitChoice, mode, detectedUnitCode)
       }
       const userMessage: TutorMessage = {
         id: crypto.randomUUID(),
@@ -337,7 +417,9 @@ export function AiTutorChat() {
         body: JSON.stringify({
           conversationId: activeConversationId,
           message: trimmed,
-          unit: normalizeUnitCode(unit),
+          unit: manualUnitCode || null,
+          selectedUnitCode: manualUnitCode || null,
+          unitSelectionMode,
           topic,
           mode: mode === 'auto' ? 'general' : mode,
           sourceScope: 'unit',
@@ -386,6 +468,11 @@ export function AiTutorChat() {
           if (eventType === 'meta') {
             receivedMeta = eventPayload || {}
             setActiveCitations(Array.isArray(eventPayload?.citations) ? eventPayload.citations : [])
+            const nextDetected = normalizeUnitCode(eventPayload?.detectedUnitCode || '') || null
+            setDetectedUnitCode(nextDetected)
+            if (user) {
+              void syncConversationContext(activeConversationId, selectedUnitChoice, mode, nextDetected)
+            }
           }
           if (eventType === 'error') {
             throw new Error(String(eventPayload?.error || 'Stream error'))
@@ -529,7 +616,11 @@ export function AiTutorChat() {
         <div className="mb-3 flex items-center justify-between">
           <p className="text-sm font-semibold text-slate-900">Conversations</p>
           {user && (
-            <Button size="sm" onClick={() => setConversationId('')}>New</Button>
+            <Button size="sm" onClick={() => {
+              setConversationId('')
+              setSelectedUnitChoice(UNIT_CHOICE_GENERAL)
+              setDetectedUnitCode(null)
+            }}>New</Button>
           )}
         </div>
         <div className="space-y-2">
@@ -569,24 +660,29 @@ export function AiTutorChat() {
         <Card className="p-4">
           <div className="grid gap-3 sm:grid-cols-3">
             <div>
-              <label className="text-sm font-medium text-slate-700">Unit</label>
+              <label className="text-sm font-medium text-slate-700">Choose unit</label>
               <select
-                value={unit}
+                value={selectedUnitChoice}
                 onChange={(event) => {
-                  const nextUnit = normalizeUnitCode(event.target.value)
-                  setUnit(nextUnit)
+                  const rawChoice = event.target.value
+                  const nextChoice = rawChoice === UNIT_CHOICE_AUTO ? UNIT_CHOICE_AUTO : normalizeUnitCode(rawChoice)
+                  setSelectedUnitChoice(nextChoice)
+                  if (nextChoice !== UNIT_CHOICE_AUTO) {
+                    setDetectedUnitCode(null)
+                  }
                   if (user && conversationId) {
-                    void syncConversationContext(conversationId, nextUnit, mode)
+                    void syncConversationContext(conversationId, nextChoice, mode, null)
                   }
                 }}
                 className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
               >
-                <option value="">Auto from uploads</option>
+                <option value={UNIT_CHOICE_GENERAL}>General / No unit</option>
+                <option value={UNIT_CHOICE_AUTO}>Auto-detect from question/uploads</option>
                 {unitOptions.map((option) => (
                   <option key={option.code} value={option.code}>{option.code} - {option.name}</option>
                 ))}
               </select>
-              <p className="mt-2 text-xs text-slate-500">Context: {normalizeUnitCode(unit) || selectedConversation?.active_unit_code || 'General Tutor'}</p>
+              <p className="mt-2 text-xs text-slate-500">{contextLabel}</p>
             </div>
             <div>
               <label className="text-sm font-medium text-slate-700">Topic</label>

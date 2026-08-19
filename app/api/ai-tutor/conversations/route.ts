@@ -25,13 +25,15 @@ export async function POST(request: NextRequest) {
   const activeUnitCode = typeof body?.activeUnitCode === 'string' ? body.activeUnitCode.trim().toUpperCase() : null
   const mode = typeof body?.mode === 'string' ? body.mode.trim() : null
   const unitId = typeof body?.unitId === 'string' ? body.unitId.trim() : null
+  const sourceScope = body?.sourceScope && typeof body.sourceScope === 'object' ? body.sourceScope : undefined
 
   const conversation = await createTutorConversation({
     userId: user.id,
     title: title || 'New conversation',
     unitId,
     activeUnitCode,
-    mode
+    mode,
+    sourceScope
   })
 
   if (!conversation) {

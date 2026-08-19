@@ -68,6 +68,10 @@ export async function POST(request: NextRequest) {
         metadata: {
           provider: modelReply?.provider || 'demo',
           model: modelReply?.model || 'offline',
+          unitSelectionMode: promptContext.unitSelectionMode,
+          selectedUnitCode: promptContext.selectedUnitCode,
+          detectedUnitCode: promptContext.detectedUnitCode,
+          effectiveUnitCode: promptContext.effectiveUnitCode,
           mode: body.mode || null,
           topic: body.topic || null
         }
@@ -97,6 +101,10 @@ export async function POST(request: NextRequest) {
       response: responseText,
       demoMode,
       citations: promptContext.citations,
+      unitSelectionMode: promptContext.unitSelectionMode,
+      selectedUnitCode: promptContext.selectedUnitCode,
+      detectedUnitCode: promptContext.detectedUnitCode,
+      effectiveUnitCode: promptContext.effectiveUnitCode,
       provider: modelReply?.provider || 'demo',
       model: modelReply?.model || 'offline'
     })

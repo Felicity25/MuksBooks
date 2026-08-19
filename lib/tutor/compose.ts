@@ -39,9 +39,15 @@ export async function buildTutorPromptContext(input: TutorRequest, userId?: stri
 
   const learningHints = learningProfile ? buildLearningHints(learningProfile) : ''
 
+  const enrichedUnit = retrievalContext.effectiveUnitCode || null
+
   const enrichedBody: AiTutorRequestBody = {
     ...input,
-    unit: input.unit || retrievalContext.selectedUnit || retrievalContext.availableUnits[0],
+    unit: enrichedUnit || undefined,
+    unitSelectionMode: retrievalContext.unitSelectionMode,
+    selectedUnitCode: retrievalContext.selectedUnitCode,
+    detectedUnitCode: retrievalContext.detectedUnitCode,
+    effectiveUnitCode: retrievalContext.effectiveUnitCode,
     availableUnits: retrievalContext.availableUnits,
     curriculumResourceSummary: retrievalContext.curriculumResourceSummary,
     relevantChunks: retrievalContext.relevantChunks,
@@ -51,11 +57,13 @@ export async function buildTutorPromptContext(input: TutorRequest, userId?: stri
       `Current question:
 ${prioritizeQuestion(input)}`,
       input.contextSummary,
+      `Unit mode: ${retrievalContext.unitSelectionMode}`,
+      `Manual selected unit: ${retrievalContext.selectedUnitCode || 'none'}`,
+      `Detected unit: ${retrievalContext.detectedUnitCode || 'none'} (confidence ${retrievalContext.detectionConfidence.toFixed(3)})`,
+      `Effective unit: ${retrievalContext.effectiveUnitCode || 'General'}`,
       `Curriculum retrieval scope: ${retrievalContext.curriculumResourceSummary}`,
-      retrievalContext.selectedUnit
-        ? `Selected unit: ${retrievalContext.selectedUnit}`
-        : retrievalContext.availableUnits.length
-          ? `Active curriculum units: ${retrievalContext.availableUnits.join(', ')}`
+      retrievalContext.availableUnits.length
+        ? `Active curriculum units: ${retrievalContext.availableUnits.join(', ')}`
         : 'No active curriculum units found in the Knowledge Base.',
       compacted.length
         ? `Recent conversation context (truncated):\n${compacted.map((item) => `${item.role.toUpperCase()}: ${item.content.slice(0, 180)}`).join('\n')}`
@@ -72,6 +80,11 @@ ${prioritizeQuestion(input)}`,
     systemPrompt,
     userPrompt,
     learningProfile,
-    citations: retrievalContext.citations as TutorCitation[]
+    citations: retrievalContext.citations as TutorCitation[],
+    unitSelectionMode: retrievalContext.unitSelectionMode,
+    selectedUnitCode: retrievalContext.selectedUnitCode,
+    detectedUnitCode: retrievalContext.detectedUnitCode,
+    effectiveUnitCode: retrievalContext.effectiveUnitCode,
+    detectionConfidence: retrievalContext.detectionConfidence
   }
 }

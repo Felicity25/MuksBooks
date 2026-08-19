@@ -3,6 +3,10 @@ import { optimizeTutorPrompt, TutorManagerInput, TutorManagerOutput } from './tu
 export interface AiTutorRequestBody {
   message: string
   unit?: string
+  unitSelectionMode?: 'general' | 'auto' | 'manual'
+  selectedUnitCode?: string | null
+  detectedUnitCode?: string | null
+  effectiveUnitCode?: string | null
   topic?: string
   mode?: string
   lessonObjectives?: string

@@ -1440,7 +1440,7 @@ export function getLessonContext(input: { unit?: string; topic?: string }) {
 
   const weakTopics = masteryRows.filter((row) => Number(row.mastery_score ?? 0) < 0.45)
   const settings = getUserSettings('default')
-  const selectedUnit = courses[0]?.course_code || unit || ''
+  const selectedUnit = unit || ''
 
   const contextSummary = [
     selectedUnit ? `Selected unit: ${selectedUnit}` : 'No unit selected.',
