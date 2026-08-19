@@ -30,6 +30,7 @@ type TutorMessage = {
 type TutorConversation = {
   id: string
   title: string
+  unit_id?: string | null
   active_unit_code?: string | null
   mode?: string | null
   created_at: string
@@ -175,7 +176,12 @@ export function AiTutorChat() {
       const payload = await fetchJson<{ ok: boolean; conversations: TutorConversation[] }>('/api/ai-tutor/conversations', { cache: 'no-store' })
       setConversations(payload.conversations || [])
       if (!conversationId && payload.conversations?.[0]?.id) {
-        setConversationId(payload.conversations[0].id)
+        const firstConversation = payload.conversations[0]
+        setConversationId(firstConversation.id)
+        setUnit(normalizeUnitCode(firstConversation.active_unit_code || ''))
+        if (firstConversation.mode) {
+          setMode(firstConversation.mode as typeof mode)
+        }
       }
     } catch (loadError: any) {
       setError(loadError?.message || 'Failed to load conversations')
@@ -226,6 +232,19 @@ export function AiTutorChat() {
     }
   }
 
+  async function syncConversationContext(nextConversationId: string, nextUnit: string, nextMode: typeof mode) {
+    if (!user || !nextConversationId) return
+    await fetchJson(`/api/ai-tutor/conversations/${nextConversationId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        unitId: null,
+        activeUnitCode: normalizeUnitCode(nextUnit) || null,
+        mode: nextMode
+      })
+    })
+  }
+
   useEffect(() => {
     void loadUnits()
   }, [])
@@ -247,6 +266,20 @@ export function AiTutorChat() {
     void loadMessages(conversationId)
   }, [conversationId])
 
+  useEffect(() => {
+    if (!conversationId) return
+    const activeConversation = conversations.find((conversation) => conversation.id === conversationId)
+    if (!activeConversation) return
+
+    const activeUnitCode = normalizeUnitCode(activeConversation.active_unit_code || '')
+    if (activeUnitCode && activeUnitCode !== normalizeUnitCode(unit)) {
+      setUnit(activeUnitCode)
+    }
+    if (activeConversation.mode && activeConversation.mode !== mode) {
+      setMode(activeConversation.mode as typeof mode)
+    }
+  }, [conversationId, conversations, mode, unit])
+
   async function ensureConversation() {
     if (conversationId) return conversationId
     if (!user) {
@@ -260,6 +293,7 @@ export function AiTutorChat() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         title: `Tutor ${new Date().toLocaleDateString()}`,
+        unitId: null,
         activeUnitCode: normalizeUnitCode(unit),
         mode
       })
@@ -285,8 +319,11 @@ export function AiTutorChat() {
 
     try {
       const activeConversationId = await ensureConversation()
+      if (user) {
+        await syncConversationContext(activeConversationId, unit, mode)
+      }
       const userMessage: TutorMessage = {
-        id: `u_${Date.now()}`,
+        id: crypto.randomUUID(),
         role: 'user',
         content: trimmed,
         createdAt: new Date().toISOString()
@@ -303,12 +340,19 @@ export function AiTutorChat() {
           unit: normalizeUnitCode(unit),
           topic,
           mode: mode === 'auto' ? 'general' : mode,
+          sourceScope: 'unit',
           attachedFiles: composerFiles.map((file) => ({ name: file.name, size: file.size, type: file.type }))
         })
       })
 
       if (!response.ok || !response.body) {
         const payload = await response.json().catch(() => null)
+        if (response.status === 401) {
+          throw new Error(payload?.error || 'Sign in to use the paid Tutor AI.')
+        }
+        if (response.status === 429) {
+          throw new Error(payload?.error || 'Tutor quota reached for the last 24 hours.')
+        }
         throw new Error(payload?.error || 'Tutor request failed')
       }
 
@@ -350,7 +394,7 @@ export function AiTutorChat() {
       }
 
       const assistantMessage: TutorMessage = {
-        id: `a_${Date.now()}`,
+        id: crypto.randomUUID(),
         role: 'assistant',
         content: assistantText,
         createdAt: new Date().toISOString(),
@@ -528,7 +572,13 @@ export function AiTutorChat() {
               <label className="text-sm font-medium text-slate-700">Unit</label>
               <select
                 value={unit}
-                onChange={(event) => setUnit(event.target.value)}
+                onChange={(event) => {
+                  const nextUnit = normalizeUnitCode(event.target.value)
+                  setUnit(nextUnit)
+                  if (user && conversationId) {
+                    void syncConversationContext(conversationId, nextUnit, mode)
+                  }
+                }}
                 className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
               >
                 <option value="">Auto from uploads</option>
@@ -536,6 +586,7 @@ export function AiTutorChat() {
                   <option key={option.code} value={option.code}>{option.code} - {option.name}</option>
                 ))}
               </select>
+              <p className="mt-2 text-xs text-slate-500">Context: {normalizeUnitCode(unit) || selectedConversation?.active_unit_code || 'General Tutor'}</p>
             </div>
             <div>
               <label className="text-sm font-medium text-slate-700">Topic</label>

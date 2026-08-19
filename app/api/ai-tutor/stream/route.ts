@@ -24,17 +24,25 @@ export async function POST(request: NextRequest) {
   const user = await getAuthenticatedUser()
   const userId = user?.id
 
-  if (userId) {
-    const exceeded = await isTutorUsageLimitExceeded(userId)
-    if (exceeded) {
-      return new Response(JSON.stringify({
-        error: 'Daily Tutor usage limit reached. Please try again later or switch to your own provider credentials.',
-        code: 'TUTOR_USAGE_LIMIT'
-      }), {
-        status: 429,
-        headers: { 'Content-Type': 'application/json' }
-      })
-    }
+  if (!userId) {
+    return new Response(JSON.stringify({
+      error: 'Sign in to use the paid Tutor AI. Guests can use the page, but AI generation requires authentication.',
+      code: 'UNAUTHENTICATED'
+    }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' }
+    })
+  }
+
+  const exceeded = await isTutorUsageLimitExceeded(userId)
+  if (exceeded) {
+    return new Response(JSON.stringify({
+      error: 'Daily Tutor usage limit reached. Please try again later or switch to your own provider credentials.',
+      code: 'TUTOR_USAGE_LIMIT'
+    }), {
+      status: 429,
+      headers: { 'Content-Type': 'application/json' }
+    })
   }
 
   const promptContext = await buildTutorPromptContext(body, userId)
@@ -71,7 +79,7 @@ export async function POST(request: NextRequest) {
 
         let provider = modelReply?.provider || 'demo'
         let model = modelReply?.model || 'demo'
-        let usage = modelReply?.usage
+        const usage = modelReply?.usage
 
         if (!modelReply || !fullText.trim()) {
           fullText = formatDemoResponse(promptContext.enrichedBody)
@@ -97,12 +105,14 @@ export async function POST(request: NextRequest) {
             }
           })
 
-          await recordTutorUsage({
-            userId,
-            conversationId: body.conversationId,
-            usage,
-            route: 'stream'
-          })
+          if (usage) {
+            await recordTutorUsage({
+              userId,
+              conversationId: body.conversationId,
+              usage,
+              route: 'stream'
+            })
+          }
 
           if (promptContext.learningProfile) {
             const patch = deriveProfilePatch({

@@ -7,6 +7,7 @@ import type { TutorCitation } from '@/lib/tutor/types'
 
 export interface TutorRetrievalContext {
   availableUnits: string[]
+  selectedUnit: string | null
   curriculumResourceSummary: string
   relevantChunks: string[]
   uploadedContext: string
@@ -44,24 +45,26 @@ export async function buildTutorRetrievalContext(request: AiTutorRequestBody, us
   )
 
   const normalizedRequestedUnit = request.unit?.trim().toUpperCase()
-  const chosenUnit = normalizedRequestedUnit && availableUnits.includes(normalizedRequestedUnit)
+  const selectedUnit = normalizedRequestedUnit && availableUnits.includes(normalizedRequestedUnit)
     ? normalizedRequestedUnit
-    : lessonContext.units[0]?.code || availableUnits[0]
+    : lessonContext.units[0]?.code || availableUnits[0] || null
 
   // Pass userId so search prefers Supabase chunks
-  const hits = await searchKnowledgeBase(request.message, chosenUnit, 10, userId)
-  const relevantChunks = hits.map((hit) => `${hit.chunk.text.slice(0, 800)}\n[section:${hit.chunk.sectionTitle || 'general'}][score:${hit.score.toFixed(3)}]`)
-  const hitCitations: TutorCitation[] = hits.slice(0, 6).map((hit) => ({
+  const hits = await searchKnowledgeBase(request.message, selectedUnit || undefined, 8, userId)
+  const relevantHits = hits.filter((hit) => hit.score >= 0.18)
+  const topHits = (relevantHits.length ? relevantHits : hits.slice(0, 3)).slice(0, 5)
+  const relevantChunks = topHits.map((hit) => `${hit.chunk.text.slice(0, 700)}\n[section:${hit.chunk.sectionTitle || 'general'}][score:${hit.score.toFixed(3)}]`)
+  const hitCitations: TutorCitation[] = topHits.map((hit) => ({
     id: hit.chunk.chunkId,
     label: hit.chunk.sectionTitle || 'Knowledge chunk',
-    unit: chosenUnit || null,
+    unit: selectedUnit || null,
     section: hit.chunk.sectionTitle || null,
     score: Number(hit.score.toFixed(3))
   }))
 
-  const scopedDocuments = chosenUnit
-    ? allDocuments.filter((document) => document.course_code === chosenUnit)
-    : allDocuments.slice(0, 12)
+  const scopedDocuments = selectedUnit
+    ? allDocuments.filter((document) => document.course_code === selectedUnit)
+    : allDocuments.slice(0, 8)
 
   const curriculumResourceSummary = scopedDocuments.length
     ? scopedDocuments
@@ -72,14 +75,14 @@ export async function buildTutorRetrievalContext(request: AiTutorRequestBody, us
   const documentCitations: TutorCitation[] = scopedDocuments.slice(0, 6).map((document, index) => ({
     id: `doc-${index}-${document.filename}`,
     label: document.filename,
-    unit: document.course_code || chosenUnit || null,
+    unit: document.course_code || selectedUnit || null,
     section: document.document_type || null,
     score: null
   }))
 
-  const unitContext = chosenUnit
+  const unitContext = selectedUnit
     ? [
-        `Selected unit: ${chosenUnit}.`,
+        `Selected unit: ${selectedUnit}.`,
         lessonContext.contextSummary,
         `Curriculum resources used: ${curriculumResourceSummary}`,
         scopedDocuments.length
@@ -89,15 +92,16 @@ export async function buildTutorRetrievalContext(request: AiTutorRequestBody, us
     : 'No active curriculum unit detected. Please upload course resources first.'
 
   await appendLog('retrievals', 'Tutor retrieval context created', {
-    selectedUnit: chosenUnit || null,
+    selectedUnit,
     availableUnits,
-    resultCount: hits.length,
+    resultCount: topHits.length,
     documentCount: scopedDocuments.length,
     source: userId ? 'cloud' : 'local'
   })
 
   return {
     availableUnits,
+    selectedUnit,
     curriculumResourceSummary,
     relevantChunks,
     uploadedContext: lessonContext.uploadedContext || curriculumResourceSummary,

@@ -15,6 +15,15 @@ function compactConversation(messages: Array<{ role: string; content: string }>,
   return messages.slice(-limit)
 }
 
+function prioritizeQuestion(input: TutorRequest) {
+  return [
+    input.message,
+    input.topic ? `Requested topic: ${input.topic}` : '',
+    input.unit ? `Selected unit: ${input.unit}` : '',
+    input.mode ? `Requested mode: ${input.mode}` : ''
+  ].filter(Boolean).join('\n')
+}
+
 export async function buildTutorPromptContext(input: TutorRequest, userId?: string) {
   const retrievalContext = await buildTutorRetrievalContext(input, userId)
 
@@ -32,20 +41,24 @@ export async function buildTutorPromptContext(input: TutorRequest, userId?: stri
 
   const enrichedBody: AiTutorRequestBody = {
     ...input,
-    unit: input.unit || retrievalContext.availableUnits[0],
+    unit: input.unit || retrievalContext.selectedUnit || retrievalContext.availableUnits[0],
     availableUnits: retrievalContext.availableUnits,
     curriculumResourceSummary: retrievalContext.curriculumResourceSummary,
     relevantChunks: retrievalContext.relevantChunks,
     uploadedContext: retrievalContext.uploadedContext,
     unitContext: retrievalContext.unitContext,
     contextSummary: [
+      `Current question:
+${prioritizeQuestion(input)}`,
       input.contextSummary,
       `Curriculum retrieval scope: ${retrievalContext.curriculumResourceSummary}`,
-      retrievalContext.availableUnits.length
-        ? `Active curriculum units: ${retrievalContext.availableUnits.join(', ')}`
+      retrievalContext.selectedUnit
+        ? `Selected unit: ${retrievalContext.selectedUnit}`
+        : retrievalContext.availableUnits.length
+          ? `Active curriculum units: ${retrievalContext.availableUnits.join(', ')}`
         : 'No active curriculum units found in the Knowledge Base.',
       compacted.length
-        ? `Conversation summary:\n${compacted.map((item) => `${item.role.toUpperCase()}: ${item.content.slice(0, 240)}`).join('\n')}`
+        ? `Recent conversation context (truncated):\n${compacted.map((item) => `${item.role.toUpperCase()}: ${item.content.slice(0, 180)}`).join('\n')}`
         : '',
       learningHints ? `Learning memory hints: ${learningHints}` : ''
     ].filter(Boolean).join(' ')

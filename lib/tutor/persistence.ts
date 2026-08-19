@@ -2,8 +2,8 @@ import crypto from 'node:crypto'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 import type { TutorCitation, TutorConversation, TutorLearningProfile, TutorMessage, TutorUsageRecord } from '@/lib/tutor/types'
 
-function id(prefix: string) {
-  return `${prefix}_${crypto.randomUUID()}`
+function uuid() {
+  return crypto.randomUUID()
 }
 
 function isMissingRelation(err: unknown) {
@@ -74,7 +74,7 @@ export async function createTutorConversation(input: {
   const client = createSupabaseServerClient()
   if (!client) return null
 
-  const conversationId = id('conv')
+  const conversationId = uuid()
 
   const primary = await client
     .from('tutor_conversations')
@@ -216,7 +216,7 @@ export async function createTutorMessage(input: {
   const client = createSupabaseServerClient()
   if (!client) return null
 
-  const messageId = id('msg')
+  const messageId = uuid()
 
   const primary = await client
     .from('tutor_messages')
@@ -347,7 +347,7 @@ export async function recordTutorUsage(input: {
   if (!client) return
 
   const { error } = await client.from('tutor_usage_events').insert({
-    id: id('usage'),
+    id: uuid(),
     user_id: input.userId,
     conversation_id: input.conversationId ?? null,
     provider: input.usage.provider,
@@ -387,10 +387,10 @@ export async function getTutorUsageSummary(userId: string, hours = 24) {
 }
 
 export async function isTutorUsageLimitExceeded(userId: string) {
-  const tokenLimit = Number(process.env.TUTOR_DAILY_TOKEN_LIMIT || 0)
+  const tokenLimit = Number(process.env.TUTOR_DAILY_TOKEN_LIMIT || 50000)
   const costLimitMicrousd = Number(process.env.TUTOR_DAILY_COST_LIMIT_MICROUSD || 0)
-  if (!Number.isFinite(tokenLimit) && !Number.isFinite(costLimitMicrousd)) return false
-  if (tokenLimit <= 0 && costLimitMicrousd <= 0) return false
+  if (!Number.isFinite(tokenLimit) || tokenLimit <= 0) return true
+  if (!Number.isFinite(costLimitMicrousd) && costLimitMicrousd !== 0) return true
 
   const summary = await getTutorUsageSummary(userId, 24)
   const totalTokens = summary.totalInputTokens + summary.totalOutputTokens
@@ -414,7 +414,7 @@ export async function saveProviderCredential(input: {
   const { error } = await client
     .from('tutor_provider_credentials')
     .upsert({
-      id: id('cred'),
+      id: uuid(),
       user_id: input.userId,
       provider: input.provider,
       label: input.label || 'default',

@@ -8,6 +8,19 @@ type ProviderName = 'anthropic' | 'openai'
 
 const DEFAULT_PROVIDER = (process.env.AI_PROVIDER || 'anthropic') as ProviderName
 
+function resolveDefaultModel(provider: ProviderName) {
+  return provider === 'openai'
+    ? (process.env.OPENAI_MODEL || 'gpt-4o-mini')
+    : (process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20240620')
+}
+
+function buildNoProviderMessage(provider: ProviderName) {
+  const missing = provider === 'openai'
+    ? 'OPENAI_API_KEY'
+    : 'ANTHROPIC_API_KEY'
+  return `Missing server AI credentials. Please configure ${missing} or set up BYOK for your account.`
+}
+
 async function getStoredProviderKey(userId: string, provider: ProviderName): Promise<string | null> {
   const client = createSupabaseServerClient()
   if (!client) return null
@@ -44,7 +57,7 @@ export async function resolveTutorProvider(userId?: string): Promise<TutorProvid
     if (byokKey) {
       return {
         provider,
-        model: provider === 'openai' ? (process.env.OPENAI_MODEL || 'gpt-4o-mini') : (process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20240620'),
+        model: resolveDefaultModel(provider),
         byok: true,
         apiKey: byokKey
       }
@@ -52,22 +65,22 @@ export async function resolveTutorProvider(userId?: string): Promise<TutorProvid
   }
 
   if (provider === 'openai' && defaultOpenAIKey) {
-    return { provider, model: process.env.OPENAI_MODEL || 'gpt-4o-mini', byok: false, apiKey: defaultOpenAIKey }
+    return { provider, model: resolveDefaultModel(provider), byok: false, apiKey: defaultOpenAIKey }
   }
 
   if (provider === 'anthropic' && defaultAnthropicKey) {
-    return { provider, model: process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20240620', byok: false, apiKey: defaultAnthropicKey }
+    return { provider, model: resolveDefaultModel(provider), byok: false, apiKey: defaultAnthropicKey }
   }
 
   // Fallback to openai if default provider has no key.
   if (defaultOpenAIKey) {
-    return { provider: 'openai', model: process.env.OPENAI_MODEL || 'gpt-4o-mini', byok: false, apiKey: defaultOpenAIKey }
+    return { provider: 'openai', model: resolveDefaultModel('openai'), byok: false, apiKey: defaultOpenAIKey }
   }
   if (defaultAnthropicKey) {
-    return { provider: 'anthropic', model: process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20240620', byok: false, apiKey: defaultAnthropicKey }
+    return { provider: 'anthropic', model: resolveDefaultModel('anthropic'), byok: false, apiKey: defaultAnthropicKey }
   }
 
-  return { provider, model: provider === 'openai' ? 'gpt-4o-mini' : 'claude-3-5-sonnet-20240620', byok: false }
+  return { provider, model: resolveDefaultModel(provider), byok: false }
 }
 
 export async function generateTutorReply(input: {
@@ -76,7 +89,9 @@ export async function generateTutorReply(input: {
   userId?: string
 }): Promise<TutorReplyPayload | null> {
   const resolved = await resolveTutorProvider(input.userId)
-  if (!resolved.apiKey) return null
+  if (!resolved.apiKey) {
+    throw new Error(buildNoProviderMessage(resolved.provider))
+  }
 
   if (resolved.provider === 'openai') {
     const openai = new OpenAI({ apiKey: resolved.apiKey })
@@ -147,6 +162,7 @@ export async function streamTutorReply(input: {
       temperature: 0.2,
       max_tokens: 1400,
       stream: true,
+      stream_options: { include_usage: true },
       messages: [
         { role: 'system', content: input.systemPrompt },
         { role: 'user', content: input.userPrompt }
@@ -154,18 +170,29 @@ export async function streamTutorReply(input: {
     })
 
     let fullText = ''
+    let usage: TutorUsageRecord | undefined
     for await (const part of stream) {
       const delta = part.choices?.[0]?.delta?.content || ''
       if (delta) {
         fullText += delta
         await input.onText(delta)
       }
+      const streamUsage = (part as any).usage
+      if (streamUsage) {
+        usage = {
+          provider: 'openai',
+          model: resolved.model,
+          inputTokens: streamUsage.prompt_tokens,
+          outputTokens: streamUsage.completion_tokens
+        }
+      }
     }
 
     return {
       provider: 'openai',
       model: resolved.model,
-      fullText
+      fullText,
+      usage
     }
   }
 

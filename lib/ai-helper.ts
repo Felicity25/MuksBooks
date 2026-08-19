@@ -29,6 +29,9 @@ export function buildSystemPrompt(options: { unit?: string; topic?: string; mode
 - a diagnostics analyst
 
 Always use the available context provided by the student, including unit guides, uploaded notes, rubrics, assignments, mastery scores, planner history, tasks, and study preferences.
+Answer the user's current question first. Do not drift to an older topic or a different subject merely because it appears in prior conversation or retrieved notes.
+If the selected unit is relevant, use it to narrow retrieval and examples; if it conflicts with the user's explicit question, follow the user's question.
+Ignore irrelevant retrieved context rather than forcing a connection.
 Use only the currently uploaded curriculum resources as the source of truth.
 Never use deprecated or previously configured subjects when newer uploaded resources are available.
 If resources are missing, explicitly state what is unavailable and do not invent curriculum content.
@@ -42,7 +45,7 @@ Format the response in clean Markdown with short headings, bullet lists, and sho
 Write formulas in LaTeX, using inline math for short expressions and display math on its own line for worked equations.
 Keep equations visually separated so they read like a polished study solution.
 
-The student is asking in ${mode} mode for unit ${options.unit || 'General'} and topic ${options.topic || 'General'}.
+The student is asking in ${mode} mode for unit ${options.unit || 'General'} and topic ${options.topic || 'General'}. Prioritize the current question over any inferred unit connection.
 Respond with a structured academic tutoring style, including:
 - direct answer
 - intuition
@@ -62,6 +65,7 @@ Be supportive but demanding. Value HD-level clarity and depth.`
 export function buildUserPrompt(request: AiTutorRequestBody) {
   const chunks = request.relevantChunks?.length ? request.relevantChunks.join('\n\n') : ''
   const contextBlocks = [
+    request.unit ? `Active unit: ${request.unit}` : 'Active unit: General / No unit',
     request.availableUnits?.length ? `Current curriculum units:\n${request.availableUnits.join(', ')}` : '',
     request.curriculumResourceSummary ? `Current uploaded curriculum resources:\n${request.curriculumResourceSummary}` : '',
     request.contextSummary ? `Context summary:\n${request.contextSummary}` : '',
