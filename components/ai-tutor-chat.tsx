@@ -162,11 +162,13 @@ function SourceChip({
 function ClaudeWorkspace({
   artifactUrl,
   expanded,
-  onToggleExpanded
+  onToggleExpanded,
+  onClose
 }: {
   artifactUrl: string
   expanded: boolean
   onToggleExpanded: () => void
+  onClose: () => void
 }) {
   const trimmedUrl = artifactUrl.trim()
   const hasEmbedUrl = Boolean(trimmedUrl)
@@ -187,6 +189,14 @@ function ClaudeWorkspace({
           aria-label={expanded ? 'Restore workspace size' : 'Expand workspace'}
         >
           {expanded ? <Minimize2 size={15} /> : <Expand size={15} />}
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-xl border border-slate-200 p-2 text-slate-600 hover:border-slate-300"
+          aria-label="Close Claude workspace"
+        >
+          <X size={15} />
         </button>
       </div>
 
@@ -316,7 +326,7 @@ export function AiTutorChat() {
 
   const contextChipLabel = useMemo(() => {
     if (unitSelectionMode === 'manual') return manualUnitCode || 'General'
-    if (unitSelectionMode === 'auto') return `Auto${detectedUnitCode ? ` · ${detectedUnitCode}` : ''}`
+    if (unitSelectionMode === 'auto') return detectedUnitCode ? `Auto -> ${detectedUnitCode}` : 'Auto'
     return 'General'
   }, [unitSelectionMode, manualUnitCode, detectedUnitCode])
 
@@ -372,12 +382,32 @@ export function AiTutorChat() {
 
   function applyUnitChoice(rawChoice: string) {
     const nextChoice = rawChoice === UNIT_CHOICE_AUTO ? UNIT_CHOICE_AUTO : normalizeUnitCode(rawChoice)
+    const nextSelectionMode = getUnitSelectionMode(nextChoice)
+    const nextManual = getManualUnitCode(nextChoice)
+    const nextDetected = nextSelectionMode === 'auto' ? detectedUnitCode : null
+
     setSelectedUnitChoice(nextChoice)
-    if (nextChoice !== UNIT_CHOICE_AUTO) {
+    if (nextSelectionMode !== 'auto') {
       setDetectedUnitCode(null)
     }
+
+    if (conversationId) {
+      setConversations((current) => current.map((conversation) => {
+        if (conversation.id !== conversationId) return conversation
+        return {
+          ...conversation,
+          active_unit_code: nextManual,
+          source_scope: {
+            unitSelectionMode: nextSelectionMode,
+            selectedUnitCode: nextManual,
+            detectedUnitCode: nextDetected
+          }
+        }
+      }))
+    }
+
     if (user && conversationId) {
-      void syncConversationContext(conversationId, nextChoice, mode, null)
+      void syncConversationContext(conversationId, nextChoice, mode, nextDetected)
     }
     setShowContextPicker(false)
   }
@@ -389,7 +419,9 @@ export function AiTutorChat() {
       const options = units
         .map((item) => ({ code: normalizeUnitCode(item.code), name: item.name || item.code }))
         .filter((item) => Boolean(item.code))
-      setUnitOptions(options)
+      const deduped = Array.from(new Map(options.map((item) => [item.code, item])).values())
+      deduped.sort((a, b) => a.code.localeCompare(b.code))
+      setUnitOptions(deduped)
     } catch {
       setUnitOptions([])
     }
@@ -557,7 +589,7 @@ export function AiTutorChat() {
     if (activeConversation.mode && activeConversation.mode !== mode) {
       setMode(activeConversation.mode as typeof mode)
     }
-  }, [conversationId, conversations, mode])
+  }, [conversationId, conversations])
 
   async function ensureConversation() {
     if (conversationId) return conversationId
@@ -668,9 +700,14 @@ export function AiTutorChat() {
             receivedMeta = eventPayload || {}
             setActiveCitations(Array.isArray(eventPayload?.citations) ? eventPayload.citations : [])
             const nextDetected = normalizeUnitCode(eventPayload?.detectedUnitCode || '') || null
-            setDetectedUnitCode(nextDetected)
+
+            if (unitSelectionMode === 'auto') {
+              setDetectedUnitCode(nextDetected)
+            }
+
             if (user) {
-              void syncConversationContext(activeConversationId, selectedUnitChoice, mode, nextDetected)
+              const syncDetected = unitSelectionMode === 'auto' ? nextDetected : null
+              void syncConversationContext(activeConversationId, selectedUnitChoice, mode, syncDetected)
             }
           }
           if (eventType === 'error') {
@@ -927,6 +964,7 @@ export function AiTutorChat() {
                   artifactUrl={claudeArtifactUrl}
                   expanded={claudeExpanded}
                   onToggleExpanded={() => setClaudeExpanded((open) => !open)}
+                  onClose={() => setWorkspace('tutor')}
                 />
               </div>
             ) : (
@@ -937,16 +975,17 @@ export function AiTutorChat() {
                       <button
                         type="button"
                         onClick={() => setShowContextPicker((open) => !open)}
-                        className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700"
+                        className="inline-flex items-center gap-2 rounded-full border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-semibold text-sky-900"
                       >
-                        {contextChipLabel}
+                        Choose unit
+                        <span className="rounded-full bg-white px-2 py-0.5 text-[11px] text-slate-700">{contextChipLabel}</span>
                         <ChevronDown size={12} />
                       </button>
                       {showContextPicker ? (
-                        <div className="absolute left-0 top-9 z-20 w-[280px] rounded-2xl border border-slate-200 bg-white p-2 shadow-lg">
-                          <p className="px-2 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Study context</p>
+                        <div className="absolute left-0 top-9 z-20 w-[310px] rounded-2xl border border-slate-200 bg-white p-2 shadow-lg">
+                          <p className="px-2 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Choose unit</p>
                           <button className="block w-full rounded-xl px-2 py-2 text-left text-sm hover:bg-slate-50" onClick={() => applyUnitChoice(UNIT_CHOICE_GENERAL)}>General</button>
-                          <button className="block w-full rounded-xl px-2 py-2 text-left text-sm hover:bg-slate-50" onClick={() => applyUnitChoice(UNIT_CHOICE_AUTO)}>Auto detect</button>
+                          <button className="block w-full rounded-xl px-2 py-2 text-left text-sm hover:bg-slate-50" onClick={() => applyUnitChoice(UNIT_CHOICE_AUTO)}>Auto</button>
                           {unitOptions.map((option) => (
                             <button
                               key={option.code}
@@ -959,6 +998,10 @@ export function AiTutorChat() {
                         </div>
                       ) : null}
                     </div>
+
+                    <span className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-700">
+                        {contextChipLabel}
+                    </span>
 
                     {topic ? <span className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600">{topic}</span> : null}
                     {latestAssistantCitations.length ? <span className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600">{latestAssistantCitations.length} sources</span> : null}
@@ -1067,6 +1110,16 @@ export function AiTutorChat() {
                     />
 
                     <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowContextPicker((open) => !open)}
+                        className="inline-flex items-center gap-2 rounded-full border border-sky-200 bg-white px-3 py-1.5 text-xs font-semibold text-sky-900"
+                      >
+                        Choose unit
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-700">{contextChipLabel}</span>
+                        <ChevronDown size={12} />
+                      </button>
+
                       <label className="inline-flex cursor-pointer items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 hover:border-slate-300">
                         <Paperclip size={13} />
                         Attachment

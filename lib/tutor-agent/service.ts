@@ -160,9 +160,8 @@ export async function buildTutorRetrievalContext(request: AiTutorRequestBody, us
 
   const unitSelectionMode = resolveSelectionMode(request)
   const normalizedSelectedUnit = normalizeUnitCode(request.selectedUnitCode || request.unit)
-  const selectedUnitCode = normalizedSelectedUnit && availableUnits.includes(normalizedSelectedUnit)
-    ? normalizedSelectedUnit
-    : null
+  // Manual selection must remain sticky even when indexed uploads for that unit are missing.
+  const selectedUnitCode = normalizedSelectedUnit || null
 
   const mentionedUnitCode = detectMentionedUnit(request.message, availableUnits)
 

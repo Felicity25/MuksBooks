@@ -21,6 +21,10 @@ export interface AiTutorRequestBody {
   curriculumResourceSummary?: string
 }
 
+function prefersDeepResponse(message: string) {
+  return /\b(explain|teach|synthesi[sz]e|deep|deeply|help me understand|derive|derivation|step by step|intuit|comprehensive)\b/i.test(message)
+}
+
 export function buildSystemPrompt(options: { unit?: string; topic?: string; mode?: string; demoMode: boolean }) {
   const mode = options.mode || 'general'
   return `You are MuksBooks, a strict but supportive academic tutor for Monash University actuarial science students. You act as:
@@ -57,6 +61,8 @@ The student is asking in ${mode} mode for unit ${options.unit || 'General'} and 
 Respond like a strong university tutor.
 Give the direct answer first.
 Then add only the sections that materially improve understanding, such as intuition, formal mathematics, worked example, unit connection, pitfalls, or a quick check.
+Default to substantial teaching depth unless the student explicitly asks for a concise answer.
+For continuity questions like "give me practice questions" or "hint question 1", carry forward the active topic and unit from the recent conversation context.
 Do not output placeholder labels like "Title", "Section:", or empty rubric headings.
 If the user asks for a concept explanation, actually explain the concept with substance and mathematics where appropriate.
 If the user asks about a specific week, infer the week's topic from schedule context and teach that actual material.
@@ -73,6 +79,7 @@ export function buildUserPrompt(request: AiTutorRequestBody) {
   const chunks = request.relevantChunks?.length ? request.relevantChunks.join('\n\n') : ''
   const selectedUnit = request.effectiveUnitCode || request.unit || 'General'
   const mode = request.mode || 'general'
+  const deepResponse = prefersDeepResponse(request.message)
 
   return `Student question:
 ${request.message}
@@ -105,7 +112,10 @@ Instructions:
 - If the retrieved uploads are insufficient, say that clearly and then answer from reliable general knowledge.
 - Do not output placeholder section labels like "Title" or "Section:".
 - Do not claim to have used a source unless it appears in the retrieved excerpts above.
-- Keep the answer readable Markdown with meaningful headings only when they help.`
+- Keep the answer readable Markdown with meaningful headings only when they help.
+- ${deepResponse
+  ? 'Use deep-teaching mode: provide intuition, formal math, derivation logic where relevant, a worked example, common mistakes, and key takeaways.'
+  : 'Use balanced depth by default; only be brief if the student explicitly asks for concise output.'}`
 }
 
 export function formatDemoResponse(request: AiTutorRequestBody) {

@@ -105,7 +105,7 @@ export async function generateTutorReply(input: {
     const completion = await openai.chat.completions.create({
       model: resolved.model,
       temperature: 0.2,
-      max_tokens: 1400,
+      max_tokens: 2200,
       messages: [
         { role: 'system', content: input.systemPrompt },
         { role: 'user', content: input.userPrompt }
@@ -131,7 +131,7 @@ export async function generateTutorReply(input: {
   const anthropic = new Anthropic({ apiKey: resolved.apiKey })
   const response = await anthropic.messages.create({
     model: resolved.model,
-    max_tokens: 1400,
+    max_tokens: 2200,
     temperature: 0.2,
     messages: [{ role: 'user', content: `${input.systemPrompt}\n\n${input.userPrompt}` }]
   })
@@ -175,7 +175,7 @@ export async function streamTutorReply(input: {
     const stream = await openai.chat.completions.create({
       model: resolved.model,
       temperature: 0.2,
-      max_tokens: 1400,
+      max_tokens: 2200,
       stream: true,
       stream_options: { include_usage: true },
       messages: [
@@ -219,7 +219,7 @@ export async function streamTutorReply(input: {
   const anthropic = new Anthropic({ apiKey: resolved.apiKey })
   const response = await anthropic.messages.create({
     model: resolved.model,
-    max_tokens: 1400,
+    max_tokens: 2200,
     temperature: 0.2,
     messages: [{ role: 'user', content: `${input.systemPrompt}\n\n${input.userPrompt}` }]
   })
