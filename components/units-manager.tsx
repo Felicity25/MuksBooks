@@ -19,15 +19,39 @@ interface Unit {
 }
 
 const COLOR_OPTIONS = [
-  { value: 'sky', label: 'Sky' },
-  { value: 'emerald', label: 'Emerald' },
-  { value: 'amber', label: 'Amber' },
-  { value: 'rose', label: 'Rose' },
-  { value: 'violet', label: 'Violet' },
-  { value: 'slate', label: 'Slate' }
+  { value: '#0ea5e9', label: 'Sky' },
+  { value: '#10b981', label: 'Emerald' },
+  { value: '#f59e0b', label: 'Amber' },
+  { value: '#f43f5e', label: 'Rose' },
+  { value: '#8b5cf6', label: 'Violet' },
+  { value: '#64748b', label: 'Slate' }
 ]
 
-const emptyForm = { code: '', name: '', status: 'In progress', semester: '', year: new Date().getFullYear(), color: 'sky' }
+const emptyForm = { code: '', name: '', status: 'In progress', semester: '', year: new Date().getFullYear(), color: '#0ea5e9' }
+
+function normalizeColor(value?: string | null) {
+  if (!value) return '#0ea5e9'
+  const trimmed = value.trim().toLowerCase()
+  if (/^#([0-9a-f]{6})$/i.test(trimmed)) return trimmed
+  const mapped = COLOR_OPTIONS.find((option) => option.label.toLowerCase() === trimmed || option.value === trimmed)
+  if (mapped) return mapped.value
+  if (trimmed === 'sky') return '#0ea5e9'
+  if (trimmed === 'emerald') return '#10b981'
+  if (trimmed === 'amber') return '#f59e0b'
+  if (trimmed === 'rose') return '#f43f5e'
+  if (trimmed === 'violet') return '#8b5cf6'
+  if (trimmed === 'indigo') return '#6366f1'
+  if (trimmed === 'slate') return '#64748b'
+  return '#0ea5e9'
+}
+
+function withAlpha(hexColor: string, alpha: number) {
+  const hex = normalizeColor(hexColor)
+  const red = Number.parseInt(hex.slice(1, 3), 16)
+  const green = Number.parseInt(hex.slice(3, 5), 16)
+  const blue = Number.parseInt(hex.slice(5, 7), 16)
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`
+}
 
 export function UnitsManager() {
   const { requireAuth } = useAuth()
@@ -130,7 +154,7 @@ export function UnitsManager() {
       status: unit.status,
       semester: unit.semester,
       year: unit.year ?? new Date().getFullYear(),
-      color: unit.color || 'sky'
+      color: normalizeColor(unit.color)
     })
     setShowForm(true)
   }
@@ -232,6 +256,33 @@ export function UnitsManager() {
               >
                 {COLOR_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
               </select>
+              <div className="sm:col-span-2 space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Custom unit colour</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  {COLOR_OPTIONS.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      title={option.label}
+                      className={`h-7 w-7 rounded-full border ${formData.color === option.value ? 'border-slate-900 ring-2 ring-slate-300' : 'border-slate-200'}`}
+                      style={{ backgroundColor: option.value }}
+                      onClick={() => setFormData({ ...formData, color: option.value })}
+                    />
+                  ))}
+                  <label className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700">
+                    Custom
+                    <input
+                      type="color"
+                      value={normalizeColor(formData.color)}
+                      onChange={(event) => setFormData({ ...formData, color: event.target.value })}
+                      className="h-6 w-8 cursor-pointer border-0 bg-transparent p-0"
+                    />
+                  </label>
+                  <span className="rounded-full px-2 py-1 text-xs font-semibold" style={{ backgroundColor: withAlpha(formData.color, 0.14), color: '#0f172a' }}>
+                    {normalizeColor(formData.color).toUpperCase()}
+                  </span>
+                </div>
+              </div>
             </div>
             <div className="flex gap-2">
               <Button type="submit" disabled={isSaving}>{isSaving ? 'Saving...' : `${editingUnit ? 'Update' : 'Add'} Unit`}</Button>
@@ -247,7 +298,10 @@ export function UnitsManager() {
             <div key={unit.id} className="rounded-3xl border border-slate-200 bg-white p-4">
               <div className="flex items-center justify-between gap-4">
                 <div>
-                  <p className="font-semibold text-slate-950">{unit.code}</p>
+                  <div className="flex items-center gap-2">
+                    <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: normalizeColor(unit.color) }} />
+                    <p className="font-semibold text-slate-950">{unit.code}</p>
+                  </div>
                   <p className="text-sm text-slate-600">{unit.name}</p>
                   {(unit.semester || unit.year) && (
                     <p className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-400">

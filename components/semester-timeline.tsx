@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { CalendarDays, ChevronLeft, ChevronRight, EyeOff, Upload } from 'lucide-react'
@@ -130,6 +130,15 @@ const DEFAULT_SETTINGS: CalendarSettings = {
 }
 
 const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+const UNIT_COLOR_HEX: Record<string, string> = {
+  sky: '#0ea5e9',
+  emerald: '#10b981',
+  amber: '#f59e0b',
+  rose: '#f43f5e',
+  violet: '#8b5cf6',
+  indigo: '#6366f1',
+  slate: '#64748b'
+}
 
 function toDateOnlyISO(value: Date) {
   const yyyy = value.getFullYear()
@@ -170,6 +179,47 @@ function parseMaybeDate(value?: string | null) {
   if (!value) return null
   const parsed = new Date(value)
   return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+function normalizeUnitColor(color?: string | null) {
+  if (!color) return ''
+  const trimmed = color.trim().toLowerCase()
+  if (/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(trimmed)) return trimmed
+  return UNIT_COLOR_HEX[trimmed] || ''
+}
+
+function hexToRgba(color: string, alpha: number) {
+  const normalized = normalizeUnitColor(color)
+  if (!normalized) return ''
+  const hex = normalized.length === 4
+    ? `#${normalized[1]}${normalized[1]}${normalized[2]}${normalized[2]}${normalized[3]}${normalized[3]}`
+    : normalized
+  const red = Number.parseInt(hex.slice(1, 3), 16)
+  const green = Number.parseInt(hex.slice(3, 5), 16)
+  const blue = Number.parseInt(hex.slice(5, 7), 16)
+  if ([red, green, blue].some((channel) => Number.isNaN(channel))) return ''
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`
+}
+
+function eventSurfaceStyle(color?: string | null): CSSProperties | undefined {
+  const base = normalizeUnitColor(color)
+  if (!base) return undefined
+  return {
+    borderColor: hexToRgba(base, 0.3),
+    backgroundColor: hexToRgba(base, 0.12)
+  }
+}
+
+function colorDotStyle(color?: string | null): CSSProperties | undefined {
+  const base = normalizeUnitColor(color)
+  if (!base) return undefined
+  return { backgroundColor: base }
+}
+
+function compactTopicPreview(event: CalendarEventItem) {
+  const unitPrefix = event.unitCode ? `${event.unitCode} ` : ''
+  const cleanedTitle = event.title.startsWith(unitPrefix) ? event.title.slice(unitPrefix.length) : event.title
+  return cleanedTitle.trim() || 'Weekly topic'
 }
 
 function buildUnitColorMap(courses: Course[]) {
@@ -248,6 +298,7 @@ export function SemesterTimeline() {
   const [focusDate, setFocusDate] = useState<Date>(new Date())
   const [settingsReady, setSettingsReady] = useState(false)
   const [calendarSettings, setCalendarSettings] = useState<CalendarSettings>(DEFAULT_SETTINGS)
+  const [topicDetailEvent, setTopicDetailEvent] = useState<CalendarEventItem | null>(null)
   const [isImporting, setIsImporting] = useState(false)
   const [importMessage, setImportMessage] = useState<string | null>(null)
 
@@ -639,17 +690,44 @@ export function SemesterTimeline() {
 
   const EventChip = ({ event }: { event: CalendarEventItem }) => {
     const hidden = hiddenEventIdSet.has(event.id)
+    const isTopic = event.source === 'unit_schedule'
+    const preview = compactTopicPreview(event)
     return (
-      <div className={`rounded-xl border p-2 text-xs ${tintClassName(event.color)}`}>
+      <div
+        className={`rounded-xl border text-xs ${isTopic ? 'p-2.5 shadow-sm' : 'p-2'} ${isTopic ? '' : tintClassName(event.color)}`}
+        style={eventSurfaceStyle(event.color)}
+      >
         <div className="flex items-start justify-between gap-2">
           <button
             type="button"
             className="text-left"
-            onClick={() => routeToSourceEditor(event)}
+            onClick={() => {
+              if (isTopic) {
+                setTopicDetailEvent(event)
+                return
+              }
+              routeToSourceEditor(event)
+            }}
           >
-            <p className="font-semibold text-slate-900">{event.unitCode ? `${event.unitCode} · ` : ''}{event.title}</p>
-            <p className="mt-0.5 text-slate-600">{formatTimeRange(event)}{event.location ? ` · ${event.location}` : ''}</p>
-            {event.meta ? <p className="mt-0.5 text-slate-500">{event.meta}</p> : null}
+            {isTopic ? (
+              <>
+                <div className="flex items-center gap-2">
+                  <span
+                    className="h-2.5 w-2.5 rounded-full"
+                    style={colorDotStyle(event.color)}
+                  />
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-700">{event.unitCode || 'Unit topic'}</p>
+                </div>
+                <p className="mt-1 max-w-full truncate font-medium text-slate-900">{preview}</p>
+                {event.notes ? <p className="mt-0.5 max-w-full truncate text-slate-600">{event.notes}</p> : null}
+              </>
+            ) : (
+              <>
+                <p className="font-semibold text-slate-900">{event.unitCode ? `${event.unitCode} · ` : ''}{event.title}</p>
+                <p className="mt-0.5 text-slate-600">{formatTimeRange(event)}{event.location ? ` · ${event.location}` : ''}</p>
+                {event.meta ? <p className="mt-0.5 text-slate-500">{event.meta}</p> : null}
+              </>
+            )}
           </button>
           <button
             type="button"
@@ -664,6 +742,7 @@ export function SemesterTimeline() {
           <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${sourcePillClassName(event.source)}`}>
             {SOURCE_LABELS[event.source]}
           </span>
+          {isTopic ? <span className="text-[10px] font-semibold text-slate-500">Open details</span> : null}
         </div>
       </div>
     )
@@ -815,13 +894,16 @@ export function SemesterTimeline() {
           <div className="flex flex-wrap gap-2">
             {courses.map((course) => {
               const active = calendarSettings.selectedUnitIds.includes(course.id)
+              const unitColor = normalizeUnitColor(course.color)
               return (
                 <button
                   key={course.id}
                   type="button"
                   onClick={() => toggleUnit(course.id)}
-                  className={`rounded-full border px-3 py-1 text-xs font-semibold ${active ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-300 bg-white text-slate-700'}`}
+                  className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold ${active ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-300 bg-white text-slate-700'}`}
+                  style={!active && unitColor ? { borderColor: hexToRgba(unitColor, 0.5) } : undefined}
                 >
+                  <span className="h-2 w-2 rounded-full" style={colorDotStyle(unitColor)} />
                   {course.course_code}
                 </button>
               )
@@ -860,21 +942,23 @@ export function SemesterTimeline() {
         ) : null}
 
         {calendarView === 'week' ? (
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-7">
+          <div className="overflow-x-auto pb-2">
+          <div className="grid min-w-[1500px] grid-cols-7 gap-3">
             {weekDays.map((day) => {
               const dayEvents = eventsForDay(day)
               return (
-                <div key={dateKey(day)} className="rounded-2xl border border-slate-200 bg-white p-3">
+                <div key={dateKey(day)} className="min-h-[14rem] rounded-2xl border border-slate-200 bg-white p-3.5">
                   <button type="button" onClick={() => { setFocusDate(day); setCalendarView('day') }} className="w-full text-left">
                     <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">{day.toLocaleDateString('en-AU', { weekday: 'short' })}</p>
-                    <p className="text-sm font-semibold text-slate-900">{day.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}</p>
+                    <p className="text-base font-semibold text-slate-900">{day.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}</p>
                   </button>
-                  <div className="mt-3 space-y-2">
+                  <div className="mt-3 space-y-2.5">
                     {dayEvents.length ? dayEvents.map((event) => <EventChip key={`${event.id}-${dateKey(day)}`} event={event} />) : <p className="text-xs text-slate-500">No events</p>}
                   </div>
                 </div>
               )
             })}
+          </div>
           </div>
         ) : null}
 
@@ -905,6 +989,28 @@ export function SemesterTimeline() {
           </div>
         ) : null}
       </Card>
+      </div>
+    ) : null}
+
+    {topicDetailEvent ? (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-4" onClick={() => setTopicDetailEvent(null)}>
+        <div className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white p-5 shadow-xl" onClick={(event) => event.stopPropagation()}>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Weekly topic detail</p>
+              <h3 className="mt-1 text-lg font-semibold text-slate-950">{topicDetailEvent.unitCode ? `${topicDetailEvent.unitCode} · ` : ''}{compactTopicPreview(topicDetailEvent)}</h3>
+            </div>
+            <Button variant="outline" onClick={() => setTopicDetailEvent(null)}>Close</Button>
+          </div>
+          <div className="mt-4 space-y-3 text-sm text-slate-700">
+            <p><span className="font-semibold text-slate-900">Window:</span> {topicDetailEvent.start.toLocaleDateString('en-AU', { dateStyle: 'medium' })} - {topicDetailEvent.end.toLocaleDateString('en-AU', { dateStyle: 'medium' })}</p>
+            {topicDetailEvent.meta ? <p><span className="font-semibold text-slate-900">Week:</span> {topicDetailEvent.meta}</p> : null}
+            {topicDetailEvent.notes ? <p><span className="font-semibold text-slate-900">Details:</span> {topicDetailEvent.notes}</p> : <p>No additional topic notes were provided for this week.</p>}
+          </div>
+          <div className="mt-5 flex justify-end">
+            <Button variant="secondary" onClick={() => window.location.assign('/semester-timeline#curriculum')}>Open Curriculum Editor</Button>
+          </div>
+        </div>
       </div>
     ) : null}
     </div>
