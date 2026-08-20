@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import OpenAI from 'openai'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
+import { appendLog } from '@/lib/logging'
 import { decryptSecret } from '@/lib/tutor/crypto'
 import type { TutorProviderConfig, TutorReplyPayload, TutorUsageRecord } from '@/lib/tutor/types'
 
@@ -89,6 +90,12 @@ export async function generateTutorReply(input: {
   userId?: string
 }): Promise<TutorReplyPayload | null> {
   const resolved = await resolveTutorProvider(input.userId)
+  await appendLog('retrievals', 'Tutor provider resolved (sync)', {
+    provider: resolved.provider,
+    model: resolved.model,
+    byok: resolved.byok,
+    hasApiKey: Boolean(resolved.apiKey)
+  }).catch(() => {})
   if (!resolved.apiKey) {
     throw new Error(buildNoProviderMessage(resolved.provider))
   }
@@ -151,9 +158,17 @@ export async function streamTutorReply(input: {
   userPrompt: string
   userId?: string
   onText: (chunk: string) => Promise<void> | void
-}): Promise<{ provider: string; model: string; usage?: TutorUsageRecord; fullText: string } | null> {
+}): Promise<{ provider: string; model: string; usage?: TutorUsageRecord; fullText: string }> {
   const resolved = await resolveTutorProvider(input.userId)
-  if (!resolved.apiKey) return null
+  await appendLog('retrievals', 'Tutor provider resolved (stream)', {
+    provider: resolved.provider,
+    model: resolved.model,
+    byok: resolved.byok,
+    hasApiKey: Boolean(resolved.apiKey)
+  }).catch(() => {})
+  if (!resolved.apiKey) {
+    throw new Error(buildNoProviderMessage(resolved.provider))
+  }
 
   if (resolved.provider === 'openai') {
     const openai = new OpenAI({ apiKey: resolved.apiKey })
@@ -188,6 +203,10 @@ export async function streamTutorReply(input: {
       }
     }
 
+    if (!fullText.trim()) {
+      throw new Error(`The ${resolved.provider} provider returned an empty Tutor response.`)
+    }
+
     return {
       provider: 'openai',
       model: resolved.model,
@@ -205,6 +224,10 @@ export async function streamTutorReply(input: {
     messages: [{ role: 'user', content: `${input.systemPrompt}\n\n${input.userPrompt}` }]
   })
   const text = response.content?.[0]?.type === 'text' ? response.content[0].text?.trim() || '' : ''
+
+  if (!text) {
+    throw new Error(`The ${resolved.provider} provider returned an empty Tutor response.`)
+  }
 
   let cursor = 0
   const chunkSize = 180

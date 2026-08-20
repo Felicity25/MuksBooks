@@ -6,10 +6,11 @@ interface SectionShellProps {
   title: string
   description: string
   actionLabel?: string
+  contentClassName?: string
   children: ReactNode
 }
 
-export function SectionShell({ title, description, actionLabel, children }: SectionShellProps) {
+export function SectionShell({ title, description, actionLabel, contentClassName, children }: SectionShellProps) {
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -19,7 +20,7 @@ export function SectionShell({ title, description, actionLabel, children }: Sect
         </div>
         {actionLabel ? <Button variant="secondary">{actionLabel}</Button> : null}
       </div>
-      <div className="grid gap-4 lg:grid-cols-[0.9fr_0.6fr]">{children}</div>
+      <div className={contentClassName || 'grid gap-4 lg:grid-cols-[0.9fr_0.6fr]'}>{children}</div>
     </div>
   )
 }

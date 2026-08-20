@@ -2,7 +2,6 @@ import { NextRequest } from 'next/server'
 import { buildTutorPromptContext, type TutorRequest } from '@/lib/tutor/compose'
 import { createTutorMessage, isTutorUsageLimitExceeded, recordTutorUsage, upsertLearningProfile } from '@/lib/tutor/persistence'
 import { deriveProfilePatch } from '@/lib/tutor/learning'
-import { formatDemoResponse } from '@/lib/ai-helper'
 import { streamTutorReply } from '@/lib/tutor/provider'
 import { getAuthenticatedUser } from '@/lib/supabase/server'
 
@@ -77,16 +76,9 @@ export async function POST(request: NextRequest) {
           }
         })
 
-        let provider = modelReply?.provider || 'demo'
-        let model = modelReply?.model || 'demo'
-        const usage = modelReply?.usage
-
-        if (!modelReply || !fullText.trim()) {
-          fullText = formatDemoResponse(promptContext.enrichedBody)
-          provider = 'demo'
-          model = 'offline'
-          controller.enqueue(encoder.encode(sseEvent('chunk', { text: fullText })))
-        }
+        const provider = modelReply.provider
+        const model = modelReply.model
+        const usage = modelReply.usage
 
         const citations = promptContext.citations || []
 

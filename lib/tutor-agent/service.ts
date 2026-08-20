@@ -2,7 +2,7 @@ import type { AiTutorRequestBody } from '@/lib/ai-helper'
 import { searchKnowledgeBase } from '@/lib/knowledge-base/search'
 import { appendLog } from '@/lib/logging'
 import { getLessonContext, listDocuments } from '@/lib/app-state/service'
-import { listCloudDocuments } from '@/lib/supabase/documents-service'
+import { listCloudDocuments, listCloudUnits, listScheduleEntries } from '@/lib/supabase/documents-service'
 import type { TutorCitation } from '@/lib/tutor/types'
 
 export interface TutorRetrievalContext {
@@ -12,6 +12,8 @@ export interface TutorRetrievalContext {
   effectiveUnitCode: string | null
   unitSelectionMode: 'general' | 'auto' | 'manual'
   detectionConfidence: number
+  retrievalQuery: string
+  scheduleContext: string | null
   curriculumResourceSummary: string
   relevantChunks: string[]
   uploadedContext: string
@@ -83,8 +85,52 @@ function resolveSelectionMode(request: AiTutorRequestBody): 'general' | 'auto' |
   return 'auto'
 }
 
+function requestedWeekNumber(message: string) {
+  const match = message.match(/\b(?:teaching\s+)?week\s*0?(\d{1,2})\b/i)
+  return match?.[1] ? Number(match[1]) : null
+}
+
+async function resolveScheduleContext(input: {
+  userId?: string
+  unitCode: string | null
+  message: string
+  cloudUnits: Array<{ id: string; code: string }>
+}) {
+  const weekNumber = requestedWeekNumber(input.message)
+  if (!input.userId || !input.unitCode || weekNumber === null) return null
+
+  const unit = input.cloudUnits.find((candidate) => normalizeUnitCode(candidate.code) === input.unitCode)
+  if (!unit) return null
+
+  const entries = await listScheduleEntries(input.userId, unit.id)
+  const entry = entries?.find((candidate: any) => Number(candidate.week_number) === weekNumber)
+  if (!entry) return null
+
+  const topics = [entry.topic, ...(Array.isArray(entry.additional_topics) ? entry.additional_topics : [])]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean)
+  const activities = Array.isArray(entry.activities)
+    ? entry.activities.map((value: unknown) => String(value || '').trim()).filter(Boolean)
+    : []
+
+  return {
+    weekNumber,
+    topics,
+    activities,
+    text: [
+      `${input.unitCode} Week ${weekNumber}`,
+      topics.length ? `Topics: ${topics.join('; ')}` : '',
+      activities.length ? `Activities: ${activities.join('; ')}` : ''
+    ].filter(Boolean).join('. ')
+  }
+}
+
 export async function buildTutorRetrievalContext(request: AiTutorRequestBody, userId?: string): Promise<TutorRetrievalContext> {
   const lessonContext = await getLessonContext({ unit: request.unit, topic: request.topic })
+
+  const cloudUnits = userId
+    ? ((await listCloudUnits(userId)) || []).map((unit: any) => ({ id: String(unit.id), code: normalizeUnitCode(unit.code) }))
+    : []
 
   // Prefer Supabase document list (persistent) when authenticated
   let allDocuments: Array<{ document_id?: string | null; course_code: string | null; filename: string; document_type?: string | null; processing_status?: string | null; indexing_status?: string | null }> = []
@@ -107,8 +153,7 @@ export async function buildTutorRetrievalContext(request: AiTutorRequestBody, us
 
   const availableUnits = Array.from(
     new Set(
-      allDocuments
-        .map((document) => document.course_code)
+      [...cloudUnits.map((unit) => unit.code), ...allDocuments.map((document) => normalizeUnitCode(document.course_code))]
         .filter((code): code is string => Boolean(code))
     )
   )
@@ -121,8 +166,10 @@ export async function buildTutorRetrievalContext(request: AiTutorRequestBody, us
 
   const mentionedUnitCode = detectMentionedUnit(request.message, availableUnits)
 
-  // Pass userId so search prefers Supabase chunks
-  const unscopedHits = await searchKnowledgeBase(request.message, undefined, 24, userId)
+  // Only Auto/General need an unscoped pass for explicit or evidence-based unit detection.
+  const unscopedHits = unitSelectionMode === 'manual'
+    ? []
+    : await searchKnowledgeBase(request.message, undefined, 24, userId)
   const strongDetection = detectStrongUnitFromHits(unscopedHits, availableUnits)
 
   const detectedUnitCode = mentionedUnitCode || strongDetection.detectedUnitCode
@@ -136,48 +183,64 @@ export async function buildTutorRetrievalContext(request: AiTutorRequestBody, us
     effectiveUnitCode = mentionedUnitCode || strongDetection.detectedUnitCode
   }
 
+  const schedule = await resolveScheduleContext({
+    userId,
+    unitCode: effectiveUnitCode,
+    message: request.message,
+    cloudUnits
+  })
+  const retrievalQuery = [
+    request.message,
+    schedule?.text,
+    request.topic ? `Topic: ${request.topic}` : ''
+  ].filter(Boolean).join('\n')
+
   const scopedHits = effectiveUnitCode
-    ? await searchKnowledgeBase(request.message, effectiveUnitCode, 12, userId)
+    ? await searchKnowledgeBase(retrievalQuery, effectiveUnitCode, 16, userId)
     : unscopedHits
 
   const relevantHits = scopedHits.filter((hit) => hit.score >= 0.2)
-  const topHits = (relevantHits.length ? relevantHits : scopedHits.slice(0, 3)).slice(0, 5)
-  const relevantChunks = topHits.map((hit) => `${hit.chunk.text.slice(0, 700)}\n[section:${hit.chunk.sectionTitle || 'general'}][score:${hit.score.toFixed(3)}]`)
-  const hitCitations: TutorCitation[] = topHits.map((hit) => ({
-    id: hit.chunk.chunkId,
-    label: hit.chunk.sectionTitle || 'Knowledge chunk',
-    unit: getHitUnitCode(hit) || effectiveUnitCode || null,
-    section: hit.chunk.sectionTitle || null,
-    score: Number(hit.score.toFixed(3))
-  }))
+  const topHits = relevantHits.slice(0, 6)
+  const relevantChunks = topHits.map((hit, index) => {
+    const sourceName = hit.chunk.sourceFileName || 'Uploaded material'
+    const section = hit.chunk.sectionTitle || `Chunk ${hit.chunk.chunkIndex + 1}`
+    return `[SOURCE ${index + 1}: ${sourceName} | ${section} | ${getHitUnitCode(hit) || effectiveUnitCode || 'General'}]\n${hit.chunk.text.slice(0, 1200)}`
+  })
+
+  const citationByDocument = new Map<string, TutorCitation>()
+  for (const hit of topHits) {
+    if (citationByDocument.has(hit.chunk.documentId)) continue
+    citationByDocument.set(hit.chunk.documentId, {
+      id: hit.chunk.documentId,
+      label: hit.chunk.sourceFileName || hit.chunk.sectionTitle || 'Uploaded material',
+      unit: getHitUnitCode(hit) || effectiveUnitCode || null,
+      section: hit.chunk.sectionTitle || null,
+      score: Number(hit.score.toFixed(3))
+    })
+  }
+  const hitCitations = Array.from(citationByDocument.values())
 
   const topHitDocumentIds = new Set(topHits.map((hit) => String(hit.chunk.documentId || '')))
-  const scopedDocuments = effectiveUnitCode
-    ? allDocuments.filter((document) => normalizeUnitCode(document.course_code) === effectiveUnitCode)
-    : allDocuments.filter((document) => document.document_id && topHitDocumentIds.has(String(document.document_id))).slice(0, 8)
+  const scopedDocuments = allDocuments
+    .filter((document) => document.document_id && topHitDocumentIds.has(String(document.document_id)))
+    .slice(0, 6)
 
   const curriculumResourceSummary = scopedDocuments.length
     ? scopedDocuments
         .map((document) => `${document.filename} (${document.course_code || 'unclassified'}; ${document.document_type || 'resource'}; ${document.indexing_status || 'processing'})`)
         .join(' | ')
-    : lessonContext.uploadedContext || 'No strongly relevant uploaded resource found for this question.'
-
-  const documentCitations: TutorCitation[] = scopedDocuments.slice(0, 6).map((document, index) => ({
-    id: `doc-${index}-${document.filename}`,
-    label: document.filename,
-    unit: document.course_code || effectiveUnitCode || null,
-    section: document.document_type || null,
-    score: null
-  }))
+    : 'No strongly relevant indexed upload chunks were found for this question.'
 
   const unitContext = effectiveUnitCode
     ? [
         `Effective unit: ${effectiveUnitCode}.`,
-        lessonContext.contextSummary,
-        `Curriculum resources used: ${curriculumResourceSummary}`,
+        schedule ? `Schedule mapping: ${schedule.text}.` : '',
+        topHits.length
+          ? `Retrieved ${topHits.length} substantive chunks from ${hitCitations.length} source document(s).`
+          : 'No substantive uploaded chunks passed the relevance threshold.',
         scopedDocuments.length
-          ? `Documents in scope: ${scopedDocuments.map((document) => `${document.filename} [${document.processing_status || 'uploaded'}]`).join(' | ')}`
-          : 'No documents found in scope.'
+          ? `Sources actually used: ${scopedDocuments.map((document) => document.filename).join(' | ')}`
+          : 'Uploaded sources were insufficient; answer from general knowledge and state that limitation.'
       ].filter(Boolean).join(' ')
     : 'Effective unit: General. No strong unit evidence was applied.'
 
@@ -187,6 +250,8 @@ export async function buildTutorRetrievalContext(request: AiTutorRequestBody, us
     effectiveUnitCode,
     unitSelectionMode,
     detectionConfidence: strongDetection.confidence,
+    retrievalQuery,
+    scheduleContext: schedule?.text || null,
     availableUnits,
     resultCount: topHits.length,
     documentCount: scopedDocuments.length,
@@ -200,10 +265,14 @@ export async function buildTutorRetrievalContext(request: AiTutorRequestBody, us
     effectiveUnitCode,
     unitSelectionMode,
     detectionConfidence: strongDetection.confidence,
+    retrievalQuery,
+    scheduleContext: schedule?.text || null,
     curriculumResourceSummary,
     relevantChunks,
-    uploadedContext: lessonContext.uploadedContext || curriculumResourceSummary,
+    uploadedContext: relevantChunks.length
+      ? `Substantive excerpts from ${hitCitations.length} retrieved source document(s) are included below.`
+      : 'No substantive uploaded excerpts were retrieved.',
     unitContext,
-    citations: [...documentCitations, ...hitCitations]
+    citations: hitCitations
   }
 }

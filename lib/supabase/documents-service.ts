@@ -305,7 +305,7 @@ export async function searchCloudChunks(
   userId: string,
   courseCode: string | undefined,
   limit = 24
-): Promise<Array<{ id: string; document_id: string; chunk_index: number; section: string | null; text: string; embedding: number[]; course_code: string | null }> | null> {
+): Promise<Array<{ id: string; document_id: string; chunk_index: number; section: string | null; text: string; embedding: number[]; course_code: string | null; source_filename: string | null }> | null> {
   const client = createSupabaseServerClient()
   if (!client) return null
 
@@ -323,7 +323,24 @@ export async function searchCloudChunks(
       if (!isMissingRelation(error)) console.error('[Cloud] Search chunks failed:', error.message)
       return null
     }
-    return data ?? []
+    const chunks = data ?? []
+    if (!chunks.length) return []
+
+    const documentIds = Array.from(new Set(chunks.map((chunk) => chunk.document_id).filter(Boolean)))
+    const { data: uploads } = await client
+      .from('uploads')
+      .select('document_id, original_filename')
+      .eq('user_id', userId)
+      .in('document_id', documentIds)
+
+    const filenameByDocument = new Map(
+      (uploads || []).map((upload) => [String(upload.document_id), String(upload.original_filename || '')])
+    )
+
+    return chunks.map((chunk) => ({
+      ...chunk,
+      source_filename: filenameByDocument.get(String(chunk.document_id)) || null
+    }))
   } catch (err) {
     if (!isMissingRelation(err)) console.error('[Cloud] Search chunks error:', err)
     return null

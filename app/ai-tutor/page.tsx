@@ -3,7 +3,12 @@ import { AiTutorChat } from '@/components/ai-tutor-chat'
 
 export default function AiTutorPage() {
   return (
-    <SectionShell title="AI Tutor" description="Ask for concept explanations, lesson generation and assignment marking" actionLabel="Start session">
+    <SectionShell
+      title="AI Tutor"
+      description="Ask for concept explanations, lesson generation and assignment marking"
+      actionLabel="Start session"
+      contentClassName="block"
+    >
       <AiTutorChat />
     </SectionShell>
   )

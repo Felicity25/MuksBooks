@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { formatDemoResponse, type AiTutorRequestBody } from '@/lib/ai-helper'
+import { type AiTutorRequestBody } from '@/lib/ai-helper'
 import { buildTutorPromptContext } from '@/lib/tutor/compose'
 import { generateTutorReply } from '@/lib/tutor/provider'
 import { createTutorMessage, isTutorUsageLimitExceeded, recordTutorUsage, upsertLearningProfile } from '@/lib/tutor/persistence'
@@ -55,8 +55,10 @@ export async function POST(request: NextRequest) {
       userId
     })
 
-    const responseText = modelReply?.text?.trim() || formatDemoResponse(promptContext.enrichedBody)
-    const demoMode = !modelReply || !modelReply.text?.trim()
+    const responseText = modelReply?.text?.trim()
+    if (!responseText) {
+      throw new Error('The configured AI provider returned an empty Tutor response.')
+    }
 
     if (userId && body.conversationId) {
       await createTutorMessage({
@@ -99,7 +101,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       response: responseText,
-      demoMode,
+      demoMode: false,
       citations: promptContext.citations,
       unitSelectionMode: promptContext.unitSelectionMode,
       selectedUnitCode: promptContext.selectedUnitCode,

@@ -28,6 +28,8 @@ export interface CatalogDocument {
 export interface ChunkRecord {
   chunkId: string
   documentId: string
+  courseCode?: string | null
+  sourceFileName?: string | null
   version: number
   chunkIndex: number
   sectionTitle?: string

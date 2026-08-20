@@ -2,6 +2,7 @@ import { buildOptimizedPrompt, buildSystemPrompt, type AiTutorRequestBody } from
 import { buildTutorRetrievalContext } from '@/lib/tutor-agent/service'
 import { getLearningProfile, listTutorMessages } from '@/lib/tutor/persistence'
 import { buildLearningHints } from '@/lib/tutor/learning'
+import { appendLog } from '@/lib/logging'
 import type { TutorCitation } from '@/lib/tutor/types'
 
 export interface TutorRequest extends AiTutorRequestBody {
@@ -74,6 +75,17 @@ ${prioritizeQuestion(input)}`,
 
   const systemPrompt = buildSystemPrompt({ unit: enrichedBody.unit, topic: input.topic, mode: input.mode, demoMode: false })
   const userPrompt = await buildOptimizedPrompt(enrichedBody)
+
+  await appendLog('retrievals', 'Tutor prompt composed', {
+    effectiveUnitCode: retrievalContext.effectiveUnitCode,
+    unitSelectionMode: retrievalContext.unitSelectionMode,
+    retrievalQuery: retrievalContext.retrievalQuery,
+    scheduleContext: retrievalContext.scheduleContext,
+    citations: retrievalContext.citations.map((citation) => citation.label).slice(0, 6),
+    chunkPreview: retrievalContext.relevantChunks.slice(0, 3).map((chunk) => chunk.slice(0, 280)),
+    systemPromptPreview: systemPrompt.slice(0, 280),
+    userPromptPreview: userPrompt.slice(0, 500)
+  }).catch(() => {})
 
   return {
     enrichedBody,

@@ -88,7 +88,7 @@ async function fetchJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> 
 
 function MarkdownMessage({ content }: { content: string }) {
   return (
-    <div className="prose prose-slate max-w-none text-sm leading-7 prose-pre:rounded-2xl prose-pre:border prose-pre:border-slate-200 prose-pre:bg-slate-950 prose-pre:text-slate-100">
+    <div className="prose prose-slate max-w-none text-[15px] leading-8 prose-headings:scroll-mt-24 prose-headings:font-semibold prose-h2:mt-8 prose-h2:text-2xl prose-h3:mt-6 prose-h3:text-xl prose-p:text-slate-800 prose-li:my-1 prose-ul:my-4 prose-ol:my-4 prose-pre:overflow-x-auto prose-pre:rounded-2xl prose-pre:border prose-pre:border-slate-200 prose-pre:bg-slate-950 prose-pre:text-slate-100 prose-code:text-[0.95em]">
       <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
         {content}
       </ReactMarkdown>
@@ -99,9 +99,9 @@ function MarkdownMessage({ content }: { content: string }) {
 function SourceChips({ citations }: { citations?: TutorCitation[] }) {
   if (!citations?.length) return null
   return (
-    <div className="mt-3 flex flex-wrap gap-2">
+    <div className="mt-4 flex flex-wrap gap-2">
       {citations.slice(0, 6).map((citation) => (
-        <span key={citation.id} className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-600">
+        <span key={citation.id} className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] text-slate-600">
           {citation.label}
           {citation.unit ? ` • ${citation.unit}` : ''}
         </span>
@@ -611,8 +611,8 @@ export function AiTutorChat() {
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
-      <Card className="p-3">
+    <div className="grid gap-5 xl:grid-cols-[240px_minmax(0,1fr)]">
+      <Card className="p-3 xl:sticky xl:top-24 xl:h-[78vh] xl:overflow-y-auto">
         <div className="mb-3 flex items-center justify-between">
           <p className="text-sm font-semibold text-slate-900">Conversations</p>
           {user && (
@@ -656,7 +656,7 @@ export function AiTutorChat() {
         </div>
       </Card>
 
-      <div className="space-y-4">
+      <div className="space-y-4 min-w-0">
         <Card className="p-4">
           <div className="grid gap-3 sm:grid-cols-3">
             <div>
@@ -708,19 +708,19 @@ export function AiTutorChat() {
           </div>
         </Card>
 
-        <Card className="h-[34rem] overflow-y-auto p-4">
+        <Card className="min-h-[52vh] p-0 lg:min-h-[64vh] xl:min-h-[70vh]">
           {!messages.length && !draftAssistant ? (
-            <div className="flex h-full items-center justify-center rounded-3xl border border-dashed border-slate-200 bg-slate-50 text-center">
+            <div className="flex h-full min-h-[52vh] items-center justify-center rounded-3xl border border-dashed border-slate-200 bg-slate-50 text-center lg:min-h-[64vh] xl:min-h-[70vh]">
               <div className="max-w-lg space-y-2 p-6">
                 <p className="text-base font-semibold text-slate-900">Central Tutor is ready</p>
                 <p className="text-sm text-slate-600">Ask about your current unit, request guided practice, or open R Lab to connect concepts to implementation.</p>
               </div>
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="h-full max-h-[52vh] space-y-5 overflow-y-auto p-5 lg:max-h-[64vh] xl:max-h-[70vh]">
               {messages.map((message) => (
                 <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-3xl rounded-3xl px-4 py-3 ${message.role === 'user' ? 'bg-slate-900 text-white' : 'border border-slate-200 bg-white text-slate-900'}`}>
+                  <div className={`w-full max-w-5xl rounded-3xl px-5 py-4 ${message.role === 'user' ? 'bg-slate-900 text-white' : 'border border-slate-200 bg-white text-slate-900 shadow-sm'}`}>
                     {message.role === 'assistant' ? (
                       <>
                         <div className="mb-2 flex flex-wrap gap-2">
@@ -747,7 +747,7 @@ export function AiTutorChat() {
 
               {isLoading && (
                 <div className="flex justify-start">
-                  <div className="max-w-3xl rounded-3xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
+                  <div className="w-full max-w-5xl rounded-3xl border border-slate-200 bg-white px-5 py-4 text-sm text-slate-600 shadow-sm">
                     <p className="font-medium text-slate-900">Tutor is working</p>
                     <p className="mt-1 text-xs text-slate-500">Retrieving unit sources, checking learning memory, then generating response.</p>
                     <div className="mt-2 flex gap-2 text-[11px] text-slate-500">
@@ -764,7 +764,7 @@ export function AiTutorChat() {
           )}
         </Card>
 
-        <Card className="p-4">
+        <Card className="sticky bottom-4 p-4">
           {error ? <p className="mb-2 text-sm text-rose-600">{error}</p> : null}
           {micStatus ? <p className="mb-2 text-xs text-slate-500" aria-live="polite">{micStatus}</p> : null}
           <textarea

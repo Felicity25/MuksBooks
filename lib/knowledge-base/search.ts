@@ -52,7 +52,7 @@ export async function searchKnowledgeBase(query: string, courseCode?: string, li
   if (userId) {
     try {
       const { searchCloudChunks } = await import('@/lib/supabase/documents-service')
-      const cloudChunks = await searchCloudChunks(userId, courseCode, limit * 4)
+      const cloudChunks = await searchCloudChunks(userId, courseCode, Math.max(500, limit * 20))
       if (cloudChunks && cloudChunks.length > 0) {
         const queryEmbedding = await embedText(query)
         const scored = cloudChunks
@@ -70,7 +70,8 @@ export async function searchKnowledgeBase(query: string, courseCode?: string, li
                 embeddingPath: '',
                 sourcePriority: 1,
                 version: 1,
-                courseCode: c.course_code ?? null
+                courseCode: c.course_code ?? null,
+                sourceFileName: c.source_filename ?? null
               } as ChunkRecord,
               score: emb.length > 0 ? cosineSimilarity(queryEmbedding, emb) : 0
             }
@@ -94,6 +95,9 @@ export async function searchKnowledgeBase(query: string, courseCode?: string, li
   const documentCourseMap = new Map(
     activeDocuments.map((doc) => [doc.documentId, doc.metadata.courseCode?.toUpperCase() || null])
   )
+  const documentNameMap = new Map(
+    activeDocuments.map((doc) => [doc.documentId, doc.fileName])
+  )
   const activeDocIds = new Set(
     activeDocuments
       .filter((doc) => !courseCode || doc.metadata.courseCode.toUpperCase() === courseCode.toUpperCase())
@@ -110,7 +114,8 @@ export async function searchKnowledgeBase(query: string, courseCode?: string, li
       scored.push({
         chunk: {
           ...chunk,
-          courseCode: documentCourseMap.get(chunk.documentId) || null
+          courseCode: documentCourseMap.get(chunk.documentId) || null,
+          sourceFileName: documentNameMap.get(chunk.documentId) || null
         } as ChunkRecord,
         score
       })
