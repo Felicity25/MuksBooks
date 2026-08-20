@@ -5,7 +5,21 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
-import { Card } from '@/components/ui/card'
+import {
+  ChevronDown,
+  Expand,
+  FlaskConical,
+  Mic,
+  Minimize2,
+  PanelLeft,
+  PanelLeftClose,
+  Paperclip,
+  Plus,
+  Send,
+  Sparkles,
+  Wrench,
+  X
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/components/auth-provider'
 import { useReadAloud } from '@/components/study/read-aloud-provider'
@@ -110,16 +124,103 @@ function MarkdownMessage({ content }: { content: string }) {
   )
 }
 
-function SourceChips({ citations }: { citations?: TutorCitation[] }) {
+function SourceChip({
+  citations,
+  open,
+  onToggle
+}: {
+  citations?: TutorCitation[]
+  open: boolean
+  onToggle: () => void
+}) {
   if (!citations?.length) return null
   return (
-    <div className="mt-4 flex flex-wrap gap-2">
-      {citations.slice(0, 6).map((citation) => (
-        <span key={citation.id} className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] text-slate-600">
-          {citation.label}
-          {citation.unit ? ` • ${citation.unit}` : ''}
-        </span>
-      ))}
+    <div className="mt-3">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-medium text-slate-600 hover:border-slate-300"
+      >
+        Sources {citations.length}
+        <ChevronDown size={12} className={open ? 'rotate-180' : ''} />
+      </button>
+      {open ? (
+        <div className="mt-2 space-y-1 rounded-2xl border border-slate-200 bg-white p-3 text-xs text-slate-600">
+          {citations.slice(0, 8).map((citation) => (
+            <p key={citation.id}>
+              {citation.label}
+              {citation.section ? ` · ${citation.section}` : ''}
+              {citation.unit ? ` · ${citation.unit}` : ''}
+            </p>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function ClaudeWorkspace({
+  artifactUrl,
+  expanded,
+  onToggleExpanded
+}: {
+  artifactUrl: string
+  expanded: boolean
+  onToggleExpanded: () => void
+}) {
+  const trimmedUrl = artifactUrl.trim()
+  const hasEmbedUrl = Boolean(trimmedUrl)
+  const blockedClaudeChatUrl = /claude\.ai/i.test(trimmedUrl)
+  const canEmbed = hasEmbedUrl && !blockedClaudeChatUrl
+
+  return (
+    <div className="flex h-full flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white">
+      <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+        <div>
+          <p className="text-sm font-semibold text-slate-900">Claude workspace</p>
+          <p className="text-xs text-slate-500">Runs on your Claude account and Claude usage limits.</p>
+        </div>
+        <button
+          type="button"
+          onClick={onToggleExpanded}
+          className="rounded-xl border border-slate-200 p-2 text-slate-600 hover:border-slate-300"
+          aria-label={expanded ? 'Restore workspace size' : 'Expand workspace'}
+        >
+          {expanded ? <Minimize2 size={15} /> : <Expand size={15} />}
+        </button>
+      </div>
+
+      {canEmbed ? (
+        <iframe
+          title="Claude Artifact Workspace"
+          src={trimmedUrl}
+          className="h-full min-h-[65vh] w-full border-0"
+          allow="clipboard-write"
+          referrerPolicy="strict-origin-when-cross-origin"
+        />
+      ) : (
+        <div className="space-y-4 p-5 text-sm text-slate-700">
+          <p className="font-medium text-slate-900">Claude Artifact embed is not configured yet.</p>
+          {blockedClaudeChatUrl ? (
+            <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-900">
+              Direct claude.ai chat URLs are not supported here. Use a published Artifact embed URL from Claude &quot;Get embed code&quot;.
+            </p>
+          ) : null}
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs leading-6 text-slate-600">
+            <p className="font-semibold text-slate-900">Setup steps</p>
+            <p>1. In Claude, open your Artifact and click Publish.</p>
+            <p>2. Click Get embed code and set Allowed domains (include muksbooks.com and your preview domains).</p>
+            <p>3. Copy the embed URL and set NEXT_PUBLIC_CLAUDE_ARTIFACT_EMBED_URL.</p>
+            <p>4. Redeploy MuksBooks.</p>
+          </div>
+          <div className="rounded-2xl border border-slate-200 p-4 text-xs leading-6 text-slate-600">
+            <p className="font-semibold text-slate-900">Capability boundary</p>
+            <p>MuksBooks Tutor uses your units/uploads/schedule context.</p>
+            <p>Claude workspace uses Claude authentication and Claude usage allowances.</p>
+            <p>No implicit Supabase or MuksBooks data bridge is assumed in the Artifact.</p>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -145,6 +246,7 @@ function ComposerFileList({ files, onRemove }: { files: File[]; onRemove: (name:
 export function AiTutorChat() {
   const { user, requireAuth } = useAuth()
   const readAloud = useReadAloud()
+  const claudeArtifactUrl = process.env.NEXT_PUBLIC_CLAUDE_ARTIFACT_EMBED_URL || ''
 
   const [conversations, setConversations] = useState<TutorConversation[]>([])
   const [conversationId, setConversationId] = useState<string>('')
@@ -168,6 +270,15 @@ export function AiTutorChat() {
   const [rRunning, setRRunning] = useState(false)
   const [isListening, setIsListening] = useState(false)
   const [micStatus, setMicStatus] = useState('')
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [showContextPicker, setShowContextPicker] = useState(false)
+  const [showContextDetails, setShowContextDetails] = useState(false)
+  const [showTools, setShowTools] = useState(false)
+  const [expandedSourcesMessageId, setExpandedSourcesMessageId] = useState<string | null>(null)
+  const [workspace, setWorkspace] = useState<'tutor' | 'claude'>('tutor')
+  const [focusMode, setFocusMode] = useState(false)
+  const [claudeExpanded, setClaudeExpanded] = useState(false)
 
   async function copyToClipboard(value: string) {
     try {
@@ -197,6 +308,25 @@ export function AiTutorChat() {
     }
     return 'Context: General'
   }, [unitSelectionMode, manualUnitCode, detectedUnitCode])
+
+  const activeConversation = useMemo(
+    () => conversations.find((conversation) => conversation.id === conversationId) || null,
+    [conversations, conversationId]
+  )
+
+  const contextChipLabel = useMemo(() => {
+    if (unitSelectionMode === 'manual') return manualUnitCode || 'General'
+    if (unitSelectionMode === 'auto') return `Auto${detectedUnitCode ? ` · ${detectedUnitCode}` : ''}`
+    return 'General'
+  }, [unitSelectionMode, manualUnitCode, detectedUnitCode])
+
+  const latestAssistantCitations = useMemo(() => {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const item = messages[index]
+      if (item.role === 'assistant' && item.citations?.length) return item.citations
+    }
+    return activeCitations
+  }, [messages, activeCitations])
 
   function applyConversationUnitContext(conversation?: TutorConversation) {
     if (!conversation) {
@@ -238,6 +368,18 @@ export function AiTutorChat() {
 
     setSelectedUnitChoice(UNIT_CHOICE_GENERAL)
     setDetectedUnitCode(null)
+  }
+
+  function applyUnitChoice(rawChoice: string) {
+    const nextChoice = rawChoice === UNIT_CHOICE_AUTO ? UNIT_CHOICE_AUTO : normalizeUnitCode(rawChoice)
+    setSelectedUnitChoice(nextChoice)
+    if (nextChoice !== UNIT_CHOICE_AUTO) {
+      setDetectedUnitCode(null)
+    }
+    if (user && conversationId) {
+      void syncConversationContext(conversationId, nextChoice, mode, null)
+    }
+    setShowContextPicker(false)
   }
 
   async function loadUnits() {
@@ -431,6 +573,10 @@ export function AiTutorChat() {
   async function sendMessage(regenerateFromUserMessage?: string) {
     const trimmed = (regenerateFromUserMessage || input).trim()
     if (!trimmed) return
+
+    if (/\b(show me|write|solve|run).{0,30}\bin r\b|\bsee it in r\b|\br code\b/i.test(trimmed)) {
+      setRLabOpen(true)
+    }
 
     if (!user && requireAuth('Sign in to persist tutor memory, conversations and learning profile.')) {
       // Allow guests to continue in local mode after showing auth prompt.
@@ -663,250 +809,437 @@ export function AiTutorChat() {
     recognition.start()
   }
 
+  const containerClass = focusMode
+    ? 'fixed inset-0 z-50 bg-slate-50 p-3 sm:p-4'
+    : 'relative'
+
   return (
-    <div className="grid gap-5 xl:grid-cols-[240px_minmax(0,1fr)]">
-      <Card className="p-3 xl:sticky xl:top-24 xl:h-[78vh] xl:overflow-y-auto">
-        <div className="mb-3 flex items-center justify-between">
-          <p className="text-sm font-semibold text-slate-900">Conversations</p>
-          {user && (
-            <Button size="sm" onClick={() => {
-              setConversationId('')
-              setSelectedUnitChoice(UNIT_CHOICE_GENERAL)
-              setDetectedUnitCode(null)
-            }}>New</Button>
-          )}
-        </div>
-        <div className="space-y-2">
-          {conversations.map((conversation) => (
-            <div key={conversation.id} className={`rounded-2xl border p-2 ${conversation.id === conversationId ? 'border-slate-900 bg-slate-50' : 'border-slate-200 bg-white'}`}>
-              <button className="w-full text-left" onClick={() => setConversationId(conversation.id)}>
-                <p className="truncate text-sm font-medium text-slate-900">{conversation.title}</p>
-                <p className="text-xs text-slate-500">{conversation.active_unit_code || 'No unit selected'}</p>
-              </button>
-              {user && (
-                <div className="mt-2 flex gap-2">
-                  <button className="text-xs text-slate-500 hover:text-slate-900" onClick={() => renameConversation(conversation)}>Rename</button>
-                  <button className="text-xs text-rose-500 hover:text-rose-700" onClick={() => deleteConversation(conversation)}>Delete</button>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-
-        <div className="mt-4 border-t border-slate-200 pt-4">
-          <button className="text-xs font-medium text-slate-600 hover:text-slate-900" onClick={() => setShowMemoryPanel((open) => !open)}>
-            {showMemoryPanel ? 'Hide learning memory' : 'Learning memory'}
-          </button>
-          {showMemoryPanel && (
-            <div className="mt-2 space-y-2 text-xs text-slate-600">
-              <p>Depth: {learningProfile?.preferred_depth || 'balanced'}</p>
-              <p>Hint style: {learningProfile?.hint_style || 'progressive'}</p>
-              <p>Recent topics: {learningProfile?.recent_topics?.slice(0, 3).join(', ') || 'None yet'}</p>
-              <p>Misconceptions: {learningProfile?.repeated_misconceptions?.slice(0, 3).join(', ') || 'None tracked'}</p>
-              {user && <button className="text-rose-600 hover:text-rose-700" onClick={resetLearningMemory}>Reset memory</button>}
-            </div>
-          )}
-        </div>
-      </Card>
-
-      <div className="space-y-4 min-w-0">
-        <Card className="p-4">
-          <div className="grid gap-3 sm:grid-cols-3">
+    <div className={containerClass}>
+      <div className="flex h-full min-h-[78vh] flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+        <header className="flex items-center justify-between gap-3 border-b border-slate-200 px-3 py-3 sm:px-4">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setSidebarOpen(true)}
+              className="rounded-xl border border-slate-200 p-2 text-slate-600 lg:hidden"
+              aria-label="Open conversations sidebar"
+            >
+              <PanelLeft size={16} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setSidebarCollapsed((value) => !value)}
+              className="hidden rounded-xl border border-slate-200 p-2 text-slate-600 lg:inline-flex"
+              aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            >
+              <PanelLeftClose size={16} className={sidebarCollapsed ? 'rotate-180' : ''} />
+            </button>
             <div>
-              <label className="text-sm font-medium text-slate-700">Choose unit</label>
-              <select
-                value={selectedUnitChoice}
-                onChange={(event) => {
-                  const rawChoice = event.target.value
-                  const nextChoice = rawChoice === UNIT_CHOICE_AUTO ? UNIT_CHOICE_AUTO : normalizeUnitCode(rawChoice)
-                  setSelectedUnitChoice(nextChoice)
-                  if (nextChoice !== UNIT_CHOICE_AUTO) {
-                    setDetectedUnitCode(null)
-                  }
-                  if (user && conversationId) {
-                    void syncConversationContext(conversationId, nextChoice, mode, null)
-                  }
-                }}
-                className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
-              >
-                <option value={UNIT_CHOICE_GENERAL}>General / No unit</option>
-                <option value={UNIT_CHOICE_AUTO}>Auto-detect from question/uploads</option>
-                {unitOptions.map((option) => (
-                  <option key={option.code} value={option.code}>{option.code} - {option.name}</option>
-                ))}
-              </select>
-              <p className="mt-2 text-xs text-slate-500">{contextLabel}</p>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-slate-700">Topic</label>
-              <input
-                value={topic}
-                onChange={(event) => setTopic(event.target.value)}
-                className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
-                placeholder="e.g. conditional expectation"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium text-slate-700">Mode</label>
-              <select
-                value={mode}
-                onChange={(event) => setMode(event.target.value as typeof mode)}
-                className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
-              >
-                {modes.map((item) => (
-                  <option key={item.value} value={item.value}>{item.label}</option>
-                ))}
-              </select>
+              <p className="text-sm font-semibold text-slate-900">AI Tutor Workspace</p>
+              <p className="text-xs text-slate-500">Conversation-first study flow for actuarial learning.</p>
             </div>
           </div>
-        </Card>
 
-        <Card className="min-h-[52vh] p-0 lg:min-h-[64vh] xl:min-h-[70vh]">
-          {!messages.length && !draftAssistant ? (
-            <div className="flex h-full min-h-[52vh] items-center justify-center rounded-3xl border border-dashed border-slate-200 bg-slate-50 text-center lg:min-h-[64vh] xl:min-h-[70vh]">
-              <div className="max-w-lg space-y-2 p-6">
-                <p className="text-base font-semibold text-slate-900">Central Tutor is ready</p>
-                <p className="text-sm text-slate-600">Ask about your current unit, request guided practice, or open R Lab to connect concepts to implementation.</p>
-              </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setWorkspace('tutor')}
+              className={`rounded-full px-3 py-1.5 text-xs font-medium ${workspace === 'tutor' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700'}`}
+            >
+              MuksBooks Tutor
+            </button>
+            <button
+              type="button"
+              onClick={() => setWorkspace('claude')}
+              className={`rounded-full px-3 py-1.5 text-xs font-medium ${workspace === 'claude' ? 'bg-sky-700 text-white' : 'bg-slate-100 text-slate-700'}`}
+            >
+              Work with Claude
+            </button>
+            <button
+              type="button"
+              onClick={() => setFocusMode((open) => !open)}
+              className="rounded-xl border border-slate-200 p-2 text-slate-600"
+              aria-label={focusMode ? 'Exit focus mode' : 'Enter focus mode'}
+            >
+              {focusMode ? <Minimize2 size={16} /> : <Expand size={16} />}
+            </button>
+          </div>
+        </header>
+
+        <div className="relative flex min-h-0 flex-1">
+          {sidebarOpen ? (
+            <div className="fixed inset-0 z-40 bg-slate-900/30 lg:hidden" onClick={() => setSidebarOpen(false)} />
+          ) : null}
+
+          <aside
+            className={`
+              fixed left-0 top-0 z-50 h-full w-[260px] border-r border-slate-200 bg-white p-3 transition-transform lg:static lg:z-0 lg:h-auto lg:translate-x-0
+              ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+              ${sidebarCollapsed ? 'lg:w-0 lg:overflow-hidden lg:border-r-0 lg:p-0' : ''}
+            `}
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Conversations</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setConversationId('')
+                  setSelectedUnitChoice(UNIT_CHOICE_GENERAL)
+                  setDetectedUnitCode(null)
+                  setMessages([])
+                  setSidebarOpen(false)
+                }}
+                className="rounded-lg border border-slate-200 p-1.5 text-slate-600"
+              >
+                <Plus size={14} />
+              </button>
             </div>
-          ) : (
-            <div className="h-full max-h-[52vh] space-y-5 overflow-y-auto p-5 lg:max-h-[64vh] xl:max-h-[70vh]">
-              {messages.map((message) => (
-                <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`w-full max-w-5xl rounded-3xl px-5 py-4 ${message.role === 'user' ? 'bg-slate-900 text-white' : 'border border-slate-200 bg-white text-slate-900 shadow-sm'}`}>
-                    {message.role === 'assistant' ? (
-                      <>
-                        <div className="mb-2 flex flex-wrap gap-2">
-                          <Button size="sm" variant="outline" onClick={() => readAloud.speakText(message.content)} aria-label="Read tutor response aloud">Read aloud</Button>
-                          <Button size="sm" variant="outline" onClick={readAloud.readSelection} aria-label="Read selected text aloud">Read selection</Button>
-                          <Button size="sm" variant="outline" onClick={() => { void copyToClipboard(message.content) }} aria-label="Copy tutor response">Copy</Button>
+
+            <div className="space-y-1 overflow-y-auto pb-4">
+              {conversations.map((conversation) => (
+                <div key={conversation.id} className={`rounded-2xl p-2 ${conversation.id === conversationId ? 'bg-slate-100' : 'hover:bg-slate-50'}`}>
+                  <button
+                    type="button"
+                    className="w-full text-left"
+                    onClick={() => {
+                      setConversationId(conversation.id)
+                      setSidebarOpen(false)
+                    }}
+                  >
+                    <p className="truncate text-sm font-medium text-slate-900">{conversation.title}</p>
+                    <p className="mt-1 text-[11px] text-slate-500">{conversation.active_unit_code || 'General'}</p>
+                  </button>
+                  {user ? (
+                    <div className="mt-2 flex gap-2 text-[11px]">
+                      <button className="text-slate-500 hover:text-slate-800" onClick={() => renameConversation(conversation)}>Rename</button>
+                      <button className="text-rose-600 hover:text-rose-700" onClick={() => deleteConversation(conversation)}>Delete</button>
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </aside>
+
+          <section className="min-w-0 flex-1">
+            {workspace === 'claude' ? (
+              <div className={`h-full p-3 sm:p-4 ${claudeExpanded ? 'pb-0' : ''}`}>
+                <ClaudeWorkspace
+                  artifactUrl={claudeArtifactUrl}
+                  expanded={claudeExpanded}
+                  onToggleExpanded={() => setClaudeExpanded((open) => !open)}
+                />
+              </div>
+            ) : (
+              <div className="flex h-full min-h-0 flex-col">
+                <div className="border-b border-slate-200 px-3 py-3 sm:px-5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setShowContextPicker((open) => !open)}
+                        className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700"
+                      >
+                        {contextChipLabel}
+                        <ChevronDown size={12} />
+                      </button>
+                      {showContextPicker ? (
+                        <div className="absolute left-0 top-9 z-20 w-[280px] rounded-2xl border border-slate-200 bg-white p-2 shadow-lg">
+                          <p className="px-2 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Study context</p>
+                          <button className="block w-full rounded-xl px-2 py-2 text-left text-sm hover:bg-slate-50" onClick={() => applyUnitChoice(UNIT_CHOICE_GENERAL)}>General</button>
+                          <button className="block w-full rounded-xl px-2 py-2 text-left text-sm hover:bg-slate-50" onClick={() => applyUnitChoice(UNIT_CHOICE_AUTO)}>Auto detect</button>
+                          {unitOptions.map((option) => (
+                            <button
+                              key={option.code}
+                              className="block w-full rounded-xl px-2 py-2 text-left text-sm hover:bg-slate-50"
+                              onClick={() => applyUnitChoice(option.code)}
+                            >
+                              {option.code} - {option.name}
+                            </button>
+                          ))}
                         </div>
-                        <MarkdownMessage content={message.content} />
-                        <SourceChips citations={message.citations} />
-                      </>
+                      ) : null}
+                    </div>
+
+                    {topic ? <span className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600">{topic}</span> : null}
+                    {latestAssistantCitations.length ? <span className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600">{latestAssistantCitations.length} sources</span> : null}
+
+                    <button
+                      type="button"
+                      onClick={() => setShowContextDetails((open) => !open)}
+                      className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600"
+                    >
+                      Details
+                    </button>
+                  </div>
+
+                  {showContextDetails ? (
+                    <div className="mt-2 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+                      <p><strong className="text-slate-900">Conversation:</strong> {activeConversation?.title || 'New chat'}</p>
+                      <p><strong className="text-slate-900">Context:</strong> {contextLabel}</p>
+                      <p><strong className="text-slate-900">Mode:</strong> {mode}</p>
+                      <p><strong className="text-slate-900">Learning memory:</strong> {learningProfile ? 'Active' : 'Not loaded'}</p>
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-5">
+                  {!messages.length && !draftAssistant ? (
+                    <div className="mx-auto flex h-full max-w-3xl flex-col items-center justify-center text-center">
+                      <p className="text-2xl font-semibold text-slate-900">What are we learning today?</p>
+                      <p className="mt-2 text-sm text-slate-600">Pick a context and start a focused study conversation.</p>
+                      <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                        <button className="rounded-full border border-slate-200 px-3 py-1.5 text-sm text-slate-700" onClick={() => applyUnitChoice(UNIT_CHOICE_GENERAL)}>General</button>
+                        {unitOptions.slice(0, 2).map((option) => (
+                          <button key={option.code} className="rounded-full border border-slate-200 px-3 py-1.5 text-sm text-slate-700" onClick={() => applyUnitChoice(option.code)}>
+                            {option.code}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="mt-6 grid gap-2 text-sm text-slate-500 sm:grid-cols-2">
+                        <p>Explain today&apos;s lecture</p>
+                        <p>Quiz me</p>
+                        <p>Work through a problem</p>
+                        <p>See something in R</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mx-auto w-full max-w-4xl space-y-8">
+                      {messages.map((message) => (
+                        <div key={message.id} className={message.role === 'user' ? 'flex justify-end' : 'flex justify-start'}>
+                          {message.role === 'user' ? (
+                            <div className="max-w-[85%] rounded-3xl bg-slate-900 px-4 py-3 text-sm leading-7 text-white">
+                              <p className="whitespace-pre-wrap">{message.content}</p>
+                              <div className="mt-2 flex gap-3 text-[11px] text-slate-200">
+                                <button onClick={() => setInput(message.content)}>Edit</button>
+                                <button onClick={() => void sendMessage(message.content)}>Retry</button>
+                                <button onClick={() => { void copyToClipboard(message.content) }}>Copy</button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="w-full">
+                              <div className="mb-2 flex flex-wrap gap-2 text-xs">
+                                <button className="rounded-full border border-slate-200 px-3 py-1 text-slate-600" onClick={() => readAloud.speakText(message.content)}>Read aloud</button>
+                                <button className="rounded-full border border-slate-200 px-3 py-1 text-slate-600" onClick={readAloud.readSelection}>Read selection</button>
+                                <button className="rounded-full border border-slate-200 px-3 py-1 text-slate-600" onClick={() => { void copyToClipboard(message.content) }}>Copy</button>
+                              </div>
+                              <MarkdownMessage content={message.content} />
+                              <SourceChip
+                                citations={message.citations}
+                                open={expandedSourcesMessageId === message.id}
+                                onToggle={() => setExpandedSourcesMessageId((current) => current === message.id ? null : message.id)}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      ))}
+
+                      {isLoading ? (
+                        <div className="w-full text-sm text-slate-500">
+                          <p className="font-medium text-slate-800">Tutor is thinking...</p>
+                          {draftAssistant ? (
+                            <div className="mt-3">
+                              <MarkdownMessage content={draftAssistant} />
+                              <SourceChip
+                                citations={activeCitations}
+                                open={expandedSourcesMessageId === '__draft__'}
+                                onToggle={() => setExpandedSourcesMessageId((current) => current === '__draft__' ? null : '__draft__')}
+                              />
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </div>
+                  )}
+                </div>
+
+                <div className="border-t border-slate-200 bg-white px-3 py-3 sm:px-5">
+                  {error ? <p className="mb-2 text-sm text-rose-600">{error}</p> : null}
+                  {micStatus ? <p className="mb-2 text-xs text-slate-500" aria-live="polite">{micStatus}</p> : null}
+
+                  <div className="rounded-3xl border border-slate-200 bg-slate-50 p-3">
+                    <textarea
+                      value={input}
+                      onChange={(event) => setInput(event.target.value)}
+                      placeholder="Ask anything about your unit, then follow up naturally..."
+                      rows={4}
+                      className="w-full resize-none border-0 bg-transparent px-1 text-sm leading-7 text-slate-900 outline-none"
+                      disabled={isLoading}
+                    />
+
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <label className="inline-flex cursor-pointer items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 hover:border-slate-300">
+                        <Paperclip size={13} />
+                        Attachment
+                        <input
+                          type="file"
+                          multiple
+                          className="hidden"
+                          onChange={(event) => {
+                            const list = Array.from(event.target.files || [])
+                            setComposerFiles((current) => [...current, ...list].slice(0, 8))
+                          }}
+                        />
+                      </label>
+
+                      <button
+                        type="button"
+                        onClick={startDictation}
+                        disabled={isLoading || isListening}
+                        className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700"
+                      >
+                        <Mic size={13} />
+                        {isListening ? 'Listening...' : 'Microphone'}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setShowTools((open) => !open)}
+                        className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700"
+                      >
+                        <Wrench size={13} />
+                        Tools
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setRLabOpen((open) => !open)}
+                        className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700"
+                      >
+                        <FlaskConical size={13} />
+                        {'</> See it in R'}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setWorkspace('claude')}
+                        className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700"
+                      >
+                        <Sparkles size={13} />
+                        Open Claude workspace
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => void sendMessage()}
+                        disabled={isLoading || !input.trim()}
+                        className="ml-auto inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <Send size={14} />
+                        Send
+                      </button>
+                    </div>
+
+                    {showTools ? (
+                      <div className="mt-3 grid gap-3 rounded-2xl border border-slate-200 bg-white p-3 sm:grid-cols-2">
+                        <label className="text-xs text-slate-600">
+                          Topic
+                          <input
+                            value={topic}
+                            onChange={(event) => setTopic(event.target.value)}
+                            placeholder="e.g. Week 3 MLE"
+                            className="mt-1 w-full rounded-xl border border-slate-200 px-2 py-1.5 text-sm text-slate-800"
+                          />
+                        </label>
+                        <label className="text-xs text-slate-600">
+                          Mode
+                          <select
+                            value={mode}
+                            onChange={(event) => {
+                              const nextMode = event.target.value as typeof mode
+                              setMode(nextMode)
+                              if (user && conversationId) {
+                                void syncConversationContext(conversationId, selectedUnitChoice, nextMode, detectedUnitCode)
+                              }
+                            }}
+                            className="mt-1 w-full rounded-xl border border-slate-200 px-2 py-1.5 text-sm text-slate-800"
+                          >
+                            {modes.map((item) => (
+                              <option key={item.value} value={item.value}>{item.label}</option>
+                            ))}
+                          </select>
+                        </label>
+
+                        <button
+                          type="button"
+                          className="rounded-xl border border-slate-200 px-3 py-2 text-left text-xs text-slate-600"
+                          onClick={() => setShowMemoryPanel((open) => !open)}
+                        >
+                          {showMemoryPanel ? 'Hide learning memory' : 'Learning memory'}
+                        </button>
+
+                        {showMemoryPanel ? (
+                          <div className="rounded-xl border border-slate-200 bg-slate-50 p-2 text-xs text-slate-600">
+                            <p>Depth: {learningProfile?.preferred_depth || 'balanced'}</p>
+                            <p>Hint style: {learningProfile?.hint_style || 'progressive'}</p>
+                            <p>Recent topics: {learningProfile?.recent_topics?.slice(0, 3).join(', ') || 'None yet'}</p>
+                            {user ? (
+                              <button className="mt-1 text-rose-600" onClick={resetLearningMemory}>Reset memory</button>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+
+                    <ComposerFileList
+                      files={composerFiles}
+                      onRemove={(name) => setComposerFiles((current) => current.filter((file) => file.name !== name))}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+          </section>
+
+          {rLabOpen ? (
+            <div className="absolute right-0 top-0 z-30 h-full w-full border-l border-slate-200 bg-white sm:w-[420px]">
+              <div className="flex h-full flex-col">
+                <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">R Lab</p>
+                    <p className="text-xs text-slate-500">Run and iterate R code from Tutor prompts.</p>
+                  </div>
+                  <button type="button" onClick={() => setRLabOpen(false)} className="rounded-xl border border-slate-200 p-2 text-slate-600">
+                    <X size={14} />
+                  </button>
+                </div>
+
+                <div className="flex-1 space-y-3 overflow-y-auto p-4">
+                  <textarea
+                    value={rCode}
+                    onChange={(event) => setRCode(event.target.value)}
+                    rows={11}
+                    className="w-full rounded-2xl border border-slate-300 bg-slate-950 px-3 py-3 font-mono text-xs text-slate-100"
+                    placeholder="# Write or paste R code here"
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <Button variant="secondary" onClick={() => setRCode('')}>Reset</Button>
+                    <Button onClick={() => void runRCode()} disabled={rRunning || !rCode.trim()}>{rRunning ? 'Running...' : 'Run'}</Button>
+                    <Button variant="outline" onClick={() => { void copyToClipboard(rCode) }}>Copy code</Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => setInput((current) => `${current}${current ? '\n\n' : ''}Use this R output in your explanation:\n${rOutput?.stdout || '(no output yet)'}`)}
+                    >
+                      Send output to chat
+                    </Button>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Console output</p>
+                    {rOutput ? (
+                      <div className="mt-2 space-y-2 text-xs">
+                        <pre className="whitespace-pre-wrap text-slate-800">{rOutput.stdout || '(no stdout)'}</pre>
+                        {rOutput.stderr ? <pre className="whitespace-pre-wrap text-rose-700">{rOutput.stderr}</pre> : null}
+                        {rOutput.error ? <p className="text-rose-700">{rOutput.error}</p> : null}
+                      </div>
                     ) : (
-                      <>
-                        <p className="whitespace-pre-wrap text-sm leading-7">{message.content}</p>
-                        <div className="mt-2 flex gap-3">
-                          <button className="text-xs text-slate-200 hover:text-white" onClick={() => setInput(message.content)}>Edit and resubmit</button>
-                          <button className="text-xs text-slate-200 hover:text-white" onClick={() => void sendMessage(message.content)}>Retry</button>
-                          <button className="text-xs text-slate-200 hover:text-white" onClick={() => { void copyToClipboard(message.content) }}>Copy</button>
-                        </div>
-                      </>
+                      <p className="mt-2 text-xs text-slate-500">No run executed yet.</p>
                     )}
                   </div>
                 </div>
-              ))}
-
-              {isLoading && (
-                <div className="flex justify-start">
-                  <div className="w-full max-w-5xl rounded-3xl border border-slate-200 bg-white px-5 py-4 text-sm text-slate-600 shadow-sm">
-                    <p className="font-medium text-slate-900">Tutor is working</p>
-                    <p className="mt-1 text-xs text-slate-500">Retrieving unit sources, checking learning memory, then generating response.</p>
-                    <div className="mt-2 flex gap-2 text-[11px] text-slate-500">
-                      <span className="rounded-full border border-slate-200 px-2 py-0.5">Retrieval</span>
-                      <span className="rounded-full border border-slate-200 px-2 py-0.5">Memory</span>
-                      <span className="rounded-full border border-slate-200 px-2 py-0.5">Generation</span>
-                    </div>
-                    {draftAssistant ? <MarkdownMessage content={draftAssistant} /> : null}
-                    {draftAssistant ? <SourceChips citations={activeCitations} /> : null}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </Card>
-
-        <Card className="sticky bottom-4 p-4">
-          {error ? <p className="mb-2 text-sm text-rose-600">{error}</p> : null}
-          {micStatus ? <p className="mb-2 text-xs text-slate-500" aria-live="polite">{micStatus}</p> : null}
-          <textarea
-            value={input}
-            onChange={(event) => setInput(event.target.value)}
-            placeholder="Ask for explanation, guided hint, practice, marking feedback, or R implementation..."
-            rows={4}
-            className="w-full rounded-2xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
-            disabled={isLoading}
-          />
-
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <label className="rounded-xl border border-slate-300 px-3 py-2 text-xs text-slate-700 hover:border-slate-500">
-              Attach files
-              <input
-                type="file"
-                multiple
-                className="hidden"
-                onChange={(event) => {
-                  const list = Array.from(event.target.files || [])
-                  setComposerFiles((current) => [...current, ...list].slice(0, 8))
-                }}
-              />
-            </label>
-
-            <button
-              type="button"
-              className="rounded-xl border border-slate-300 px-3 py-2 text-xs text-slate-700 hover:border-slate-500"
-              onClick={startDictation}
-              aria-label={isListening ? 'Microphone is currently active' : 'Start microphone dictation'}
-              disabled={isLoading || isListening}
-            >
-              {isListening ? 'Listening...' : 'Microphone'}
-            </button>
-
-            <button type="button" className="rounded-xl border border-slate-300 px-3 py-2 text-xs text-slate-700 hover:border-slate-500" onClick={readAloud.readSelection}>
-              Read selection
-            </button>
-
-            <Button onClick={() => void sendMessage()} disabled={isLoading || !input.trim()}>
-              Send
-            </Button>
-
-            <Button variant="secondary" onClick={() => setRLabOpen((open) => !open)}>
-              {rLabOpen ? 'Hide R Lab' : 'Open R Lab'}
-            </Button>
-          </div>
-
-          <ComposerFileList
-            files={composerFiles}
-            onRemove={(name) => setComposerFiles((current) => current.filter((file) => file.name !== name))}
-          />
-        </Card>
-
-        {rLabOpen && (
-          <Card className="p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <div>
-                <p className="text-sm font-semibold text-slate-900">R Lab</p>
-                <p className="text-xs text-slate-500">Run R code in an isolated sandbox and ask Tutor about the results.</p>
-              </div>
-              <div className="flex gap-2">
-                <Button variant="secondary" onClick={() => setRCode('')}>Reset</Button>
-                <Button onClick={() => void runRCode()} disabled={rRunning || !rCode.trim()}>{rRunning ? 'Running...' : 'Run'}</Button>
               </div>
             </div>
-
-            <textarea
-              value={rCode}
-              onChange={(event) => setRCode(event.target.value)}
-              rows={10}
-              className="w-full rounded-2xl border border-slate-300 bg-slate-950 px-3 py-3 font-mono text-xs text-slate-100"
-              placeholder="# Write or paste R code here"
-            />
-
-            <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Console output</p>
-              {rOutput ? (
-                <div className="mt-2 space-y-2 text-xs">
-                  <pre className="whitespace-pre-wrap text-slate-800">{rOutput.stdout || '(no stdout)'}</pre>
-                  {rOutput.stderr ? <pre className="whitespace-pre-wrap text-rose-700">{rOutput.stderr}</pre> : null}
-                  {rOutput.error ? <p className="text-rose-700">{rOutput.error}</p> : null}
-                </div>
-              ) : (
-                <p className="mt-2 text-xs text-slate-500">No run executed yet.</p>
-              )}
-            </div>
-          </Card>
-        )}
+          ) : null}
+        </div>
       </div>
     </div>
   )
