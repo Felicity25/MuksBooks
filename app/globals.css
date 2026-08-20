@@ -43,6 +43,26 @@ html[data-theme='dark'] .text-slate-500 { color: #cbd5e1 !important; }
 html[data-theme='dark'] .border-slate-200,
 html[data-theme='dark'] .border-slate-300 { border-color: #334155 !important; }
 
+.katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.75rem 0;
+  margin: 1rem 0;
+}
+
+.katex-display > .katex {
+  max-width: 100%;
+}
+
+.katex {
+  font-size: 1em;
+}
+
+html[data-theme='dark'] .katex,
+html[data-theme='dark'] .katex-display {
+  color: inherit;
+}
+
 html[data-density='compact'] .shadow-soft { padding: 1rem; }
 html[data-density='spacious'] .shadow-soft { padding: 2rem; }
 html[data-density='compact'] input,

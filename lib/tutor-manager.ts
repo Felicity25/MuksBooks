@@ -324,7 +324,8 @@ export class TutorManager {
       explain: [
         'provide clear definitions and examples',
         'connect to real-world actuarial applications',
-        'explain mathematical derivations intuitively'
+        'explain mathematical derivations intuitively',
+        'write equations in valid LaTeX using inline and display math delimiters'
       ],
       quiz: [
         'create practice questions with solutions',

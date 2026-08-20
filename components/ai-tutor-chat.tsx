@@ -91,8 +91,8 @@ async function fetchJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> 
 
 function MarkdownMessage({ content }: { content: string }) {
   return (
-    <div className="prose prose-slate max-w-none text-[15px] leading-8 prose-headings:scroll-mt-24 prose-headings:font-semibold prose-h2:mt-8 prose-h2:text-2xl prose-h3:mt-6 prose-h3:text-xl prose-p:text-slate-800 prose-li:my-1 prose-ul:my-4 prose-ol:my-4 prose-pre:overflow-x-auto prose-pre:rounded-2xl prose-pre:border prose-pre:border-slate-200 prose-pre:bg-slate-950 prose-pre:text-slate-100 prose-code:text-[0.95em]">
-      <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+    <div className="prose prose-slate max-w-none text-[15px] leading-8 prose-headings:scroll-mt-24 prose-headings:font-semibold prose-h2:mt-8 prose-h2:text-2xl prose-h3:mt-6 prose-h3:text-xl prose-p:text-slate-800 prose-li:my-1 prose-ul:my-4 prose-ol:my-4 prose-pre:overflow-x-auto prose-pre:rounded-2xl prose-pre:border prose-pre:border-slate-200 prose-pre:bg-slate-950 prose-pre:text-slate-100 prose-code:text-[0.95em] prose-p:break-words prose-table:block prose-table:overflow-x-auto prose-table:whitespace-nowrap prose-img:max-w-full">
+      <ReactMarkdown remarkPlugins={[[remarkMath, { singleDollarTextMath: false }], remarkGfm]} rehypePlugins={[rehypeKatex]}>
         {content}
       </ReactMarkdown>
     </div>
