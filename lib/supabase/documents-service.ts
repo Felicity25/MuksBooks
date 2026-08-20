@@ -8,6 +8,9 @@
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
+import { extractKeywords, semanticChunk } from '@/lib/knowledge-base/chunking'
+import { embedText } from '@/lib/knowledge-base/embeddings'
+import { extractTextFromUploadDetailed } from '@/lib/course-manager/extractors'
 
 // ─── Internal helpers ────────────────────────────────────────────────────────
 
@@ -90,6 +93,21 @@ export async function getSignedUrl(storagePath: string): Promise<string | null> 
     const { data, error } = await client.storage.from(BUCKET).createSignedUrl(storagePath, 3600)
     if (error || !data?.signedUrl) return null
     return data.signedUrl
+  } catch {
+    return null
+  }
+}
+
+/** Download a file buffer from Supabase Storage. */
+export async function downloadFileFromStorage(storagePath: string): Promise<Buffer | null> {
+  const client = getServiceClient()
+  if (!client || !storagePath) return null
+
+  try {
+    const { data, error } = await client.storage.from(BUCKET).download(storagePath)
+    if (error || !data) return null
+    const arrayBuffer = await data.arrayBuffer()
+    return Buffer.from(arrayBuffer)
   } catch {
     return null
   }
@@ -251,6 +269,8 @@ export interface CloudChunk {
   section?: string
   embedding: number[]
   keywords: string[]
+  pageStart?: number | null
+  pageEnd?: number | null
 }
 
 /** Persist extracted text chunks + embeddings to Supabase document_chunks. */
@@ -277,7 +297,9 @@ export async function persistDocumentChunks(
         text: c.text,
         embedding: c.embedding,
         keywords: c.keywords,
-        course_code: courseCode
+        course_code: courseCode,
+        page_start: c.pageStart ?? null,
+        page_end: c.pageEnd ?? null
       }))
 
       const { error } = await client.from('document_chunks').upsert(rows, { onConflict: 'id' })
@@ -304,19 +326,44 @@ export async function deleteCloudChunks(userId: string, documentId: string): Pro
 export async function searchCloudChunks(
   userId: string,
   courseCode: string | undefined,
-  limit = 24
-): Promise<Array<{ id: string; document_id: string; chunk_index: number; section: string | null; text: string; embedding: number[]; course_code: string | null; source_filename: string | null }> | null> {
+  limit = 24,
+  options?: {
+    documentIds?: string[]
+    pageStart?: number | null
+    pageEnd?: number | null
+  }
+): Promise<Array<{
+  id: string
+  document_id: string
+  chunk_index: number
+  section: string | null
+  text: string
+  embedding: number[]
+  course_code: string | null
+  source_filename: string | null
+  page_start: number | null
+  page_end: number | null
+}> | null> {
   const client = createSupabaseServerClient()
   if (!client) return null
 
   try {
     let query = client
       .from('document_chunks')
-      .select('id, document_id, chunk_index, section, text, embedding, course_code')
+      .select('id, document_id, chunk_index, section, text, embedding, course_code, page_start, page_end')
       .eq('user_id', userId)
       .limit(limit)
 
     if (courseCode) query = query.eq('course_code', courseCode.toUpperCase())
+    if (options?.documentIds?.length) query = query.in('document_id', options.documentIds)
+
+    if (typeof options?.pageStart === 'number' && typeof options?.pageEnd === 'number') {
+      query = query
+        .not('page_start', 'is', null)
+        .not('page_end', 'is', null)
+        .lte('page_start', options.pageEnd)
+        .gte('page_end', options.pageStart)
+    }
 
     const { data, error } = await query
     if (error) {
@@ -344,6 +391,88 @@ export async function searchCloudChunks(
   } catch (err) {
     if (!isMissingRelation(err)) console.error('[Cloud] Search chunks error:', err)
     return null
+  }
+}
+
+/** Re-index an existing cloud document to attach page-aware chunk metadata. */
+export async function reindexCloudDocumentPages(userId: string, documentId: string) {
+  const client = createSupabaseServerClient()
+  if (!client) return { ok: false, reason: 'client_unavailable' as const }
+
+  const { data: upload, error: uploadError } = await client
+    .from('uploads')
+    .select('id, user_id, document_id, storage_path, original_filename, mime_type, course_code')
+    .eq('user_id', userId)
+    .eq('document_id', documentId)
+    .maybeSingle()
+
+  if (uploadError || !upload) {
+    return { ok: false, reason: 'document_not_found' as const }
+  }
+
+  const content = await downloadFileFromStorage(String(upload.storage_path || ''))
+  if (!content) {
+    return { ok: false, reason: 'storage_download_failed' as const }
+  }
+
+  const extracted = await extractTextFromUploadDetailed({
+    fileName: String(upload.original_filename || 'document.pdf'),
+    mimeType: String(upload.mime_type || 'application/octet-stream'),
+    content
+  })
+
+  const blocks = extracted.pages.length
+    ? extracted.pages.flatMap((page) => semanticChunk(page.text).map((block) => ({
+      title: block.title,
+      text: block.text,
+      pageStart: page.pageNumber,
+      pageEnd: page.pageNumber
+    })))
+    : semanticChunk(extracted.text).map((block) => ({
+      title: block.title,
+      text: block.text,
+      pageStart: null,
+      pageEnd: null
+    }))
+
+  const chunks: CloudChunk[] = []
+  for (let index = 0; index < blocks.length; index += 1) {
+    const block = blocks[index]
+    const embedding = await embedText(block.text)
+    chunks.push({
+      id: `${documentId}:${index}`,
+      chunkIndex: index,
+      text: block.text,
+      section: block.title,
+      embedding,
+      keywords: extractKeywords(block.text),
+      pageStart: block.pageStart,
+      pageEnd: block.pageEnd
+    })
+  }
+
+  await deleteCloudChunks(userId, documentId)
+  await persistDocumentChunks(
+    userId,
+    upload.id ? String(upload.id) : null,
+    documentId,
+    String(upload.course_code || ''),
+    chunks
+  )
+
+  await client
+    .from('uploads')
+    .update({
+      chunk_count: chunks.length,
+      processing_status: 'tutor_ready'
+    })
+    .eq('user_id', userId)
+    .eq('document_id', documentId)
+
+  return {
+    ok: true,
+    chunks: chunks.length,
+    pages: extracted.pages.length
   }
 }
 

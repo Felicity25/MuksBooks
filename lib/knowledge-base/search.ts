@@ -64,6 +64,7 @@ export async function searchKnowledgeBase(query: string, courseCode?: string, li
                 documentId: c.document_id,
                 chunkIndex: c.chunk_index,
                 sectionTitle: c.section ?? '',
+                pageNumber: typeof c.page_start === 'number' ? c.page_start : undefined,
                 text: c.text,
                 keywords: [],
                 relationships: [],

@@ -7,7 +7,7 @@ import { activateCurriculumVersion, ensureCourseFolders, hashBuffer, loadCatalog
 import type { CatalogDocument, ChunkRecord, CourseMetadata } from '@/lib/knowledge-base/types'
 import { addKnowledgeChunk, createOrUpdateDocument, extractAssessmentsFromText, extractWeeklyTopicsFromText, upsertCourse } from '@/lib/app-state/service'
 import { publishEvent } from '@/lib/app-state/events'
-import { extractTextFromUpload } from './extractors'
+import { extractTextFromUploadDetailed } from './extractors'
 import { isAcademicUnitBinding, type DocumentDomain } from './document-domain'
 
 function normalizeCode(value?: string) {
@@ -89,6 +89,15 @@ export interface UploadChunkResult {
   section?: string
   embedding: number[]
   keywords: string[]
+  pageStart?: number | null
+  pageEnd?: number | null
+}
+
+type IndexedBlock = {
+  title?: string
+  text: string
+  pageStart?: number | null
+  pageEnd?: number | null
 }
 
 export async function ingestUpload(payload: UploadPayload) {
@@ -228,11 +237,14 @@ export async function ingestUpload(payload: UploadPayload) {
 
   try {
     await appendLog('uploads', '[UPLOAD] extraction started', { documentId, fileName: payload.fileName })
-    const extractedText = payload.textContent || await extractTextFromUpload({
-      fileName: payload.fileName,
-      mimeType: payload.mimeType,
-      content: payload.content
-    })
+    const extracted = payload.textContent
+      ? { text: payload.textContent, pages: [] as Array<{ pageNumber: number; text: string }> }
+      : await extractTextFromUploadDetailed({
+        fileName: payload.fileName,
+        mimeType: payload.mimeType,
+        content: payload.content
+      })
+    const extractedText = extracted.text
 
     const enrichedMetadata: CourseMetadata = {
       ...detectCourseMetadata(payload.fileName, extractedText, payload.mimeType),
@@ -271,7 +283,22 @@ export async function ingestUpload(payload: UploadPayload) {
       metadata: enrichedMetadata
     })
 
-    const blocks = semanticChunk(extractedText)
+    const blocks: IndexedBlock[] = extracted.pages.length
+      ? extracted.pages.flatMap((page) => {
+        const pageBlocks = semanticChunk(page.text)
+        return pageBlocks.map((block) => ({
+          title: block.title,
+          text: block.text,
+          pageStart: page.pageNumber,
+          pageEnd: page.pageNumber
+        }))
+      })
+      : semanticChunk(extractedText).map((block) => ({
+        title: block.title,
+        text: block.text,
+        pageStart: null,
+        pageEnd: null
+      }))
     const chunkIds: string[] = []
     const chunkResults: UploadChunkResult[] = []
 
@@ -294,6 +321,7 @@ export async function ingestUpload(payload: UploadPayload) {
         version,
         chunkIndex: i,
         sectionTitle: block.title,
+        pageNumber: block.pageStart || undefined,
         text: block.text,
         keywords,
         relationships: [],
@@ -303,7 +331,16 @@ export async function ingestUpload(payload: UploadPayload) {
 
       chunkIds.push(chunkId)
       catalog.chunks.push(chunk)
-      chunkResults.push({ id: chunkId, chunkIndex: i, text: block.text, section: block.title, embedding, keywords })
+      chunkResults.push({
+        id: chunkId,
+        chunkIndex: i,
+        text: block.text,
+        section: block.title,
+        embedding,
+        keywords,
+        pageStart: block.pageStart || null,
+        pageEnd: block.pageEnd || null
+      })
 
       const chunkPath = path.join(courseRoot, 'Chunks', `${chunkId}.txt`)
       await fs.writeFile(chunkPath, block.text, 'utf8')

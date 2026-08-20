@@ -107,9 +107,12 @@ No substantive uploaded excerpts were retrieved.`}
 Instructions:
 - Answer the student’s actual question directly and substantively.
 - Use the retrieved source excerpts above when they are relevant.
+- If page-specific excerpts are present, answer from those pages first and cite them explicitly.
 - If the question is mathematical, include the actual definition, formula, derivation logic, and a worked example where helpful.
 - If the user asked about a week, teach the resolved week topic rather than describing study strategy.
 - If the retrieved uploads are insufficient, say that clearly and then answer from reliable general knowledge.
+- If multiple documents are plausible for a page request, ask a short clarification naming the likely documents instead of claiming no access.
+- Only claim you do not have access when no relevant uploaded sources are available.
 - Do not output placeholder section labels like "Title" or "Section:".
 - Do not claim to have used a source unless it appears in the retrieved excerpts above.
 - Keep the answer readable Markdown with meaningful headings only when they help.

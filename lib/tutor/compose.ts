@@ -26,11 +26,11 @@ function prioritizeQuestion(input: TutorRequest) {
 }
 
 export async function buildTutorPromptContext(input: TutorRequest, userId?: string) {
-  const retrievalContext = await buildTutorRetrievalContext(input, userId)
-
   const conversationMessages = userId && input.conversationId
     ? await listTutorMessages(userId, input.conversationId)
     : []
+
+  const retrievalContext = await buildTutorRetrievalContext(input, userId, conversationMessages)
 
   const compacted = compactConversation(conversationMessages.map((msg) => ({ role: msg.role, content: msg.content })))
 

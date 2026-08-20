@@ -1,6 +1,16 @@
 import path from 'path'
 import { appendLog } from '@/lib/logging'
 
+export interface ExtractedPageText {
+  pageNumber: number
+  text: string
+}
+
+export interface ExtractedUploadText {
+  text: string
+  pages: ExtractedPageText[]
+}
+
 function stripXmlTags(text: string) {
   return text
     .replace(/<w:tab\/?\s*>/g, ' ')
@@ -48,11 +58,34 @@ export function cleanExtractedText(raw: string) {
     .trim()
 }
 
-async function extractFromPdf(content: Buffer) {
+async function extractFromPdf(content: Buffer): Promise<ExtractedUploadText> {
   const pdfModule = await import('pdf-parse')
   const pdfParse = (pdfModule as any).default || (pdfModule as any)
-  const parsed = await pdfParse(content)
-  return parsed?.text || ''
+  let pageCounter = 0
+  const pages: ExtractedPageText[] = []
+
+  const parsed = await pdfParse(content, {
+    pagerender: async (pageData: any) => {
+      pageCounter += 1
+      const textContent = await pageData.getTextContent({ normalizeWhitespace: true })
+      const pageText = (textContent?.items || [])
+        .map((item: any) => String(item?.str || '').trim())
+        .filter(Boolean)
+        .join(' ')
+      const cleaned = cleanExtractedText(pageText)
+      if (cleaned) {
+        pages.push({ pageNumber: pageCounter, text: cleaned })
+      }
+      return pageText
+    }
+  })
+
+  const fallbackText = cleanExtractedText(parsed?.text || '')
+  const combined = pages.length ? pages.map((page) => page.text).join('\n\n') : fallbackText
+  return {
+    text: combined,
+    pages
+  }
 }
 
 async function extractFromDocx(content: Buffer) {
@@ -102,14 +135,22 @@ function isImage(mimeType: string, ext: string) {
 }
 
 export async function extractTextFromUpload(params: { fileName: string; mimeType: string; content: Buffer }) {
+  const detailed = await extractTextFromUploadDetailed(params)
+  return detailed.text
+}
+
+export async function extractTextFromUploadDetailed(params: { fileName: string; mimeType: string; content: Buffer }): Promise<ExtractedUploadText> {
   const { fileName, mimeType, content } = params
   const ext = extension(fileName)
 
   try {
     let raw = ''
+    let pages: ExtractedPageText[] = []
 
     if (mimeType === 'application/pdf' || ext === '.pdf') {
-      raw = await extractFromPdf(content)
+      const extracted = await extractFromPdf(content)
+      raw = extracted.text
+      pages = extracted.pages
     } else if (mimeType.includes('wordprocessingml') || ext === '.docx') {
       raw = await extractFromDocx(content)
     } else if (mimeType.includes('presentationml') || ext === '.pptx') {
@@ -125,10 +166,14 @@ export async function extractTextFromUpload(params: { fileName: string; mimeType
       fileName,
       mimeType,
       extension: ext,
-      extractedLength: cleaned.length
+      extractedLength: cleaned.length,
+      extractedPages: pages.length
     })
 
-    return cleaned
+    return {
+      text: cleaned,
+      pages
+    }
   } catch (error: any) {
     await appendLog('errors', 'Extractor failed; fallback to utf8 decode', {
       fileName,
@@ -136,6 +181,9 @@ export async function extractTextFromUpload(params: { fileName: string; mimeType
       error: error?.message || String(error)
     })
 
-    return cleanExtractedText(decodeBuffer(content))
+    return {
+      text: cleanExtractedText(decodeBuffer(content)),
+      pages: []
+    }
   }
 }
