@@ -1,4 +1,5 @@
 import crypto from 'node:crypto'
+import { appendLog } from '@/lib/logging'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 import type { TutorCitation, TutorConversation, TutorLearningProfile, TutorMessage, TutorUsageRecord } from '@/lib/tutor/types'
 
@@ -118,8 +119,28 @@ export async function updateTutorConversation(input: {
   sourceScope?: Record<string, unknown>
   summary?: string | null
 }) {
+  const result = await updateTutorConversationDetailed(input)
+  return result.conversation
+}
+
+export async function updateTutorConversationDetailed(input: {
+  userId: string
+  conversationId: string
+  title?: string
+  activeUnitCode?: string | null
+  mode?: string | null
+  sourceScope?: Record<string, unknown>
+  summary?: string | null
+}) {
   const client = createSupabaseServerClient()
-  if (!client) return null
+  const userMarker = input.userId.slice(0, 8)
+  if (!client) {
+    await appendLog('retrievals', 'Tutor conversation update failed: client unavailable', {
+      userMarker,
+      conversationId: input.conversationId
+    }).catch(() => {})
+    return { conversation: null, reason: 'client_unavailable' as const }
+  }
 
   const patch: Record<string, unknown> = {}
   if (input.title !== undefined) patch.title = input.title
@@ -128,7 +149,52 @@ export async function updateTutorConversation(input: {
   if (input.sourceScope !== undefined) patch.source_scope = input.sourceScope
   if (input.summary !== undefined) patch.summary = input.summary
 
-  if (Object.keys(patch).length === 0) return null
+  const patchKeys = Object.keys(patch)
+
+  const existing = await client
+    .from('tutor_conversations')
+    .select('id, user_id, unit_id, title, created_at, updated_at')
+    .eq('id', input.conversationId)
+    .eq('user_id', input.userId)
+    .maybeSingle()
+
+  if (existing.error) {
+    await appendLog('retrievals', 'Tutor conversation existence check failed', {
+      userMarker,
+      conversationId: input.conversationId,
+      patchKeys,
+      errorCode: (existing.error as any)?.code || null,
+      errorMessage: existing.error.message
+    }).catch(() => {})
+    return {
+      conversation: null,
+      reason: 'update_error' as const,
+      errorCode: (existing.error as any)?.code || null,
+      errorMessage: existing.error.message,
+      patchKeys
+    }
+  }
+
+  if (!existing.data) {
+    await appendLog('retrievals', 'Tutor conversation update target not found', {
+      userMarker,
+      conversationId: input.conversationId,
+      patchKeys
+    }).catch(() => {})
+    return { conversation: null, reason: 'not_found' as const, patchKeys }
+  }
+
+  if (patchKeys.length === 0) {
+    await appendLog('retrievals', 'Tutor conversation update skipped: empty patch', {
+      userMarker,
+      conversationId: input.conversationId
+    }).catch(() => {})
+    return {
+      conversation: toConversation({ ...existing.data, active_unit_code: null, mode: null, source_scope: {}, summary: null }),
+      reason: 'no_patch' as const,
+      patchKeys
+    }
+  }
 
   const primary = await client
     .from('tutor_conversations')
@@ -138,20 +204,55 @@ export async function updateTutorConversation(input: {
     .select('id, user_id, unit_id, active_unit_code, title, mode, source_scope, summary, created_at, updated_at')
     .maybeSingle()
 
-  if (!primary.error && primary.data) return toConversation(primary.data)
-  if (!isMissingRelation(primary.error)) return null
+  if (!primary.error && primary.data) {
+    await appendLog('retrievals', 'Tutor conversation update succeeded', {
+      userMarker,
+      conversationId: input.conversationId,
+      patchKeys,
+      usedFallback: false
+    }).catch(() => {})
+    return { conversation: toConversation(primary.data), patchKeys, usedFallback: false }
+  }
+  if (!isMissingRelation(primary.error)) {
+    await appendLog('retrievals', 'Tutor conversation primary update failed', {
+      userMarker,
+      conversationId: input.conversationId,
+      patchKeys,
+      errorCode: (primary.error as any)?.code || null,
+      errorMessage: primary.error?.message || null
+    }).catch(() => {})
+    return {
+      conversation: null,
+      reason: 'update_error' as const,
+      errorCode: (primary.error as any)?.code || null,
+      errorMessage: primary.error?.message || null,
+      patchKeys,
+      usedFallback: false
+    }
+  }
+
+  await appendLog('retrievals', 'Tutor conversation primary update hit schema fallback', {
+    userMarker,
+    conversationId: input.conversationId,
+    patchKeys,
+    errorCode: (primary.error as any)?.code || null,
+    errorMessage: primary.error?.message || null
+  }).catch(() => {})
 
   const fallbackPatch: Record<string, unknown> = {}
   if (input.title !== undefined) fallbackPatch.title = input.title
   if (Object.keys(fallbackPatch).length === 0) {
-    const current = await client
-      .from('tutor_conversations')
-      .select('id, user_id, unit_id, title, created_at, updated_at')
-      .eq('id', input.conversationId)
-      .eq('user_id', input.userId)
-      .maybeSingle()
-    if (current.error || !current.data) return null
-    return toConversation({ ...current.data, active_unit_code: null, mode: null, source_scope: {}, summary: null })
+    await appendLog('retrievals', 'Tutor conversation fallback rejected: missing intelligence schema', {
+      userMarker,
+      conversationId: input.conversationId,
+      patchKeys
+    }).catch(() => {})
+    return {
+      conversation: null,
+      reason: 'schema_missing' as const,
+      patchKeys,
+      usedFallback: true
+    }
   }
 
   const fallback = await client
@@ -162,8 +263,35 @@ export async function updateTutorConversation(input: {
     .select('id, user_id, unit_id, title, created_at, updated_at')
     .maybeSingle()
 
-  if (fallback.error || !fallback.data) return null
-  return toConversation({ ...fallback.data, active_unit_code: null, mode: null, source_scope: {}, summary: null })
+  if (fallback.error || !fallback.data) {
+    await appendLog('retrievals', 'Tutor conversation fallback update failed', {
+      userMarker,
+      conversationId: input.conversationId,
+      patchKeys: Object.keys(fallbackPatch),
+      errorCode: (fallback.error as any)?.code || null,
+      errorMessage: fallback.error?.message || null
+    }).catch(() => {})
+    return {
+      conversation: null,
+      reason: 'update_error' as const,
+      errorCode: (fallback.error as any)?.code || null,
+      errorMessage: fallback.error?.message || null,
+      patchKeys,
+      usedFallback: true
+    }
+  }
+
+  await appendLog('retrievals', 'Tutor conversation fallback update succeeded', {
+    userMarker,
+    conversationId: input.conversationId,
+    patchKeys: Object.keys(fallbackPatch),
+    usedFallback: true
+  }).catch(() => {})
+  return {
+    conversation: toConversation({ ...fallback.data, active_unit_code: null, mode: null, source_scope: {}, summary: null }),
+    patchKeys,
+    usedFallback: true
+  }
 }
 
 export async function deleteTutorConversation(userId: string, conversationId: string) {

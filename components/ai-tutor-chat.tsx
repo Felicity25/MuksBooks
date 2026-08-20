@@ -81,7 +81,10 @@ async function fetchJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> 
   const response = await fetch(input, init)
   const payload = await response.json().catch(() => null)
   if (!response.ok) {
-    throw new Error(payload?.error || 'Request failed')
+    const error = new Error(payload?.error || 'Request failed') as Error & { code?: string; status?: number }
+    error.code = payload?.code
+    error.status = response.status
+    throw error
   }
   return payload as T
 }
@@ -243,9 +246,21 @@ export function AiTutorChat() {
     if (!user) return
     try {
       const payload = await fetchJson<{ ok: boolean; conversations: TutorConversation[] }>('/api/ai-tutor/conversations', { cache: 'no-store' })
-      setConversations(payload.conversations || [])
-      if (!conversationId && payload.conversations?.[0]?.id) {
-        const firstConversation = payload.conversations[0]
+      const nextConversations = payload.conversations || []
+      setConversations(nextConversations)
+
+      if (conversationId && !nextConversations.some((conversation) => conversation.id === conversationId)) {
+        const replacement = nextConversations[0]
+        setConversationId(replacement?.id || '')
+        applyConversationUnitContext(replacement)
+        if (!replacement) {
+          setMessages([])
+        }
+        return
+      }
+
+      if (!conversationId && nextConversations[0]?.id) {
+        const firstConversation = nextConversations[0]
         setConversationId(firstConversation.id)
         applyConversationUnitContext(firstConversation)
         if (firstConversation.mode) {
@@ -321,6 +336,44 @@ export function AiTutorChat() {
     })
   }
 
+  async function createConversationWithCurrentContext() {
+    const created = await fetchJson<{ ok: boolean; conversation: TutorConversation }>('/api/ai-tutor/conversations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: `Tutor ${new Date().toLocaleDateString()}`,
+        unitId: null,
+        activeUnitCode: getManualUnitCode(selectedUnitChoice),
+        sourceScope: {
+          unitSelectionMode,
+          selectedUnitCode: manualUnitCode,
+          detectedUnitCode
+        },
+        mode
+      })
+    })
+
+    setConversations((current) => [created.conversation, ...current.filter((conversation) => conversation.id !== created.conversation.id)])
+    setConversationId(created.conversation.id)
+    applyConversationUnitContext(created.conversation)
+    return created.conversation.id
+  }
+
+  async function recoverConversationAfterSyncFailure(failedConversationId: string) {
+    const payload = await fetchJson<{ ok: boolean; conversations: TutorConversation[] }>('/api/ai-tutor/conversations', { cache: 'no-store' })
+    const available = payload.conversations || []
+    setConversations(available)
+
+    const exact = available.find((conversation) => conversation.id === failedConversationId)
+    if (exact) {
+      setConversationId(exact.id)
+      applyConversationUnitContext(exact)
+      return exact.id
+    }
+
+    return createConversationWithCurrentContext()
+  }
+
   useEffect(() => {
     void loadUnits()
   }, [])
@@ -361,27 +414,7 @@ export function AiTutorChat() {
       return guestConversationId
     }
 
-    const created = await fetchJson<{ ok: boolean; conversation: TutorConversation }>('/api/ai-tutor/conversations', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        title: `Tutor ${new Date().toLocaleDateString()}`,
-        unitId: null,
-        activeUnitCode: null,
-        sourceScope: {
-          unitSelectionMode: 'general',
-          selectedUnitCode: null,
-          detectedUnitCode: null
-        },
-        mode
-      })
-    })
-
-    setConversations((current) => [created.conversation, ...current])
-    setConversationId(created.conversation.id)
-    setSelectedUnitChoice(UNIT_CHOICE_GENERAL)
-    setDetectedUnitCode(null)
-    return created.conversation.id
+    return createConversationWithCurrentContext()
   }
 
   async function sendMessage(regenerateFromUserMessage?: string) {
@@ -398,9 +431,18 @@ export function AiTutorChat() {
     setActiveCitations([])
 
     try {
-      const activeConversationId = await ensureConversation()
+      let activeConversationId = await ensureConversation()
       if (user) {
-        await syncConversationContext(activeConversationId, selectedUnitChoice, mode, detectedUnitCode)
+        try {
+          await syncConversationContext(activeConversationId, selectedUnitChoice, mode, detectedUnitCode)
+        } catch (syncError: any) {
+          if (syncError?.code === 'CONVERSATION_NOT_FOUND') {
+            activeConversationId = await recoverConversationAfterSyncFailure(activeConversationId)
+            await syncConversationContext(activeConversationId, selectedUnitChoice, mode, detectedUnitCode)
+          } else {
+            throw syncError
+          }
+        }
       }
       const userMessage: TutorMessage = {
         id: crypto.randomUUID(),
