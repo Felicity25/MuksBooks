@@ -176,7 +176,7 @@ function buildUnitColorMap(courses: Course[]) {
   const map = new Map<string, string>()
   for (const course of courses) {
     if (!course.id) continue
-    map.set(course.id, course.color || null)
+    map.set(course.id, course.color || '')
   }
   return map
 }
@@ -331,10 +331,10 @@ export function SemesterTimeline() {
             try {
               const response = await fetch(`/api/app-state/unit-schedule?unitId=${encodeURIComponent(course.id)}`, { cache: 'no-store' })
               const payload = await response.json().catch(() => null)
-              if (!response.ok || !payload?.ok || !Array.isArray(payload.entries)) return [course.id, []] as const
+              if (!response.ok || !payload?.ok || !Array.isArray(payload.entries)) return [course.id, [] as UnitScheduleEntry[]] as const
               return [course.id, payload.entries as UnitScheduleEntry[]] as const
             } catch {
-              return [course.id, []] as const
+              return [course.id, [] as UnitScheduleEntry[]] as const
             }
           }))
           const mapped: Record<string, UnitScheduleEntry[]> = {}
@@ -771,7 +771,8 @@ export function SemesterTimeline() {
     </div>
 
     {showDetailedCalendar ? (
-      <Card ref={calendarRef} className="space-y-4">
+      <div ref={calendarRef}>
+      <Card className="space-y-4">
         <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h2 className="text-lg font-semibold text-slate-950">Detailed Academic Calendar</h2>
@@ -904,6 +905,7 @@ export function SemesterTimeline() {
           </div>
         ) : null}
       </Card>
+      </div>
     ) : null}
     </div>
   )
