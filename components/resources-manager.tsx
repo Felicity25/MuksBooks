@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/components/auth-provider'
+import { StochasticProcessesLab } from '@/components/resources/stochastic-processes-lab'
 import { ACTUARIAL_RESOURCES, PROFESSIONAL_SUBJECTS, relevanceScore, type ActuarialResource, type ResourceKind } from '@/lib/resources/catalog'
 import {
   DISTRIBUTIONS, defaultParameters, distributionMetricPoints, distributionQuantile,
@@ -457,6 +458,8 @@ export function ResourcesManager() {
         </div>
         <div className="mt-6 flex flex-wrap items-center gap-2 border-t border-slate-700 pt-5"><span className="mr-2 text-xs font-semibold uppercase text-slate-400">Previous days</span>{Array.from({ length: Math.min(4, DISTRIBUTIONS.length - 1) }, (_, offset) => { const item = DISTRIBUTIONS[(DISTRIBUTIONS.indexOf(dailyDistribution) - offset - 1 + DISTRIBUTIONS.length) % DISTRIBUTIONS.length]; return <button key={item.id} onClick={() => selectDistribution(item.id)} className="rounded-full border border-slate-600 px-3 py-1.5 text-xs text-slate-300 hover:border-teal-300">{item.name}</button> })}</div>
       </section>
+
+      <StochasticProcessesLab />
 
       <section aria-labelledby="library-title">
         <div className="mb-6 flex items-center gap-3"><Library className="text-teal-700" /><div><p className="text-sm font-semibold text-teal-700">Research and deep learning</p><h2 id="library-title" className="text-2xl font-semibold text-slate-950">Actuarial library</h2></div></div>
