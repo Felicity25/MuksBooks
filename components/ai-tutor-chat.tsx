@@ -7,6 +7,7 @@ import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import {
   ChevronDown,
+  ExternalLink,
   Expand,
   FlaskConical,
   Mic,
@@ -159,82 +160,6 @@ function SourceChip({
   )
 }
 
-function ClaudeWorkspace({
-  artifactUrl,
-  expanded,
-  onToggleExpanded,
-  onClose
-}: {
-  artifactUrl: string
-  expanded: boolean
-  onToggleExpanded: () => void
-  onClose: () => void
-}) {
-  const trimmedUrl = artifactUrl.trim()
-  const hasEmbedUrl = Boolean(trimmedUrl)
-  const blockedClaudeChatUrl = /claude\.ai/i.test(trimmedUrl)
-  const canEmbed = hasEmbedUrl && !blockedClaudeChatUrl
-
-  return (
-    <div className="flex h-full flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white">
-      <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-        <div>
-          <p className="text-sm font-semibold text-slate-900">Claude workspace</p>
-          <p className="text-xs text-slate-500">Runs on your Claude account and Claude usage limits.</p>
-        </div>
-        <button
-          type="button"
-          onClick={onToggleExpanded}
-          className="rounded-xl border border-slate-200 p-2 text-slate-600 hover:border-slate-300"
-          aria-label={expanded ? 'Restore workspace size' : 'Expand workspace'}
-        >
-          {expanded ? <Minimize2 size={15} /> : <Expand size={15} />}
-        </button>
-        <button
-          type="button"
-          onClick={onClose}
-          className="rounded-xl border border-slate-200 p-2 text-slate-600 hover:border-slate-300"
-          aria-label="Close Claude workspace"
-        >
-          <X size={15} />
-        </button>
-      </div>
-
-      {canEmbed ? (
-        <iframe
-          title="Claude Artifact Workspace"
-          src={trimmedUrl}
-          className="h-full min-h-[65vh] w-full border-0"
-          allow="clipboard-write"
-          referrerPolicy="strict-origin-when-cross-origin"
-        />
-      ) : (
-        <div className="space-y-4 p-5 text-sm text-slate-700">
-          <p className="font-medium text-slate-900">Claude Artifact embed is not configured yet.</p>
-          {blockedClaudeChatUrl ? (
-            <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-900">
-              Direct claude.ai chat URLs are not supported here. Use a published Artifact embed URL from Claude &quot;Get embed code&quot;.
-            </p>
-          ) : null}
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs leading-6 text-slate-600">
-            <p className="font-semibold text-slate-900">Setup steps</p>
-            <p>1. In Claude, open your Artifact and click Publish.</p>
-            <p>2. Click Get embed code and set Allowed domains (include muksbooks.com and your preview domains).</p>
-            <p>3. Copy the embed URL and set NEXT_PUBLIC_CLAUDE_ARTIFACT_EMBED_URL.</p>
-            <p>4. Redeploy MuksBooks.</p>
-          </div>
-          <div className="rounded-2xl border border-slate-200 p-4 text-xs leading-6 text-slate-600">
-            <p className="font-semibold text-slate-900">Capability boundary</p>
-            <p>MuksBooks Tutor uses your units/uploads/schedule context.</p>
-            <p>Claude workspace uses Claude authentication and Claude usage allowances.</p>
-            <p>No implicit Supabase or MuksBooks data bridge is assumed in the Artifact.</p>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
 function ComposerFileList({ files, onRemove }: { files: File[]; onRemove: (name: string) => void }) {
   if (!files.length) return null
   return (
@@ -256,7 +181,6 @@ function ComposerFileList({ files, onRemove }: { files: File[]; onRemove: (name:
 export function AiTutorChat() {
   const { user, requireAuth } = useAuth()
   const readAloud = useReadAloud()
-  const claudeArtifactUrl = process.env.NEXT_PUBLIC_CLAUDE_ARTIFACT_EMBED_URL || ''
 
   const [conversations, setConversations] = useState<TutorConversation[]>([])
   const [conversationId, setConversationId] = useState<string>('')
@@ -286,9 +210,8 @@ export function AiTutorChat() {
   const [showContextDetails, setShowContextDetails] = useState(false)
   const [showTools, setShowTools] = useState(false)
   const [expandedSourcesMessageId, setExpandedSourcesMessageId] = useState<string | null>(null)
-  const [workspace, setWorkspace] = useState<'tutor' | 'claude'>('tutor')
+  const [openAlongside, setOpenAlongside] = useState(true)
   const [focusMode, setFocusMode] = useState(false)
-  const [claudeExpanded, setClaudeExpanded] = useState(false)
 
   async function copyToClipboard(value: string) {
     try {
@@ -337,6 +260,47 @@ export function AiTutorChat() {
     }
     return activeCitations
   }, [messages, activeCitations])
+
+  const selectedUnitButtonLabel = useMemo(() => {
+    if (!contextChipLabel || contextChipLabel === 'General') return 'Choose unit'
+    return `Unit: ${contextChipLabel}`
+  }, [contextChipLabel])
+
+  function isMobileViewport() {
+    if (typeof window === 'undefined') return false
+    const mediaMobile = window.matchMedia?.('(max-width: 768px)')?.matches
+    const uaMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
+    return Boolean(mediaMobile || uaMobile)
+  }
+
+  function openExternalStudyService(service: 'chatgpt' | 'claude') {
+    const url = service === 'chatgpt' ? 'https://chatgpt.com/' : 'https://claude.ai/'
+    const shouldPopup = openAlongside && !isMobileViewport()
+
+    if (shouldPopup) {
+      const width = Math.max(780, Math.floor(window.screen.availWidth * 0.46))
+      const height = Math.max(720, Math.floor(window.screen.availHeight * 0.9))
+      const left = Math.max(0, window.screenX + window.outerWidth - width - 20)
+      const top = Math.max(0, window.screenY + 40)
+      const features = [
+        `width=${width}`,
+        `height=${height}`,
+        `left=${left}`,
+        `top=${top}`,
+        'resizable=yes',
+        'scrollbars=yes',
+        'noopener',
+        'noreferrer'
+      ].join(',')
+      const popup = window.open(url, `${service}-official`, features)
+      if (popup) {
+        popup.focus()
+        return
+      }
+    }
+
+    window.open(url, '_blank', 'noopener,noreferrer')
+  }
 
   function applyConversationUnitContext(conversation?: TutorConversation) {
     if (!conversation) {
@@ -872,26 +836,49 @@ export function AiTutorChat() {
               <PanelLeftClose size={16} className={sidebarCollapsed ? 'rotate-180' : ''} />
             </button>
             <div>
-              <p className="text-sm font-semibold text-slate-900">AI Tutor Workspace</p>
-              <p className="text-xs text-slate-500">Conversation-first study flow for actuarial learning.</p>
+              <p className="text-sm font-semibold text-slate-900">AI Tutor</p>
+              <p className="text-xs text-slate-500">MuksBooks-native learning with optional official external launchers.</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setWorkspace('tutor')}
-              className={`rounded-full px-3 py-1.5 text-xs font-medium ${workspace === 'tutor' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700'}`}
-            >
-              MuksBooks Tutor
-            </button>
-            <button
-              type="button"
-              onClick={() => setWorkspace('claude')}
-              className={`rounded-full px-3 py-1.5 text-xs font-medium ${workspace === 'claude' ? 'bg-sky-700 text-white' : 'bg-slate-100 text-slate-700'}`}
-            >
-              Work with Claude
-            </button>
+          <div className="flex flex-col items-end gap-1.5">
+            <div className="inline-flex items-center rounded-2xl border border-slate-200 bg-slate-50 p-1">
+              <button
+                type="button"
+                className="rounded-xl bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white"
+                title="Uses your MuksBooks units, uploads and study context."
+              >
+                MuksBooks Tutor
+              </button>
+              <button
+                type="button"
+                onClick={() => openExternalStudyService('chatgpt')}
+                className="inline-flex items-center gap-1 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-white"
+                title="Continue studying in your ChatGPT account."
+              >
+                ChatGPT
+                <ExternalLink size={12} />
+              </button>
+              <button
+                type="button"
+                onClick={() => openExternalStudyService('claude')}
+                className="inline-flex items-center gap-1 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-white"
+                title="Continue studying in your Claude account."
+              >
+                Claude
+                <ExternalLink size={12} />
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-500">Claude: Open Claude · Learning mode available if included with your Claude account</p>
+            <label className="inline-flex items-center gap-2 text-xs text-slate-600">
+              <input
+                type="checkbox"
+                checked={openAlongside}
+                onChange={(event) => setOpenAlongside(event.target.checked)}
+                className="h-3.5 w-3.5 rounded border-slate-300"
+              />
+              Open alongside MuksBooks
+            </label>
             <button
               type="button"
               onClick={() => setFocusMode((open) => !open)}
@@ -958,17 +945,7 @@ export function AiTutorChat() {
           </aside>
 
           <section className="min-w-0 flex-1">
-            {workspace === 'claude' ? (
-              <div className={`h-full p-3 sm:p-4 ${claudeExpanded ? 'pb-0' : ''}`}>
-                <ClaudeWorkspace
-                  artifactUrl={claudeArtifactUrl}
-                  expanded={claudeExpanded}
-                  onToggleExpanded={() => setClaudeExpanded((open) => !open)}
-                  onClose={() => setWorkspace('tutor')}
-                />
-              </div>
-            ) : (
-              <div className="flex h-full min-h-0 flex-col">
+            <div className="flex h-full min-h-0 flex-col">
                 <div className="border-b border-slate-200 px-3 py-3 sm:px-5">
                   <div className="flex flex-wrap items-center gap-2">
                     <div className="relative">
@@ -976,8 +953,9 @@ export function AiTutorChat() {
                         type="button"
                         onClick={() => setShowContextPicker((open) => !open)}
                         className="inline-flex items-center gap-2 rounded-full border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-semibold text-sky-900"
+                        title="Uses your MuksBooks units, uploads and study context."
                       >
-                        Choose unit
+                        {selectedUnitButtonLabel}
                         <span className="rounded-full bg-white px-2 py-0.5 text-[11px] text-slate-700">{contextChipLabel}</span>
                         <ChevronDown size={12} />
                       </button>
@@ -1115,7 +1093,7 @@ export function AiTutorChat() {
                         onClick={() => setShowContextPicker((open) => !open)}
                         className="inline-flex items-center gap-2 rounded-full border border-sky-200 bg-white px-3 py-1.5 text-xs font-semibold text-sky-900"
                       >
-                        Choose unit
+                        {selectedUnitButtonLabel}
                         <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-700">{contextChipLabel}</span>
                         <ChevronDown size={12} />
                       </button>
@@ -1160,15 +1138,6 @@ export function AiTutorChat() {
                       >
                         <FlaskConical size={13} />
                         {'</> See it in R'}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setWorkspace('claude')}
-                        className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700"
-                      >
-                        <Sparkles size={13} />
-                        Open Claude workspace
                       </button>
 
                       <button
@@ -1240,7 +1209,6 @@ export function AiTutorChat() {
                   </div>
                 </div>
               </div>
-            )}
           </section>
 
           {rLabOpen ? (

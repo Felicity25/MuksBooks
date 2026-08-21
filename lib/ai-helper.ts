@@ -22,7 +22,7 @@ export interface AiTutorRequestBody {
 }
 
 function prefersDeepResponse(message: string) {
-  return /\b(explain|teach|synthesi[sz]e|deep|deeply|help me understand|derive|derivation|step by step|intuit|comprehensive)\b/i.test(message)
+  return /\b(explain|teach|synthesi[sz]e|deep|deeply|help me understand|derive|derivation|step by step|intuit|comprehensive|in its entirety|lecture style|exam ready|everything)\b/i.test(message)
 }
 
 export function buildSystemPrompt(options: { unit?: string; topic?: string; mode?: string; demoMode: boolean }) {
