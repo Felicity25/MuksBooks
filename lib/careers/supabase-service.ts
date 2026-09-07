@@ -13,6 +13,7 @@ import {
   getOpportunityStatus,
   isHiddenGemCompany
 } from '@/lib/careers/opportunity-utils'
+import { syncMassPulse } from '@/lib/mass/pipeline'
 
 type SupabaseClient = any
 
@@ -34,6 +35,7 @@ export type CareerStage =
   | 'Closed'
 
 const DEFAULT_TIMEZONE = 'Australia/Melbourne'
+let careersRefreshMetadataSupported: boolean | null = null
 
 function makeId(prefix: string) {
   return `${prefix}_${crypto.randomUUID()}`
@@ -53,6 +55,84 @@ function matchesPreference(jobValue: string | null | undefined, selected: string
   const job = normalizeText(jobValue)
   if (!job) return false
   return selected.some((item) => job.includes(normalizeText(item)))
+}
+
+function dedupeKeyForJobRow(row: any) {
+  const external = normalizeText(row.external_job_id)
+  if (external) return `external:${normalizeText(row.company_id)}:${external}`
+  const app = normalizeText(row.application_url)
+  if (app) return `application:${app}`
+  const source = normalizeText(row.source_url)
+  if (source) return `source:${source}`
+  return `title:${normalizeText(row.company_id)}:${normalizeText(row.job_title)}:${normalizeText(row.location)}`
+}
+
+function slugify(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+}
+
+async function supportsCareersRefreshMetadata(client: SupabaseClient) {
+  if (careersRefreshMetadataSupported !== null) return careersRefreshMetadataSupported
+
+  const { error } = await client
+    .from('career_jobs')
+    .select('first_seen_at, last_seen_at, inactive_reason, admin_removed')
+    .limit(1)
+
+  if (!error) {
+    careersRefreshMetadataSupported = true
+    return true
+  }
+
+  if (/column .* does not exist/i.test(String(error.message || ''))) {
+    careersRefreshMetadataSupported = false
+    return false
+  }
+
+  throw new Error(error.message)
+}
+
+function inferOpportunityType(title?: string | null, description?: string | null) {
+  const text = `${title || ''} ${description || ''}`.toLowerCase()
+  if (text.includes('case competition')) return 'Case Competition'
+  if (text.includes('datathon')) return 'Datathon'
+  if (text.includes('hackathon')) return 'Hackathon'
+  if (text.includes('competition') && text.includes('trading')) return 'Trading / Quant Competition'
+  if (text.includes('competition') && text.includes('consulting')) return 'Consulting Competition'
+  if (text.includes('competition') && text.includes('business')) return 'Business Competition'
+  if (text.includes('competition') && text.includes('actuarial')) return 'Actuarial Competition'
+  if (text.includes('competition')) return 'Competition'
+  if (text.includes('scholarship')) return 'Scholarship'
+  if (text.includes('fellowship')) return 'Fellowship'
+  if (text.includes('intern')) return 'Internship'
+  if (text.includes('vacation program')) return 'Vacation Program'
+  if (text.includes('graduate program')) return 'Graduate Program'
+  if (text.includes('graduate role') || text.includes('graduate')) return 'Graduate Role'
+  if (text.includes('insight program')) return 'Insight Program'
+  if (text.includes('information session')) return 'Employer Information Session'
+  if (text.includes('networking')) return 'Networking Event'
+  if (text.includes('mentorship')) return 'Mentorship Program'
+  if (text.includes('career event') || text.includes('careers fair') || text.includes('career fair')) return 'Career Event'
+  if (text.includes('research')) return 'Research Opportunity'
+  if (text.includes('student program')) return 'Student Program'
+  if (text.includes('professional development')) return 'Professional Development Program'
+  return 'Opportunity'
+}
+
+function inferCareerAreaFromText(title?: string | null, description?: string | null) {
+  const text = `${title || ''} ${description || ''}`.toLowerCase()
+  if (text.includes('actuarial')) return 'Actuarial'
+  if (text.includes('insurance')) return 'Insurance'
+  if (text.includes('risk')) return 'Risk'
+  if (text.includes('investment')) return 'Investments'
+  if (text.includes('bank')) return 'Banking'
+  if (text.includes('quant') || text.includes('trading')) return 'Quant Finance'
+  if (text.includes('consult')) return 'Consulting'
+  if (text.includes('data')) return 'Data & Analytics'
+  if (text.includes('superannuation') || text.includes('pension')) return 'Superannuation'
+  if (text.includes('economics')) return 'Economics'
+  if (text.includes('regulat') || text.includes('government')) return 'Government / Regulation'
+  return 'Actuarial'
 }
 
 function extractCvProfile(raw: string) {
@@ -169,15 +249,26 @@ export async function listDiscoverJobsSupabase(client: SupabaseClient, filters: 
   companies?: string[]
   careerAreas?: string[]
 }) {
-  const { data, error } = await client
-    .from('career_jobs')
-    .select(`
+  const supportsRefreshMetadata = await supportsCareersRefreshMetadata(client)
+  const selectColumns = supportsRefreshMetadata
+    ? `
+      id, company_id, external_job_id, job_title, location, city, country, role_type, discipline, career_area,
+      description, requirements, opening_date, closing_date, closing_time, application_url,
+      source_url, source_type, work_rights_information, international_student_information,
+      date_found, first_seen_at, last_seen_at, last_verified, source_timezone, inactive_reason,
+      career_companies!inner(id, name, slug, official_careers_url, profile_created)
+    `
+    : `
       id, company_id, external_job_id, job_title, location, city, country, role_type, discipline, career_area,
       description, requirements, opening_date, closing_date, closing_time, application_url,
       source_url, source_type, work_rights_information, international_student_information,
       date_found, last_verified, source_timezone,
       career_companies!inner(id, name, slug, official_careers_url, profile_created)
-    `)
+    `
+
+  const { data, error } = await client
+    .from('career_jobs')
+    .select(selectColumns)
     .eq('is_active', true)
     .order('last_verified', { ascending: false, nullsFirst: false })
     .order('created_at', { ascending: false })
@@ -231,7 +322,8 @@ export async function listDiscoverJobsSupabase(client: SupabaseClient, filters: 
           sourceUrl: row.source_url,
           officialCareersUrl: company?.official_careers_url
         }),
-        lastVerified: row.last_verified
+        lastVerified: row.last_verified,
+        sourceType: row.source_type
       })
       return {
         id: row.id,
@@ -263,8 +355,11 @@ export async function listDiscoverJobsSupabase(client: SupabaseClient, filters: 
         workRightsInformation: row.work_rights_information || 'Not stated',
         internationalStudentInformation: row.international_student_information || 'Not stated',
         dateFound: row.date_found,
+        firstSeenAt: row.first_seen_at || row.date_found,
+        lastSeenAt: row.last_seen_at || row.last_verified,
         lastVerified: row.last_verified,
         sourceTimezone: row.source_timezone,
+        inactiveReason: row.inactive_reason || null,
         careerFamilies: families,
         careerFitScore: fit.score,
         careerFitLabel: fit.label,
@@ -299,6 +394,250 @@ export async function listDiscoverJobsSupabase(client: SupabaseClient, filters: 
         || job.careerFamilies.some((family: string) => normalizeText(family) === value)
       ))
     })
+}
+
+export async function refreshCareersCatalogSupabase(client: SupabaseClient) {
+  const now = new Date().toISOString()
+  const supportsRefreshMetadata = await supportsCareersRefreshMetadata(client)
+
+  let massSyncSummary: any = null
+  try {
+    massSyncSummary = await syncMassPulse('delta')
+  } catch {
+    massSyncSummary = { warning: 'MASS sync failed; proceeding with existing opportunities.' }
+  }
+
+  const { data: massCareerItems } = await client
+    .from('mass_items')
+    .select('external_id, title, description, canonical_url, source_urls, location, organisation, first_seen_at, last_seen_at, published_at')
+    .eq('category', 'Careers')
+    .order('first_seen_at', { ascending: false })
+    .limit(300)
+
+  let created = 0
+  let updated = 0
+
+  for (const item of (massCareerItems || [])) {
+    const title = String(item.title || '').trim()
+    const canonicalUrl = String(item.canonical_url || '').trim()
+    if (!title || !canonicalUrl) continue
+
+    let fallbackOrg = ''
+    try {
+      fallbackOrg = new URL(canonicalUrl).hostname.replace(/^www\./, '')
+    } catch {
+      continue
+    }
+    const org = String(item.organisation || '').trim() || fallbackOrg
+    const slug = slugify(org)
+    if (!slug) continue
+
+    const { data: company } = await client
+      .from('career_companies')
+      .select('id')
+      .eq('slug', slug)
+      .maybeSingle()
+
+    const companyId = company?.id || `carco_${slug}`
+    await client.from('career_companies').upsert({
+      id: companyId,
+      name: org,
+      slug,
+      official_careers_url: canonicalUrl,
+      source_type: 'MASS_DISCOVERY',
+      profile_created: true
+    }, { onConflict: 'id' })
+
+    const externalId = String(item.external_id || '').trim() || slugify(canonicalUrl)
+    const jobId = `carjob_mass_${externalId}`
+
+    const { data: existing } = await client
+      .from('career_jobs')
+      .select(supportsRefreshMetadata ? 'id, admin_removed' : 'id')
+      .eq('id', jobId)
+      .maybeSingle()
+
+    if (supportsRefreshMetadata && existing?.admin_removed) continue
+
+    const roleType = inferOpportunityType(item.title, item.description)
+    const careerArea = inferCareerAreaFromText(item.title, item.description)
+    const sourceUrls = Array.isArray(item.source_urls) ? item.source_urls : []
+    const sourceUrl = String(sourceUrls[0] || canonicalUrl)
+
+    const payload: any = {
+      id: jobId,
+      company_id: companyId,
+      external_job_id: `mass-${externalId}`,
+      job_title: title,
+      location: item.location || 'Australia',
+      country: 'Australia',
+      role_type: roleType,
+      discipline: careerArea,
+      career_area: careerArea,
+      description: item.description || `${title} opportunity discovered from MASS ecosystem sources.`,
+      requirements: null,
+      opening_date: item.published_at || item.first_seen_at || now,
+      closing_date: null,
+      application_url: canonicalUrl,
+      source_url: sourceUrl,
+      source_type: 'MASS_DISCOVERY',
+      work_rights_information: 'Not stated',
+      international_student_information: 'Not stated',
+      date_found: item.first_seen_at || now,
+      last_verified: now,
+      is_active: true
+    }
+
+    if (supportsRefreshMetadata) {
+      payload.first_seen_at = item.first_seen_at || item.published_at || now
+      payload.last_seen_at = item.last_seen_at || now
+      payload.inactive_reason = null
+      payload.admin_removed = false
+    }
+
+    const { error } = await client.from('career_jobs').upsert(payload, { onConflict: 'id' })
+    if (error) continue
+    if (existing?.id) updated += 1
+    else created += 1
+  }
+
+  const { data: rows, error: rowsError } = await client
+    .from('career_jobs')
+    .select(
+      supportsRefreshMetadata
+        ? 'id, company_id, external_job_id, application_url, source_url, job_title, location, closing_date, is_active, admin_removed, first_seen_at, date_found, last_seen_at, last_verified, updated_at'
+        : 'id, company_id, external_job_id, application_url, source_url, job_title, location, closing_date, is_active, date_found, last_verified, updated_at'
+    )
+    .eq('is_active', true)
+
+  if (rowsError) throw new Error(rowsError.message)
+
+  let duplicatesDeactivated = 0
+  let expiredDeactivated = 0
+  const seen = new Set<string>()
+  const jobs = (rows || []).sort((a: any, b: any) => {
+    const left = new Date(a.last_verified || a.updated_at || a.date_found || 0).getTime()
+    const right = new Date(b.last_verified || b.updated_at || b.date_found || 0).getTime()
+    return right - left
+  })
+
+  for (const row of jobs) {
+    if (supportsRefreshMetadata && row.admin_removed) continue
+
+    const patch: any = {}
+    if (supportsRefreshMetadata) {
+      if (!row.first_seen_at) patch.first_seen_at = row.date_found || now
+      if (!row.last_seen_at) patch.last_seen_at = row.last_verified || row.date_found || now
+    }
+    if (Object.keys(patch).length) {
+      await client.from('career_jobs').update(patch).eq('id', row.id)
+    }
+
+    if (row.closing_date) {
+      const closeTime = new Date(row.closing_date).getTime()
+      if (Number.isFinite(closeTime) && closeTime < Date.now()) {
+        const closePatch: any = {
+          is_active: false,
+          last_verified: now
+        }
+        if (supportsRefreshMetadata) closePatch.inactive_reason = 'CLOSING_DATE_PASSED'
+        await client.from('career_jobs').update(closePatch).eq('id', row.id)
+        expiredDeactivated += 1
+        continue
+      }
+    }
+
+    const key = dedupeKeyForJobRow(row)
+    if (seen.has(key)) {
+      const dedupePatch: any = {
+        is_active: false,
+        last_verified: now
+      }
+      if (supportsRefreshMetadata) dedupePatch.inactive_reason = 'DEDUPLICATED'
+      await client.from('career_jobs').update(dedupePatch).eq('id', row.id)
+      duplicatesDeactivated += 1
+      continue
+    }
+    seen.add(key)
+  }
+
+  const { data: companies } = await client.from('career_companies').select('id')
+  for (const company of companies || []) {
+    const { count } = await client
+      .from('career_jobs')
+      .select('id', { count: 'exact', head: true })
+      .eq('company_id', company.id)
+      .eq('is_active', true)
+
+    const { data: existingCheck } = await client
+      .from('career_company_checks')
+      .select('id')
+      .eq('company_id', company.id)
+      .limit(1)
+      .maybeSingle()
+
+    if (existingCheck?.id) {
+      await client
+        .from('career_company_checks')
+        .update({
+          status: 'HEALTHY',
+          last_checked_at: now,
+          last_successful_check_at: now,
+          error_message: null,
+          total_openings: Number(count || 0)
+        })
+        .eq('id', existingCheck.id)
+    } else {
+      await client.from('career_company_checks').insert({
+        id: `carcheck_${company.id}`,
+        company_id: company.id,
+        status: 'HEALTHY',
+        last_checked_at: now,
+        last_successful_check_at: now,
+        error_message: null,
+        total_openings: Number(count || 0)
+      })
+    }
+  }
+
+  return {
+    refreshedAt: now,
+    created,
+    updated,
+    duplicatesDeactivated,
+    expiredDeactivated,
+    deactivated: duplicatesDeactivated + expiredDeactivated,
+    massSyncSummary,
+    metadataColumnsSupported: supportsRefreshMetadata
+  }
+}
+
+export async function deactivateOpportunitySupabase(client: SupabaseClient, jobId: string, reason?: string | null) {
+  const supportsRefreshMetadata = await supportsCareersRefreshMetadata(client)
+  const { data: existing, error: existingError } = await client
+    .from('career_jobs')
+    .select('id')
+    .eq('id', jobId)
+    .maybeSingle()
+
+  if (existingError) throw new Error(existingError.message)
+  if (!existing) throw new Error('Opportunity not found.')
+
+  const patch: any = {
+    is_active: false,
+    last_verified: new Date().toISOString()
+  }
+  if (supportsRefreshMetadata) {
+    patch.admin_removed = true
+    patch.inactive_reason = (reason || 'ADMIN_DEACTIVATED').trim()
+  }
+
+  const { error } = await client
+    .from('career_jobs')
+    .update(patch)
+    .eq('id', jobId)
+
+  if (error) throw new Error(error.message)
 }
 
 export async function getCompanyDetailsSupabase(client: SupabaseClient, companyId: string, userId?: string) {
@@ -368,7 +707,8 @@ export async function getCompanyDetailsSupabase(client: SupabaseClient, companyI
             sourceUrl: job.source_url,
             officialCareersUrl: company.official_careers_url
           }),
-          lastVerified: job.last_verified
+          lastVerified: job.last_verified,
+          sourceType: company.source_type
         })
         return { opportunityStatus: status.status, opportunityStatusLabel: status.label }
       })(),
