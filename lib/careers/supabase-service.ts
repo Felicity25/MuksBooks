@@ -11,7 +11,8 @@ import {
   getActuarialCareerFit,
   matchesFilterValue,
   getOpportunityStatus,
-  isHiddenGemCompany
+  isHiddenGemCompany,
+  verifyOpportunityUrlHealth
 } from '@/lib/careers/opportunity-utils'
 import { syncMassPulse } from '@/lib/mass/pipeline'
 
@@ -36,6 +37,8 @@ export type CareerStage =
 
 const DEFAULT_TIMEZONE = 'Australia/Melbourne'
 let careersRefreshMetadataSupported: boolean | null = null
+let careersVerificationColumnsSupported: boolean | null = null
+let careersRefreshRunsSupported: boolean | null = null
 
 function makeId(prefix: string) {
   return `${prefix}_${crypto.randomUUID()}`
@@ -90,6 +93,71 @@ async function supportsCareersRefreshMetadata(client: SupabaseClient) {
   }
 
   throw new Error(error.message)
+}
+
+async function supportsCareersVerificationColumns(client: SupabaseClient) {
+  if (careersVerificationColumnsSupported !== null) return careersVerificationColumnsSupported
+
+  const { error } = await client
+    .from('career_jobs')
+    .select('verification_status, last_successful_verification_at, verification_failure_count, last_verification_http_status, last_verification_error')
+    .limit(1)
+
+  if (!error) {
+    careersVerificationColumnsSupported = true
+    return true
+  }
+
+  if (/column .* does not exist/i.test(String(error.message || ''))) {
+    careersVerificationColumnsSupported = false
+    return false
+  }
+
+  throw new Error(error.message)
+}
+
+async function supportsCareersRefreshRuns(client: SupabaseClient) {
+  if (careersRefreshRunsSupported !== null) return careersRefreshRunsSupported
+  const { error } = await client.from('career_refresh_runs').select('id').limit(1)
+  if (!error) {
+    careersRefreshRunsSupported = true
+    return true
+  }
+  if (/relation .* does not exist|table .* does not exist/i.test(String(error.message || ''))) {
+    careersRefreshRunsSupported = false
+    return false
+  }
+  throw new Error(error.message)
+}
+
+async function createRefreshRunSupabase(client: SupabaseClient, mode: string) {
+  const supported = await supportsCareersRefreshRuns(client)
+  if (!supported) return null
+  const now = new Date().toISOString()
+  const runId = makeId('carrun')
+  const { error } = await client.from('career_refresh_runs').insert({
+    id: runId,
+    started_at: now,
+    status: 'RUNNING',
+    mode,
+    created_at: now,
+    updated_at: now
+  })
+  if (error) return null
+  return runId
+}
+
+async function finalizeRefreshRunSupabase(client: SupabaseClient, runId: string | null, summary: Record<string, unknown>) {
+  if (!runId) return
+  const now = new Date().toISOString()
+  await client
+    .from('career_refresh_runs')
+    .update({
+      ...summary,
+      completed_at: now,
+      updated_at: now
+    })
+    .eq('id', runId)
 }
 
 function inferOpportunityType(title?: string | null, description?: string | null) {
@@ -250,12 +318,14 @@ export async function listDiscoverJobsSupabase(client: SupabaseClient, filters: 
   careerAreas?: string[]
 }) {
   const supportsRefreshMetadata = await supportsCareersRefreshMetadata(client)
+  const supportsVerificationColumns = await supportsCareersVerificationColumns(client)
   const selectColumns = supportsRefreshMetadata
     ? `
       id, company_id, external_job_id, job_title, location, city, country, role_type, discipline, career_area,
       description, requirements, opening_date, closing_date, closing_time, application_url,
       source_url, source_type, work_rights_information, international_student_information,
       date_found, first_seen_at, last_seen_at, last_verified, source_timezone, inactive_reason,
+      ${supportsVerificationColumns ? 'verification_status, last_successful_verification_at, verification_failure_count, last_verification_http_status, last_verification_error,' : ''}
       career_companies!inner(id, name, slug, official_careers_url, profile_created)
     `
     : `
@@ -360,6 +430,11 @@ export async function listDiscoverJobsSupabase(client: SupabaseClient, filters: 
         lastVerified: row.last_verified,
         sourceTimezone: row.source_timezone,
         inactiveReason: row.inactive_reason || null,
+        verificationStatus: row.verification_status || 'UNVERIFIED',
+        lastSuccessfulVerificationAt: row.last_successful_verification_at || null,
+        verificationFailureCount: Number(row.verification_failure_count || 0),
+        lastVerificationHttpStatus: row.last_verification_http_status ?? null,
+        lastVerificationError: row.last_verification_error || null,
         careerFamilies: families,
         careerFitScore: fit.score,
         careerFitLabel: fit.label,
@@ -399,6 +474,8 @@ export async function listDiscoverJobsSupabase(client: SupabaseClient, filters: 
 export async function refreshCareersCatalogSupabase(client: SupabaseClient) {
   const now = new Date().toISOString()
   const supportsRefreshMetadata = await supportsCareersRefreshMetadata(client)
+  const supportsVerificationColumns = await supportsCareersVerificationColumns(client)
+  const refreshRunId = await createRefreshRunSupabase(client, 'cloud')
 
   let massSyncSummary: any = null
   try {
@@ -505,7 +582,7 @@ export async function refreshCareersCatalogSupabase(client: SupabaseClient) {
     .from('career_jobs')
     .select(
       supportsRefreshMetadata
-        ? 'id, company_id, external_job_id, application_url, source_url, job_title, location, closing_date, is_active, admin_removed, first_seen_at, date_found, last_seen_at, last_verified, updated_at'
+        ? `id, company_id, external_job_id, application_url, source_url, job_title, location, closing_date, is_active, admin_removed, first_seen_at, date_found, last_seen_at, last_verified, updated_at${supportsVerificationColumns ? ', verification_status, verification_failure_count, last_successful_verification_at, last_verification_http_status, last_verification_error' : ''}`
         : 'id, company_id, external_job_id, application_url, source_url, job_title, location, closing_date, is_active, date_found, last_verified, updated_at'
     )
     .eq('is_active', true)
@@ -514,6 +591,11 @@ export async function refreshCareersCatalogSupabase(client: SupabaseClient) {
 
   let duplicatesDeactivated = 0
   let expiredDeactivated = 0
+  let linksVerified = 0
+  let linksBroken = 0
+  let linksRepaired = 0
+  let verificationClosed = 0
+  let failures = 0
   const seen = new Set<string>()
   const jobs = (rows || []).sort((a: any, b: any) => {
     const left = new Date(a.last_verified || a.updated_at || a.date_found || 0).getTime()
@@ -523,6 +605,52 @@ export async function refreshCareersCatalogSupabase(client: SupabaseClient) {
 
   for (const row of jobs) {
     if (supportsRefreshMetadata && row.admin_removed) continue
+
+    try {
+      const verification = await verifyOpportunityUrlHealth({
+        applicationUrl: row.application_url,
+        sourceUrl: row.source_url,
+        officialCareersUrl: null
+      })
+      linksVerified += 1
+
+      const previousFailures = Number(row.verification_failure_count || 0)
+      const isBrokenLike = verification.status === 'BROKEN' || verification.status === 'CLOSED'
+      const nextFailures = isBrokenLike ? previousFailures + 1 : 0
+
+      const verificationPatch: any = {
+        last_verified: now
+      }
+
+      if (supportsVerificationColumns) {
+        verificationPatch.verification_status = verification.status
+        verificationPatch.last_verification_http_status = verification.httpStatus
+        verificationPatch.last_verification_error = verification.errorMessage
+        verificationPatch.verification_failure_count = nextFailures
+        if (verification.status === 'VALID' || verification.status === 'REDIRECTED') {
+          verificationPatch.last_successful_verification_at = now
+        }
+      }
+
+      if (verification.redirected && verification.resolvedUrl && verification.resolvedUrl !== row.application_url) {
+        verificationPatch.application_url = verification.resolvedUrl
+        linksRepaired += 1
+      }
+
+      if (supportsVerificationColumns && isBrokenLike && nextFailures >= 2) {
+        verificationPatch.is_active = false
+        if (supportsRefreshMetadata) {
+          verificationPatch.inactive_reason = verification.status === 'CLOSED' ? 'LISTING_CLOSED' : 'LINK_INVALID'
+        }
+        verificationClosed += 1
+      }
+
+      const { error: verificationError } = await client.from('career_jobs').update(verificationPatch).eq('id', row.id)
+      if (verificationError) failures += 1
+      if (isBrokenLike) linksBroken += 1
+    } catch {
+      failures += 1
+    }
 
     const patch: any = {}
     if (supportsRefreshMetadata) {
@@ -600,15 +728,39 @@ export async function refreshCareersCatalogSupabase(client: SupabaseClient) {
     }
   }
 
-  return {
+  const summary = {
     refreshedAt: now,
     created,
     updated,
     duplicatesDeactivated,
     expiredDeactivated,
-    deactivated: duplicatesDeactivated + expiredDeactivated,
+    deactivated: duplicatesDeactivated + expiredDeactivated + verificationClosed,
+    linksVerified,
+    linksBroken,
+    linksRepaired,
+    failures,
     massSyncSummary,
     metadataColumnsSupported: supportsRefreshMetadata
+  }
+
+  await finalizeRefreshRunSupabase(client, refreshRunId, {
+    status: failures > 0 ? (linksVerified > 0 ? 'PARTIAL' : 'FAILED') : 'SUCCESS',
+    sources_checked: (companies || []).length,
+    opportunities_scanned: jobs.length,
+    opportunities_created: created,
+    opportunities_updated: updated,
+    opportunities_closed: duplicatesDeactivated + expiredDeactivated + verificationClosed,
+    links_verified: linksVerified,
+    links_broken: linksBroken,
+    links_repaired: linksRepaired,
+    duplicates_ignored: duplicatesDeactivated,
+    failures,
+    notes: failures > 0 ? 'Some verification checks failed; refresh continued.' : null
+  })
+
+  return {
+    ...summary,
+    refreshRunId
   }
 }
 
@@ -1725,5 +1877,47 @@ export async function getCareerPulseSupabase(client: SupabaseClient, userId: str
       title: item.title,
       deadlineAtUtc: item.deadline_at_utc
     }))
+  }
+}
+
+export async function getCareersRefreshHealthSupabase(client: SupabaseClient) {
+  const supportsRuns = await supportsCareersRefreshRuns(client)
+  const { count: activeCount } = await client
+    .from('career_jobs')
+    .select('id', { count: 'exact', head: true })
+    .eq('is_active', true)
+
+  if (!supportsRuns) {
+    return {
+      latestRun: null,
+      activeOpportunities: Number(activeCount || 0)
+    }
+  }
+
+  const { data: latest } = await client
+    .from('career_refresh_runs')
+    .select('*')
+    .order('started_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  return {
+    latestRun: latest ? {
+      id: latest.id,
+      startedAt: latest.started_at,
+      completedAt: latest.completed_at,
+      status: latest.status,
+      sourcesChecked: Number(latest.sources_checked || 0),
+      opportunitiesScanned: Number(latest.opportunities_scanned || 0),
+      opportunitiesCreated: Number(latest.opportunities_created || 0),
+      opportunitiesUpdated: Number(latest.opportunities_updated || 0),
+      opportunitiesClosed: Number(latest.opportunities_closed || 0),
+      linksVerified: Number(latest.links_verified || 0),
+      linksBroken: Number(latest.links_broken || 0),
+      linksRepaired: Number(latest.links_repaired || 0),
+      duplicatesIgnored: Number(latest.duplicates_ignored || 0),
+      failures: Number(latest.failures || 0)
+    } : null,
+    activeOpportunities: Number(activeCount || 0)
   }
 }
