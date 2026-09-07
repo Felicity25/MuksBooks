@@ -31,6 +31,13 @@ export type OpportunityStatus =
   | 'LISTING_UNAVAILABLE'
   | 'STALE_UNVERIFIED'
 
+export type VerificationStatus =
+  | 'VALID'
+  | 'REDIRECTED'
+  | 'BROKEN'
+  | 'CLOSED'
+  | 'UNVERIFIED'
+
 interface CareerFamilyRule {
   family: string
   terms: string[]
@@ -106,6 +113,119 @@ function isPlaceholderUrl(value: string) {
     return hostname === 'example.com' || hostname.endsWith('.example.com')
   } catch {
     return true
+  }
+}
+
+function isLikelyGenericCareersPath(url: URL) {
+  const path = url.pathname.toLowerCase().replace(/\/+$/, '')
+  return [
+    '/careers',
+    '/career',
+    '/jobs',
+    '/job',
+    '/work-with-us',
+    '/join-us'
+  ].includes(path)
+}
+
+function classifyByStatusCode(status: number): VerificationStatus {
+  if (status === 404 || status === 410) return 'CLOSED'
+  if (status >= 200 && status < 400) return 'VALID'
+  return 'BROKEN'
+}
+
+export async function verifyOpportunityUrlHealth(input: {
+  applicationUrl?: string | null
+  sourceUrl?: string | null
+  officialCareersUrl?: string | null
+}): Promise<{
+  resolvedUrl: string | null
+  sourceUrlChecked: string | null
+  status: VerificationStatus
+  httpStatus: number | null
+  errorMessage: string | null
+  redirected: boolean
+}> {
+  const resolvedUrl = resolveJobApplicationUrl(input)
+  if (!resolvedUrl) {
+    return {
+      resolvedUrl: null,
+      sourceUrlChecked: null,
+      status: 'UNVERIFIED',
+      httpStatus: null,
+      errorMessage: 'No valid URL available for verification.',
+      redirected: false
+    }
+  }
+
+  const doRequest = async (method: 'HEAD' | 'GET') => {
+    return fetch(resolvedUrl, {
+      method,
+      redirect: 'follow',
+      cache: 'no-store',
+      headers: {
+        'user-agent': 'MuksBooks-Careers-Verification/1.0'
+      }
+    })
+  }
+
+  let response: Response | null = null
+  let finalError: string | null = null
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      response = await doRequest('HEAD')
+      break
+    } catch (error) {
+      finalError = error instanceof Error ? error.message : 'Network verification error.'
+      if (attempt === 0) {
+        try {
+          response = await doRequest('GET')
+          break
+        } catch (retryError) {
+          finalError = retryError instanceof Error ? retryError.message : finalError
+        }
+      }
+    }
+  }
+
+  if (!response) {
+    return {
+      resolvedUrl,
+      sourceUrlChecked: resolvedUrl,
+      status: 'UNVERIFIED',
+      httpStatus: null,
+      errorMessage: finalError,
+      redirected: false
+    }
+  }
+
+  const finalUrl = response.url || resolvedUrl
+  const redirected = finalUrl !== resolvedUrl
+  const httpStatus = response.status
+  let status = classifyByStatusCode(httpStatus)
+
+  try {
+    const finalParsed = new URL(finalUrl)
+    if (httpStatus >= 200 && httpStatus < 400 && isLikelyGenericCareersPath(finalParsed)) {
+      const originalHost = new URL(resolvedUrl).hostname
+      if (finalParsed.hostname === originalHost && finalParsed.pathname !== new URL(resolvedUrl).pathname) {
+        status = 'REDIRECTED'
+      }
+    }
+  } catch {
+    // Keep status from HTTP code classification if URL parsing fails.
+  }
+
+  if (redirected && status === 'VALID') status = 'REDIRECTED'
+
+  return {
+    resolvedUrl: finalUrl,
+    sourceUrlChecked: resolvedUrl,
+    status,
+    httpStatus,
+    errorMessage: response.ok ? null : `HTTP ${httpStatus}`,
+    redirected
   }
 }
 

@@ -297,10 +297,36 @@ function migrate(db: any) {
       date_found TEXT,
       last_verified TEXT,
       source_timezone TEXT,
+      verification_status TEXT,
+      last_successful_verification_at TEXT,
+      verification_failure_count INTEGER NOT NULL DEFAULT 0,
+      last_verification_http_status INTEGER,
+      last_verification_error TEXT,
       is_active INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       FOREIGN KEY(company_id) REFERENCES career_companies(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS career_refresh_runs (
+      id TEXT PRIMARY KEY,
+      started_at TEXT NOT NULL,
+      completed_at TEXT,
+      status TEXT NOT NULL,
+      mode TEXT,
+      sources_checked INTEGER NOT NULL DEFAULT 0,
+      opportunities_scanned INTEGER NOT NULL DEFAULT 0,
+      opportunities_created INTEGER NOT NULL DEFAULT 0,
+      opportunities_updated INTEGER NOT NULL DEFAULT 0,
+      opportunities_closed INTEGER NOT NULL DEFAULT 0,
+      links_verified INTEGER NOT NULL DEFAULT 0,
+      links_broken INTEGER NOT NULL DEFAULT 0,
+      links_repaired INTEGER NOT NULL DEFAULT 0,
+      duplicates_ignored INTEGER NOT NULL DEFAULT 0,
+      failures INTEGER NOT NULL DEFAULT 0,
+      notes TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS career_company_checks (
@@ -529,6 +555,15 @@ function migrate(db: any) {
   ensureColumn(db, 'courses', 'user_id', 'TEXT')
   ensureColumn(db, 'planner_tasks', 'career_assessment_id', 'TEXT')
   ensureColumn(db, 'career_jobs', 'career_area', "TEXT NOT NULL DEFAULT 'Actuarial'")
+  ensureColumn(db, 'career_jobs', 'first_seen_at', 'TEXT')
+  ensureColumn(db, 'career_jobs', 'last_seen_at', 'TEXT')
+  ensureColumn(db, 'career_jobs', 'inactive_reason', 'TEXT')
+  ensureColumn(db, 'career_jobs', 'admin_removed', 'INTEGER NOT NULL DEFAULT 0')
+  ensureColumn(db, 'career_jobs', 'verification_status', 'TEXT')
+  ensureColumn(db, 'career_jobs', 'last_successful_verification_at', 'TEXT')
+  ensureColumn(db, 'career_jobs', 'verification_failure_count', 'INTEGER NOT NULL DEFAULT 0')
+  ensureColumn(db, 'career_jobs', 'last_verification_http_status', 'INTEGER')
+  ensureColumn(db, 'career_jobs', 'last_verification_error', 'TEXT')
   ensureColumn(db, 'career_assessments', 'custom_company_name', 'TEXT')
 
   ensureColumn(db, 'batch_files', 'batch_id', 'TEXT')
@@ -564,7 +599,11 @@ function migrate(db: any) {
     CREATE INDEX IF NOT EXISTS idx_career_jobs_company ON career_jobs(company_id);
     CREATE INDEX IF NOT EXISTS idx_career_jobs_active ON career_jobs(is_active);
     CREATE INDEX IF NOT EXISTS idx_career_jobs_area ON career_jobs(career_area);
+    CREATE INDEX IF NOT EXISTS idx_career_jobs_first_seen ON career_jobs(first_seen_at);
+    CREATE INDEX IF NOT EXISTS idx_career_jobs_last_seen ON career_jobs(last_seen_at);
+    CREATE INDEX IF NOT EXISTS idx_career_jobs_verification_status ON career_jobs(verification_status);
     CREATE INDEX IF NOT EXISTS idx_career_follow_user ON career_company_follows(user_id);
+    CREATE INDEX IF NOT EXISTS idx_career_refresh_runs_started_at ON career_refresh_runs(started_at);
     CREATE INDEX IF NOT EXISTS idx_career_saved_user ON career_saved_jobs(user_id);
     CREATE INDEX IF NOT EXISTS idx_career_app_user ON career_applications(user_id);
     CREATE INDEX IF NOT EXISTS idx_career_app_events_app ON career_application_events(application_id);

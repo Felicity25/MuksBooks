@@ -7,7 +7,8 @@ import {
   inferCareerFamilies,
   matchesFilterValue,
   getOpportunityStatus,
-  isHiddenGemCompany
+  isHiddenGemCompany,
+  verifyOpportunityUrlHealth
 } from '@/lib/careers/opportunity-utils'
 
 export type CareerStage =
@@ -63,6 +64,154 @@ function matchesPreference(jobValue: string | null | undefined, selected: string
 
 function normalizeSlug(name: string) {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+}
+
+function createRefreshRun(mode: 'local' | 'cloud_fallback') {
+  const db = getDb()
+  const now = nowIso()
+  const runId = id('carrun')
+  db.prepare(`
+    INSERT INTO career_refresh_runs (
+      id, started_at, completed_at, status, mode,
+      sources_checked, opportunities_scanned, opportunities_created, opportunities_updated, opportunities_closed,
+      links_verified, links_broken, links_repaired, duplicates_ignored, failures,
+      notes, created_at, updated_at
+    ) VALUES (?, ?, NULL, 'RUNNING', ?, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, ?, ?)
+  `).run(runId, now, mode, now, now)
+  return runId
+}
+
+function finalizeRefreshRun(runId: string, input: {
+  status: 'SUCCESS' | 'PARTIAL' | 'FAILED'
+  sourcesChecked: number
+  opportunitiesScanned: number
+  opportunitiesCreated: number
+  opportunitiesUpdated: number
+  opportunitiesClosed: number
+  linksVerified: number
+  linksBroken: number
+  linksRepaired: number
+  duplicatesIgnored: number
+  failures: number
+  notes?: string | null
+}) {
+  const db = getDb()
+  const now = nowIso()
+  db.prepare(`
+    UPDATE career_refresh_runs
+    SET completed_at = ?,
+        status = ?,
+        sources_checked = ?,
+        opportunities_scanned = ?,
+        opportunities_created = ?,
+        opportunities_updated = ?,
+        opportunities_closed = ?,
+        links_verified = ?,
+        links_broken = ?,
+        links_repaired = ?,
+        duplicates_ignored = ?,
+        failures = ?,
+        notes = ?,
+        updated_at = ?
+    WHERE id = ?
+  `).run(
+    now,
+    input.status,
+    input.sourcesChecked,
+    input.opportunitiesScanned,
+    input.opportunitiesCreated,
+    input.opportunitiesUpdated,
+    input.opportunitiesClosed,
+    input.linksVerified,
+    input.linksBroken,
+    input.linksRepaired,
+    input.duplicatesIgnored,
+    input.failures,
+    input.notes || null,
+    now,
+    runId
+  )
+}
+
+function dedupeKeyForJobRow(row: any) {
+  const external = normalizeText(row.external_job_id)
+  if (external) return `external:${normalizeText(row.company_id)}:${external}`
+  const app = normalizeText(row.application_url)
+  if (app) return `application:${app}`
+  const source = normalizeText(row.source_url)
+  if (source) return `source:${source}`
+  return `title:${normalizeText(row.company_id)}:${normalizeText(row.job_title)}:${normalizeText(row.location)}`
+}
+
+function runLocalCareerMaintenance() {
+  const db = getDb()
+  const now = nowIso()
+
+  db.prepare(`
+    UPDATE career_jobs
+    SET first_seen_at = COALESCE(first_seen_at, date_found, created_at)
+    WHERE first_seen_at IS NULL
+  `).run()
+
+  db.prepare(`
+    UPDATE career_jobs
+    SET last_seen_at = COALESCE(last_seen_at, last_verified, date_found, created_at)
+    WHERE last_seen_at IS NULL
+  `).run()
+
+  const expiredResult = db.prepare(`
+    UPDATE career_jobs
+    SET is_active = 0,
+        inactive_reason = 'CLOSING_DATE_PASSED',
+        updated_at = ?
+    WHERE is_active = 1
+      AND COALESCE(admin_removed, 0) = 0
+      AND closing_date IS NOT NULL
+      AND datetime(closing_date) < datetime(?)
+  `).run(now, now)
+
+  const activeRows = db.prepare(`
+    SELECT id, company_id, external_job_id, application_url, source_url, job_title, location,
+           COALESCE(last_verified, updated_at, created_at) AS freshness
+    FROM career_jobs
+    WHERE is_active = 1 AND COALESCE(admin_removed, 0) = 0
+    ORDER BY datetime(COALESCE(last_verified, updated_at, created_at)) DESC
+  `).all() as any[]
+
+  const seen = new Set<string>()
+  let duplicatesDeactivated = 0
+  for (const row of activeRows) {
+    const key = dedupeKeyForJobRow(row)
+    if (!key) continue
+    if (seen.has(key)) {
+      db.prepare(`
+        UPDATE career_jobs
+        SET is_active = 0,
+            inactive_reason = 'DEDUPLICATED',
+            updated_at = ?
+        WHERE id = ?
+      `).run(now, row.id)
+      duplicatesDeactivated += 1
+      continue
+    }
+    seen.add(key)
+  }
+
+  db.prepare(`
+    UPDATE career_company_checks
+    SET total_openings = (
+      SELECT COUNT(1)
+      FROM career_jobs j
+      WHERE j.company_id = career_company_checks.company_id
+        AND j.is_active = 1
+    ),
+    updated_at = ?
+  `).run(now)
+
+  return {
+    expiredDeactivated: Number(expiredResult?.changes || 0),
+    duplicatesDeactivated
+  }
 }
 
 const ACTUARIAL_COMPANIES = [
@@ -689,6 +838,7 @@ export function listDiscoverJobs(filters: {
   careerAreas?: string[]
 }) {
   ensureDefaultCareerData()
+  runLocalCareerMaintenance()
   const db = getDb()
   const clauses: string[] = []
   const params: any[] = []
@@ -748,8 +898,16 @@ export function listDiscoverJobs(filters: {
       workRightsInformation: row.work_rights_information || 'Not stated',
       internationalStudentInformation: row.international_student_information || 'Not stated',
       dateFound: row.date_found,
+      firstSeenAt: row.first_seen_at || row.date_found,
+      lastSeenAt: row.last_seen_at || row.last_verified,
       lastVerified: row.last_verified,
-      sourceTimezone: row.source_timezone
+      sourceTimezone: row.source_timezone,
+      inactiveReason: row.inactive_reason || null,
+      verificationStatus: row.verification_status || 'UNVERIFIED',
+      lastSuccessfulVerificationAt: row.last_successful_verification_at || null,
+      verificationFailureCount: Number(row.verification_failure_count || 0),
+      lastVerificationHttpStatus: row.last_verification_http_status ?? null,
+      lastVerificationError: row.last_verification_error || null
     }))
     .map((job) => {
       const fit = getActuarialCareerFit({
@@ -1959,4 +2117,188 @@ export function setCompanyJobMode(companyId: string, mode: 'ACTIVE' | 'ZERO_JOBS
   }
 
   updateCompanyCheckStatus(companyId, 'SOURCE_UNAVAILABLE', 'Source temporarily unavailable during last check.')
+}
+
+export async function refreshCareersCatalog() {
+  ensureDefaultCareerData()
+  const runId = createRefreshRun('local')
+  const db = getDb()
+  const now = nowIso()
+
+  const rows = db.prepare(`
+    SELECT j.id, j.company_id, j.application_url, j.source_url, j.job_title, j.location,
+           j.verification_failure_count, c.official_careers_url
+    FROM career_jobs j
+    INNER JOIN career_companies c ON c.id = j.company_id
+    WHERE j.is_active = 1 AND COALESCE(j.admin_removed, 0) = 0
+  `).all() as any[]
+
+  let linksVerified = 0
+  let linksBroken = 0
+  let linksRepaired = 0
+  let updated = 0
+  let closedByVerification = 0
+  let failures = 0
+
+  for (const row of rows) {
+    try {
+      const result = await verifyOpportunityUrlHealth({
+        applicationUrl: row.application_url,
+        sourceUrl: row.source_url,
+        officialCareersUrl: row.official_careers_url
+      })
+
+      linksVerified += 1
+      const previousFailures = Number(row.verification_failure_count || 0)
+      const isBrokenLike = result.status === 'BROKEN' || result.status === 'CLOSED'
+
+      const nextFailures = isBrokenLike ? previousFailures + 1 : 0
+      const shouldDeactivate = isBrokenLike && nextFailures >= 2
+
+      const patch: any = {
+        verification_status: result.status,
+        last_verification_http_status: result.httpStatus,
+        last_verification_error: result.errorMessage,
+        verification_failure_count: nextFailures,
+        last_verified: now,
+        updated_at: now
+      }
+
+      if (result.status === 'VALID' || result.status === 'REDIRECTED') {
+        patch.last_successful_verification_at = now
+      }
+
+      if (result.redirected && result.resolvedUrl && result.resolvedUrl !== row.application_url) {
+        patch.application_url = result.resolvedUrl
+        linksRepaired += 1
+      }
+
+      if (shouldDeactivate) {
+        patch.is_active = 0
+        patch.inactive_reason = result.status === 'CLOSED' ? 'LISTING_CLOSED' : 'LINK_INVALID'
+        closedByVerification += 1
+      }
+
+      db.prepare(`
+        UPDATE career_jobs
+        SET verification_status = ?,
+            last_verification_http_status = ?,
+            last_verification_error = ?,
+            verification_failure_count = ?,
+            last_successful_verification_at = COALESCE(?, last_successful_verification_at),
+            application_url = COALESCE(?, application_url),
+            is_active = COALESCE(?, is_active),
+            inactive_reason = COALESCE(?, inactive_reason),
+            last_verified = ?,
+            updated_at = ?
+        WHERE id = ?
+      `).run(
+        patch.verification_status,
+        patch.last_verification_http_status,
+        patch.last_verification_error,
+        patch.verification_failure_count,
+        patch.last_successful_verification_at || null,
+        patch.application_url || null,
+        patch.is_active ?? null,
+        patch.inactive_reason || null,
+        patch.last_verified,
+        patch.updated_at,
+        row.id
+      )
+
+      if (isBrokenLike) linksBroken += 1
+      updated += 1
+    } catch {
+      failures += 1
+    }
+  }
+
+  const maintenance = runLocalCareerMaintenance()
+  const sourcesChecked = Number(db.prepare('SELECT COUNT(1) as count FROM career_companies').get()?.count || 0)
+  const status: 'SUCCESS' | 'PARTIAL' | 'FAILED' = failures > 0
+    ? (updated > 0 ? 'PARTIAL' : 'FAILED')
+    : 'SUCCESS'
+
+  finalizeRefreshRun(runId, {
+    status,
+    sourcesChecked,
+    opportunitiesScanned: rows.length,
+    opportunitiesCreated: 0,
+    opportunitiesUpdated: updated,
+    opportunitiesClosed: closedByVerification + maintenance.expiredDeactivated + maintenance.duplicatesDeactivated,
+    linksVerified,
+    linksBroken,
+    linksRepaired,
+    duplicatesIgnored: maintenance.duplicatesDeactivated,
+    failures,
+    notes: failures > 0 ? 'Some link checks failed but refresh continued.' : null
+  })
+
+  return {
+    refreshRunId: runId,
+    refreshedAt: nowIso(),
+    created: 0,
+    updated,
+    deactivated: closedByVerification + maintenance.expiredDeactivated + maintenance.duplicatesDeactivated,
+    linksVerified,
+    linksBroken,
+    linksRepaired,
+    failures,
+    sourcesChecked,
+    ...maintenance
+  }
+}
+
+export function deactivateOpportunity(jobId: string, reason?: string | null) {
+  const db = getDb()
+  const existing = db.prepare('SELECT id FROM career_jobs WHERE id = ?').get(jobId) as any
+  if (!existing) throw new Error('Opportunity not found.')
+
+  const now = nowIso()
+  db.prepare(`
+    UPDATE career_jobs
+    SET is_active = 0,
+        admin_removed = 1,
+        inactive_reason = ?,
+        updated_at = ?,
+        last_verified = ?
+    WHERE id = ?
+  `).run((reason || 'ADMIN_DEACTIVATED').trim(), now, now, jobId)
+
+  const company = db.prepare('SELECT company_id FROM career_jobs WHERE id = ?').get(jobId) as any
+  if (company?.company_id) {
+    updateCompanyCheckStatus(company.company_id, 'HEALTHY', null)
+  }
+}
+
+export function getCareersRefreshHealth() {
+  const db = getDb()
+  const latest = db.prepare(`
+    SELECT *
+    FROM career_refresh_runs
+    ORDER BY datetime(started_at) DESC
+    LIMIT 1
+  `).get() as any
+
+  const active = db.prepare('SELECT COUNT(1) as count FROM career_jobs WHERE is_active = 1').get() as any
+
+  return {
+    latestRun: latest ? {
+      id: latest.id,
+      startedAt: latest.started_at,
+      completedAt: latest.completed_at,
+      status: latest.status,
+      sourcesChecked: Number(latest.sources_checked || 0),
+      opportunitiesScanned: Number(latest.opportunities_scanned || 0),
+      opportunitiesCreated: Number(latest.opportunities_created || 0),
+      opportunitiesUpdated: Number(latest.opportunities_updated || 0),
+      opportunitiesClosed: Number(latest.opportunities_closed || 0),
+      linksVerified: Number(latest.links_verified || 0),
+      linksBroken: Number(latest.links_broken || 0),
+      linksRepaired: Number(latest.links_repaired || 0),
+      duplicatesIgnored: Number(latest.duplicates_ignored || 0),
+      failures: Number(latest.failures || 0)
+    } : null,
+    activeOpportunities: Number(active?.count || 0)
+  }
 }

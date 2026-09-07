@@ -5,9 +5,11 @@ import {
   createApplicationFromJob,
   createManualApplication,
   createAssessment,
+  deactivateOpportunity,
   deleteApplication,
   followCompany,
   getCareerPulse,
+  getCareersRefreshHealth,
   getCareerSettings,
   getCompanyDetails,
   listApplications,
@@ -18,6 +20,7 @@ import {
   listFollowing,
   listSavedRoles,
   registerCvDocument,
+  refreshCareersCatalog,
   runCvMatch,
   saveRole,
   setCompanyJobMode,
@@ -33,9 +36,11 @@ import {
   createApplicationFromJobSupabase,
   createManualApplicationSupabase,
   createAssessmentSupabase,
+  deactivateOpportunitySupabase,
   deleteApplicationSupabase,
   followCompanySupabase,
   getCareerPulseSupabase,
+  getCareersRefreshHealthSupabase,
   getCareerSettingsSupabase,
   getCompanyDetailsSupabase,
   isCareersCloudReady,
@@ -47,6 +52,7 @@ import {
   listFollowingSupabase,
   listSavedRolesSupabase,
   registerCvDocumentSupabase,
+  refreshCareersCatalogSupabase,
   runCvMatchSupabase,
   saveRoleSupabase,
   setPrimaryCvSupabase,
@@ -70,6 +76,17 @@ async function getCloudClient() {
   const ready = await isCareersCloudReady(client)
   if (!ready) return null
   return client
+}
+
+function isCareersAdmin(user: any) {
+  const email = String(user?.email || '').toLowerCase().trim()
+  const configured = String(process.env.CAREERS_ADMIN_EMAILS || '')
+    .split(',')
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean)
+
+  if (email && configured.includes(email)) return true
+  return String(user?.app_metadata?.role || '').toLowerCase() === 'admin'
 }
 
 export async function GET(request: NextRequest) {
@@ -98,6 +115,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         ok: true,
         mode: 'guest',
+        isAdmin: false,
+        careersHealth: null,
         discover,
         companies: companyList,
         company: companyId
@@ -114,12 +133,15 @@ export async function GET(request: NextRequest) {
     }
 
     const userId = user.id
+    const admin = isCareersAdmin(user)
     const localCvDocuments = listCvDocuments(userId)
 
     if (cloudClient) {
       return NextResponse.json({
         ok: true,
         mode: 'authenticated',
+        isAdmin: admin,
+        careersHealth: admin ? await getCareersRefreshHealthSupabase(cloudClient) : null,
         discover,
         companies: companyList,
         company: companyId ? await getCompanyDetailsSupabase(cloudClient, companyId, userId) : null,
@@ -136,6 +158,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       ok: true,
       mode: 'authenticated',
+      isAdmin: admin,
+      careersHealth: admin ? getCareersRefreshHealth() : null,
       discover,
       companies: companyList,
       company: companyId ? getCompanyDetails(companyId, userId) : null,
@@ -171,6 +195,7 @@ export async function POST(request: NextRequest) {
     }
 
     const userId = user?.id || null
+    const admin = user ? isCareersAdmin(user) : false
 
     if (action === 'follow-company') {
       if (cloudClient) {
@@ -368,6 +393,38 @@ export async function POST(request: NextRequest) {
 
     if (action === 'simulate-company-mode') {
       setCompanyJobMode(body.companyId, body.mode)
+      return NextResponse.json({ ok: true })
+    }
+
+    if (action === 'refresh-careers') {
+      if (!admin) {
+        return NextResponse.json({ ok: false, error: 'Admin access required.' }, { status: 403 })
+      }
+
+      if (cloudClient) {
+        const summary = await refreshCareersCatalogSupabase(cloudClient)
+        return NextResponse.json({ ok: true, summary })
+      }
+
+      const summary = await refreshCareersCatalog()
+      return NextResponse.json({ ok: true, summary })
+    }
+
+    if (action === 'deactivate-opportunity') {
+      if (!admin) {
+        return NextResponse.json({ ok: false, error: 'Admin access required.' }, { status: 403 })
+      }
+
+      if (!body.jobId) {
+        return NextResponse.json({ ok: false, error: 'jobId is required' }, { status: 400 })
+      }
+
+      if (cloudClient) {
+        await deactivateOpportunitySupabase(cloudClient, body.jobId, body.reason || null)
+        return NextResponse.json({ ok: true })
+      }
+
+      deactivateOpportunity(body.jobId, body.reason || null)
       return NextResponse.json({ ok: true })
     }
 

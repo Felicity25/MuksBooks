@@ -11,6 +11,26 @@ type TabKey = 'discover' | 'employers' | 'following' | 'saved' | 'applications' 
 
 interface CareerState {
   mode: 'guest' | 'authenticated'
+  isAdmin?: boolean
+  careersHealth?: {
+    latestRun: {
+      id: string
+      startedAt: string
+      completedAt: string | null
+      status: string
+      sourcesChecked: number
+      opportunitiesScanned: number
+      opportunitiesCreated: number
+      opportunitiesUpdated: number
+      opportunitiesClosed: number
+      linksVerified: number
+      linksBroken: number
+      linksRepaired: number
+      duplicatesIgnored: number
+      failures: number
+    } | null
+    activeOpportunities: number
+  } | null
   discover: any[]
   companies: any[]
   following: any[]
@@ -107,6 +127,16 @@ const APPLICATION_STAGES = [
   'Assessment Centre', 'Final Interview', 'Offer', 'Accepted', 'Rejected', 'Withdrawn', 'Closed'
 ]
 
+type DiscoverSectionKey =
+  | 'for_you'
+  | 'new_this_week'
+  | 'closing_soon'
+  | 'internships'
+  | 'graduate_programs'
+  | 'case_competitions'
+  | 'scholarships'
+  | 'events_insight'
+
 function formatDateTime(value?: string | null, timezone?: string) {
   if (!value) return 'Not set'
   const date = new Date(value)
@@ -144,6 +174,55 @@ function formatCountdown(deadlineUtc?: string | null) {
   return `${hours}h ${minutes}m remaining`
 }
 
+function parseDate(value?: string | null) {
+  if (!value) return null
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return null
+  return parsed
+}
+
+function getFreshnessLabel(firstSeenAt?: string | null) {
+  const date = parseDate(firstSeenAt)
+  if (!date) return null
+  const diffDays = Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60 * 24))
+  if (diffDays < 0) return null
+  if (diffDays === 0) return 'NEW · Added today'
+  if (diffDays === 1) return 'NEW · Added yesterday'
+  if (diffDays <= 6) return `NEW · Added ${diffDays} days ago`
+  return null
+}
+
+function getClosingLabel(closingDate?: string | null) {
+  const date = parseDate(closingDate)
+  if (!date) return null
+  const diffDays = Math.floor((date.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+  if (diffDays < 0) return null
+  if (diffDays === 0) return 'Closes today'
+  if (diffDays === 1) return 'Closes tomorrow'
+  if (diffDays <= 7) return `Closes in ${diffDays} days`
+  return `Closes ${date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}`
+}
+
+function isWithinSevenDays(value?: string | null) {
+  const date = parseDate(value)
+  if (!date) return false
+  const diffMs = date.getTime() - Date.now()
+  return diffMs >= 0 && diffMs <= 7 * 24 * 60 * 60 * 1000
+}
+
+function isNewThisWeek(value?: string | null) {
+  const date = parseDate(value)
+  if (!date) return false
+  const diffMs = Date.now() - date.getTime()
+  return diffMs >= 0 && diffMs <= 7 * 24 * 60 * 60 * 1000
+}
+
+function textMatches(value: string | null | undefined, terms: string[]) {
+  const haystack = (value || '').toLowerCase()
+  if (!haystack) return false
+  return terms.some((term) => haystack.includes(term))
+}
+
 function useDefaultCareerState(): CareerState {
   return {
     mode: 'guest',
@@ -176,7 +255,7 @@ export function CareersManager() {
   const [selectedEligibility, setSelectedEligibility] = useState<string[]>([])
   const [selectedCompanies, setSelectedCompanies] = useState<string[]>([])
   const [selectedCareerArea, setSelectedCareerArea] = useState<string>('Recommended for Actuarial Students')
-  const [filtersExpanded, setFiltersExpanded] = useState(true)
+  const [filtersExpanded, setFiltersExpanded] = useState(false)
   const [assessmentForm, setAssessmentForm] = useState({
     companyId: '',
     customCompanyName: '',
@@ -190,6 +269,7 @@ export function CareersManager() {
     notes: ''
   })
   const [manualApplicationOpen, setManualApplicationOpen] = useState(false)
+  const [discoverSection, setDiscoverSection] = useState<DiscoverSectionKey>('for_you')
   const [manualApplicationForm, setManualApplicationForm] = useState({
     companyId: '',
     customCompanyName: '',
@@ -214,11 +294,6 @@ export function CareersManager() {
     if (selectedCareerArea) params.set('careerAreas', selectedCareerArea)
     return params.toString()
   }, [query, selectedRoleTypes, selectedDisciplines, selectedCountries, selectedEligibility, selectedCompanies, selectedCareerArea])
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    if (window.innerWidth < 900) setFiltersExpanded(false)
-  }, [])
 
   const loadCareers = async () => {
     setIsLoading(true)
@@ -633,13 +708,97 @@ export function CareersManager() {
     })
   }
 
+  const handleRefreshCareers = async () => {
+    await runProtectedAction('Sign in as an admin to refresh careers.', async () => {
+      const response = await fetch('/api/careers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'refresh-careers' })
+      })
+      const payload = await response.json()
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || 'Careers refresh failed.')
+      }
+      setMessage('Careers refresh complete.')
+    })
+  }
+
+  const handleDeactivateOpportunity = async (jobId: string) => {
+    await runProtectedAction('Sign in as an admin to deactivate opportunities.', async () => {
+      const response = await fetch('/api/careers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'deactivate-opportunity',
+          jobId,
+          reason: 'ADMIN_DEACTIVATED'
+        })
+      })
+      const payload = await response.json()
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || 'Could not deactivate this opportunity.')
+      }
+      setMessage('Opportunity deactivated.')
+    })
+  }
+
   const timezoneToUse = state.settings?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
 
   const followingEmpty = !isLoading && state.following.length === 0
 
   const activeDiscover = state.discover.filter((job: any) => ['CURRENTLY_LISTED', 'LIKELY_OPEN', 'CLOSING_SOON', 'STALE_UNVERIFIED'].includes(job.opportunityStatus))
   const previousDiscover = state.discover.filter((job: any) => ['CLOSED_OR_EXPIRED', 'LISTING_UNAVAILABLE'].includes(job.opportunityStatus))
+  const forYouDiscover = [...activeDiscover].sort((left: any, right: any) => Number(right.careerFitScore || 0) - Number(left.careerFitScore || 0))
+  const newThisWeekDiscover = activeDiscover.filter((job: any) => isNewThisWeek(job.firstSeenAt || job.dateFound))
+  const closingSoonDiscover = activeDiscover.filter((job: any) => isWithinSevenDays(job.closingDate))
+  const internshipsDiscover = activeDiscover.filter((job: any) => {
+    const role = String(job.roleType || '').toLowerCase()
+    return role.includes('internship') || role.includes('vacation') || role.includes('student program')
+  })
+  const graduateProgramsDiscover = activeDiscover.filter((job: any) => {
+    const role = String(job.roleType || '').toLowerCase()
+    return role.includes('graduate')
+  })
+  const caseCompetitionsDiscover = activeDiscover.filter((job: any) => {
+    const role = String(job.roleType || '')
+    const title = String(job.jobTitle || '')
+    return textMatches(role, ['competition', 'datathon', 'hackathon'])
+      || textMatches(title, ['case competition', 'datathon', 'hackathon', 'trading competition', 'quant competition'])
+  })
+  const scholarshipDiscover = activeDiscover.filter((job: any) => {
+    const role = String(job.roleType || '')
+    const title = String(job.jobTitle || '')
+    return textMatches(role, ['scholarship', 'fellowship']) || textMatches(title, ['scholarship', 'fellowship'])
+  })
+  const eventsInsightDiscover = activeDiscover.filter((job: any) => {
+    const role = String(job.roleType || '')
+    const title = String(job.jobTitle || '')
+    return textMatches(role, ['insight', 'event', 'information session', 'networking', 'mentorship', 'professional development'])
+      || textMatches(title, ['insight', 'event', 'information session', 'networking', 'mentorship', 'professional development'])
+  })
+
+  const discoverSections = [
+    { key: 'for_you' as DiscoverSectionKey, label: 'For You', jobs: forYouDiscover },
+    { key: 'new_this_week' as DiscoverSectionKey, label: 'New This Week', jobs: newThisWeekDiscover },
+    { key: 'closing_soon' as DiscoverSectionKey, label: 'Closing Soon', jobs: closingSoonDiscover },
+    { key: 'internships' as DiscoverSectionKey, label: 'Internships', jobs: internshipsDiscover },
+    { key: 'graduate_programs' as DiscoverSectionKey, label: 'Graduate Programs', jobs: graduateProgramsDiscover },
+    { key: 'case_competitions' as DiscoverSectionKey, label: 'Case Competitions', jobs: caseCompetitionsDiscover },
+    { key: 'scholarships' as DiscoverSectionKey, label: 'Scholarships', jobs: scholarshipDiscover },
+    { key: 'events_insight' as DiscoverSectionKey, label: 'Events & Insight Programs', jobs: eventsInsightDiscover }
+  ].filter((section) => section.key === 'for_you' || section.jobs.length > 0)
+
+  const selectedDiscoverSection = discoverSections.find((section) => section.key === discoverSection) || discoverSections[0]
+  const visibleDiscover = selectedDiscoverSection?.jobs || forYouDiscover
+
+  useEffect(() => {
+    if (!discoverSections.some((section) => section.key === discoverSection)) {
+      setDiscoverSection('for_you')
+    }
+  }, [discoverSection, discoverSections])
+
   const discoverEmpty = !isLoading && activeDiscover.length === 0
+  const selectedFilterCount = selectedRoleTypes.length + selectedDisciplines.length + selectedCountries.length + selectedEligibility.length + selectedCompanies.length + (selectedCareerArea ? 1 : 0)
 
   const exploredEmployers = state.companies
     .filter((company: any) => {
@@ -700,6 +859,21 @@ export function CareersManager() {
 
       {activeTab === 'discover' && (
         <Card className="space-y-4">
+          {state.isAdmin && state.careersHealth?.latestRun && (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Careers Status</p>
+              <p className="text-sm text-slate-700">
+                Last successful update: {formatDateTime(state.careersHealth.latestRun.completedAt || state.careersHealth.latestRun.startedAt, timezoneToUse)}
+              </p>
+              <p className="text-xs text-slate-600">
+                Sources checked: {state.careersHealth.latestRun.sourcesChecked} · New: {state.careersHealth.latestRun.opportunitiesCreated} · Updated: {state.careersHealth.latestRun.opportunitiesUpdated} · Closed: {state.careersHealth.latestRun.opportunitiesClosed}
+              </p>
+              <p className="text-xs text-slate-600">
+                Links verified: {state.careersHealth.latestRun.linksVerified} · Broken links: {state.careersHealth.latestRun.linksBroken} · Link repairs: {state.careersHealth.latestRun.linksRepaired} · Failures: {state.careersHealth.latestRun.failures}
+              </p>
+            </div>
+          )}
+
           <div className="space-y-2">
             <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Discover opportunities</p>
             <input
@@ -710,46 +884,72 @@ export function CareersManager() {
             />
           </div>
 
-          <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Career area</p>
-            <div className="flex flex-wrap gap-2">
-              {CAREER_AREAS.map((area) => (
-                <Button key={area} size="sm" variant={selectedCareerArea === area ? 'default' : 'outline'} onClick={() => setSelectedCareerArea(area)}>{area}</Button>
-              ))}
-            </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" variant="outline" onClick={() => setFiltersExpanded((current) => !current)}>
+              {filtersExpanded ? 'Hide Filters' : `Filters${selectedFilterCount ? ` (${selectedFilterCount})` : ''}`}
+            </Button>
+            {discoverSections.map((section) => (
+              <Button
+                key={section.key}
+                size="sm"
+                variant={discoverSection === section.key ? 'default' : 'outline'}
+                onClick={() => setDiscoverSection(section.key)}
+              >
+                {section.label}
+              </Button>
+            ))}
+            {state.isAdmin && (
+              <Button size="sm" variant="outline" onClick={handleRefreshCareers}>Refresh Careers</Button>
+            )}
           </div>
 
-          <div className="grid gap-3 lg:grid-cols-3">
-            <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Role type</p>
-              <div className="flex flex-wrap gap-2">
-                {ROLE_TYPES.map((role) => (
-                  <Button key={role} size="sm" variant={selectedRoleTypes.includes(role) ? 'default' : 'outline'} onClick={() => toggleFilter(role, selectedRoleTypes, setSelectedRoleTypes)}>{role}</Button>
-                ))}
+          {filtersExpanded && (
+            <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Career area</p>
+                <div className="flex flex-wrap gap-2">
+                  {CAREER_AREAS.map((area) => (
+                    <Button key={area} size="sm" variant={selectedCareerArea === area ? 'default' : 'outline'} onClick={() => setSelectedCareerArea(area)}>{area}</Button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid gap-3 lg:grid-cols-3">
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Role type</p>
+                  <div className="flex flex-wrap gap-2">
+                    {ROLE_TYPES.map((role) => (
+                      <Button key={role} size="sm" variant={selectedRoleTypes.includes(role) ? 'default' : 'outline'} onClick={() => toggleFilter(role, selectedRoleTypes, setSelectedRoleTypes)}>{role}</Button>
+                    ))}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Discipline</p>
+                  <div className="flex flex-wrap gap-2">
+                    {DISCIPLINES.map((discipline) => (
+                      <Button key={discipline} size="sm" variant={selectedDisciplines.includes(discipline) ? 'default' : 'outline'} onClick={() => toggleFilter(discipline, selectedDisciplines, setSelectedDisciplines)}>{discipline}</Button>
+                    ))}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Country</p>
+                  <div className="flex flex-wrap gap-2">
+                    {COUNTRIES.map((country) => (
+                      <Button key={country} size="sm" variant={selectedCountries.includes(country) ? 'default' : 'outline'} onClick={() => toggleFilter(country, selectedCountries, setSelectedCountries)}>{country}</Button>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
-            <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Discipline</p>
-              <div className="flex flex-wrap gap-2">
-                {DISCIPLINES.map((discipline) => (
-                  <Button key={discipline} size="sm" variant={selectedDisciplines.includes(discipline) ? 'default' : 'outline'} onClick={() => toggleFilter(discipline, selectedDisciplines, setSelectedDisciplines)}>{discipline}</Button>
-                ))}
-              </div>
-            </div>
-            <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Country</p>
-              <div className="flex flex-wrap gap-2">
-                {COUNTRIES.map((country) => (
-                  <Button key={country} size="sm" variant={selectedCountries.includes(country) ? 'default' : 'outline'} onClick={() => toggleFilter(country, selectedCountries, setSelectedCountries)}>{country}</Button>
-                ))}
-              </div>
-            </div>
-          </div>
+          )}
 
           <div className="space-y-3">
             {isLoading && <p className="text-sm text-slate-600">Loading opportunities...</p>}
             {discoverEmpty && <p className="text-sm text-slate-600">No matching opportunities found. Try adjusting your filters.</p>}
-            {activeDiscover.map((job) => (
+            {!discoverEmpty && selectedDiscoverSection && (
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{selectedDiscoverSection.label}</p>
+            )}
+            {visibleDiscover.map((job) => (
               <div key={job.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
@@ -757,6 +957,12 @@ export function CareersManager() {
                     <p className="text-sm text-slate-600">{job.company} · {job.location || 'Location not stated'}</p>
                     <p className="mt-2 text-xs uppercase tracking-[0.18em] text-slate-500">{job.roleType || 'Role not stated'} · {job.discipline || 'Discipline not stated'} · {job.country || 'Country not stated'}</p>
                     <p className="text-xs text-slate-600">Status: {job.opportunityStatusLabel || 'Open now'}</p>
+                    {getFreshnessLabel(job.firstSeenAt || job.dateFound) && (
+                      <p className="text-xs text-emerald-700">{getFreshnessLabel(job.firstSeenAt || job.dateFound)}</p>
+                    )}
+                    {getClosingLabel(job.closingDate) && (
+                      <p className="text-xs text-amber-700">{getClosingLabel(job.closingDate)}</p>
+                    )}
                     <p className="mt-1 text-sm text-slate-700">Career fit: <span className="font-semibold">{job.careerFitScore ?? '-'}%</span> · {job.careerFitLabel || 'Not scored'}</p>
                     <p className="text-sm text-slate-700">Why this fits: {job.careerFitReason || 'Quantitative skill overlap detected.'}</p>
                     {Array.isArray(job.careerFamilies) && job.careerFamilies.length > 0 && (
@@ -765,16 +971,21 @@ export function CareersManager() {
                     <p className="mt-2 text-sm text-slate-600">Work rights: {job.workRightsInformation || 'Not stated'}</p>
                     <p className="text-sm text-slate-600">International students: {job.internationalStudentInformation || 'Not stated'}</p>
                     <p className="text-xs text-slate-500">Last verified: {formatDateTime(job.lastVerified, timezoneToUse)}</p>
+                    <p className="text-xs text-slate-500">Link health: {job.verificationStatus || 'UNVERIFIED'}</p>
                     {!job.companyProfileAvailable && (
                       <p className="mt-2 text-sm text-amber-700">Limited careers information currently available.</p>
                     )}
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {job.applicationUrl && <a href={job.applicationUrl} target="_blank" rel="noreferrer"><Button size="sm">Apply on Company Website</Button></a>}
+                    {job.applicationUrl && <a href={job.applicationUrl} target="_blank" rel="noreferrer"><Button size="sm">{job.verificationStatus === 'VALID' || job.verificationStatus === 'REDIRECTED' ? 'Apply' : 'View / Apply'}</Button></a>}
+                    {job.sourceUrl && job.sourceUrl !== job.applicationUrl && (
+                      <a href={job.sourceUrl} target="_blank" rel="noreferrer"><Button size="sm" variant="outline">View original listing</Button></a>
+                    )}
                     <Button size="sm" variant="outline" onClick={() => handleSaveRole(job.id)}>Save Role</Button>
                     <Button size="sm" variant="outline" onClick={() => handleTrackApplication(job.id)}>I&apos;ve Applied</Button>
                     <Button size="sm" variant="outline" onClick={() => handleFollowCompany(job.companyId)}>Follow Company</Button>
                     <Button size="sm" variant="outline" onClick={() => handleCvMatch(job.id)}>CV Match</Button>
+                    {state.isAdmin && <Button size="sm" variant="outline" onClick={() => handleDeactivateOpportunity(job.id)}>Deactivate</Button>}
                   </div>
                 </div>
               </div>
@@ -789,7 +1000,7 @@ export function CareersManager() {
                     <p className="text-sm text-slate-600">{job.company} · {job.location || 'Location not stated'}</p>
                     <p className="text-xs text-slate-500">Status: {job.opportunityStatusLabel || 'Closed / previous opportunity'} · Last verified: {formatDateTime(job.lastVerified, timezoneToUse)}</p>
                     <div className="mt-2 flex flex-wrap gap-2">
-                      {job.applicationUrl && <a href={job.applicationUrl} target="_blank" rel="noreferrer"><Button size="sm" variant="outline">View Employer Careers</Button></a>}
+                      {job.applicationUrl && <a href={job.applicationUrl} target="_blank" rel="noreferrer"><Button size="sm" variant="outline">View / Apply</Button></a>}
                       <Button size="sm" variant="outline" onClick={() => handleFollowCompany(job.companyId)}>Follow Company</Button>
                     </div>
                   </div>
