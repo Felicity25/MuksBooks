@@ -120,6 +120,49 @@ export const ACTUARIAL_RESOURCES: ActuarialResource[] = [
   }
 ]
 
+export const LEARNER_RESOURCES: ActuarialResource[] = [
+  {
+    id: 'learner-essay-structure', title: 'Essay structure and argument flow', kind: 'Deep Dive', difficulty: 'University',
+    summary: 'Build a clear thesis, strong evidence, and analysis that connects your ideas to the prompt or rubric.',
+    topics: ['essay structure', 'analysis', 'writing', 'argument'], professionalSubjects: ['English', 'History', 'Theory of Knowledge'],
+    sourceName: 'IB/School writing guidance', sourceUrl: 'https://www.ibo.org/', sourceClass: 'Academic', access: 'Open', confidence: 'High'
+  },
+  {
+    id: 'learner-ia-planning', title: 'Internal Assessment planning and feedback loop', kind: 'Textbook', difficulty: 'University',
+    summary: 'Turn a broad idea into a manageable IA, EE, or research task with checkpoints, evidence, and reflection.',
+    topics: ['IA planning', 'research design', 'drafting', 'reflection'], professionalSubjects: ['Biology', 'Economics', 'Psychology'],
+    sourceName: 'School assessment support', sourceUrl: 'https://www.ibo.org/programmes/diploma-programme/curriculum/', sourceClass: 'Academic', access: 'Open', confidence: 'High'
+  },
+  {
+    id: 'learner-revision', title: 'Revision planning for deadlines and exams', kind: 'Professional', difficulty: 'University',
+    summary: 'Use spaced practice, targeted review, and realistic milestones to stay ahead without overwhelming your week.',
+    topics: ['revision planning', 'study schedule', 'exam prep', 'retrieval practice'], professionalSubjects: ['Mathematics', 'Biology', 'English'],
+    sourceName: 'Learner study planning', sourceUrl: 'https://www.ibo.org/', sourceClass: 'Academic', access: 'Open', confidence: 'High'
+  },
+  {
+    id: 'learner-data-interpretation', title: 'Data interpretation and evidence-based writing', kind: 'Paper', difficulty: 'University',
+    summary: 'Practice extracting conclusions from charts, tables, and source material before writing a response.',
+    topics: ['data interpretation', 'evidence', 'analysis', 'graphs'], professionalSubjects: ['Science', 'Economics', 'English'],
+    sourceName: 'School academic skills', sourceUrl: 'https://www.ibo.org/', sourceClass: 'Academic', access: 'Open', confidence: 'High'
+  },
+  {
+    id: 'learner-maths-foundations', title: 'Math foundations for consistent problem-solving', kind: 'Deep Dive', difficulty: 'Introductory',
+    summary: 'Strengthen algebra, functions, and conceptual fluency so you can move from question to solution with more confidence.',
+    topics: ['algebra', 'functions', 'problem solving', 'math fluency'], professionalSubjects: ['Mathematics', 'Physics', 'Economics'],
+    sourceName: 'IB mathematics support', sourceUrl: 'https://www.ibo.org/programmes/diploma-programme/curriculum/mathematics/', sourceClass: 'Academic', access: 'Open', confidence: 'High'
+  },
+  {
+    id: 'learner-science-methods', title: 'Scientific method and lab review', kind: 'Textbook', difficulty: 'University',
+    summary: 'Review method design, controls, evaluation, and the structure of strong scientific explanation for practical work.',
+    topics: ['scientific method', 'lab design', 'evaluation', 'evidence'], professionalSubjects: ['Biology', 'Chemistry', 'Physics'],
+    sourceName: 'IB science guidance', sourceUrl: 'https://www.ibo.org/programmes/diploma-programme/curriculum/science/', sourceClass: 'Academic', access: 'Open', confidence: 'High'
+  }
+]
+
+export function getResourceCatalogForMode(academicMode: 'UNIVERSITY' | 'LEARNER'): ActuarialResource[] {
+  return academicMode === 'LEARNER' ? LEARNER_RESOURCES : ACTUARIAL_RESOURCES
+}
+
 export function relevanceScore(resource: ActuarialResource, topics: string[]) {
   const normalizedTopics = topics.map((topic) => topic.toLowerCase())
   return resource.topics.reduce((score, resourceTopic) => {

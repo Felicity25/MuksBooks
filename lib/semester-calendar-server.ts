@@ -1,6 +1,6 @@
 import { promises as fs } from 'fs'
 import path from 'path'
-import { getFallbackSemesterCalendars, type SemesterCalendar } from '@/lib/semester-calendar'
+import { getFallbackSemesterCalendars, getGenericSemesterCalendar, matchesMonashUniversity, type SemesterCalendar } from '@/lib/semester-calendar'
 
 const OFFICIAL_MONASH_DATES_URL = 'https://www.monash.edu/students/admin/dates/summary-dates'
 const CACHE_TTL_MS = 1000 * 60 * 60 * 12
@@ -17,7 +17,7 @@ interface CalendarCachePayload {
 
 export interface CalendarSnapshot {
   calendar: SemesterCalendar
-  source: 'official' | 'cache' | 'fallback'
+  source: 'official' | 'cache' | 'fallback' | 'generic'
   fetchedAt?: string
   sourceUrl?: string
   stale?: boolean
@@ -179,7 +179,13 @@ function selectCalendar(calendars: SemesterCalendar[], date: Date) {
   return sameYear || calendars[0]
 }
 
-function buildFallbackSnapshot(date: Date): CalendarSnapshot {
+function buildFallbackSnapshot(date: Date, universityName?: string | null): CalendarSnapshot {
+  if (!matchesMonashUniversity(universityName)) {
+    return {
+      calendar: getGenericSemesterCalendar(date),
+      source: 'generic'
+    }
+  }
   const fallback = selectCalendar(getFallbackSemesterCalendars(), date)
   return {
     calendar: fallback,
@@ -246,7 +252,14 @@ async function fetchOfficialCalendars(): Promise<CalendarCachePayload | null> {
   }
 }
 
-export async function getSemesterCalendarSnapshot(date = new Date(), options?: { forceRefresh?: boolean; allowRefresh?: boolean }): Promise<CalendarSnapshot> {
+export async function getSemesterCalendarSnapshot(date = new Date(), options?: { forceRefresh?: boolean; allowRefresh?: boolean; universityName?: string | null }): Promise<CalendarSnapshot> {
+  if (!matchesMonashUniversity(options?.universityName)) {
+    return {
+      calendar: getGenericSemesterCalendar(date),
+      source: 'generic'
+    }
+  }
+
   const cache = await loadCache()
   const cacheAgeMs = cache ? Date.now() - new Date(cache.fetchedAt).getTime() : Number.POSITIVE_INFINITY
   const isStale = !cache || !Number.isFinite(cacheAgeMs) || cacheAgeMs > CACHE_TTL_MS
@@ -291,5 +304,5 @@ export async function getSemesterCalendarSnapshot(date = new Date(), options?: {
     }
   }
 
-  return buildFallbackSnapshot(date)
+  return buildFallbackSnapshot(date, options?.universityName)
 }

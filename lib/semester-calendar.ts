@@ -58,6 +58,52 @@ const MONASH_SEMESTER_2_2026: SemesterCalendar = {
 
 const CALENDARS = [MONASH_SEMESTER_2_2026]
 
+export function matchesMonashUniversity(universityName?: string | null) {
+  const value = (universityName || '').toLowerCase()
+  return value.includes('monash')
+}
+
+export function getGenericSemesterCalendar(date = new Date()): SemesterCalendar {
+  const year = date.getUTCFullYear()
+  const month = date.getUTCMonth()
+  const semester: SemesterCalendar['semester'] = month < 6 ? 'Semester 1' : 'Semester 2'
+  const teachingStart = semester === 'Semester 1' ? `${year}-03-01` : `${year}-08-01`
+
+  const weeks: SemesterWeekRange[] = Array.from({ length: 12 }, (_, index) => {
+    const start = new Date(`${teachingStart}T00:00:00Z`)
+    start.setUTCDate(start.getUTCDate() + index * 7)
+    const end = new Date(start)
+    end.setUTCDate(end.getUTCDate() + 6)
+    const isoStart = start.toISOString().slice(0, 10)
+    const isoEnd = end.toISOString().slice(0, 10)
+    return { label: `Week ${index + 1}`, start: isoStart, end: isoEnd, phase: 'teaching' }
+  })
+
+  const breakStart = weeks[7]?.end || teachingStart
+  const breakEndDate = new Date(`${breakStart}T00:00:00Z`)
+  breakEndDate.setUTCDate(breakEndDate.getUTCDate() + 7)
+  const breakEnd = breakEndDate.toISOString().slice(0, 10)
+  const swotvacStart = weeks[11]?.end || breakEnd
+  const swotvacEndDate = new Date(`${swotvacStart}T00:00:00Z`)
+  swotvacEndDate.setUTCDate(swotvacEndDate.getUTCDate() + 5)
+  const swotvacEnd = swotvacEndDate.toISOString().slice(0, 10)
+  const examStartDate = new Date(`${swotvacEnd}T00:00:00Z`)
+  examStartDate.setUTCDate(examStartDate.getUTCDate() + 2)
+  const examEndDate = new Date(examStartDate)
+  examEndDate.setUTCDate(examEndDate.getUTCDate() + 20)
+
+  return {
+    year,
+    semester,
+    teachingStart,
+    teachingEnd: weeks[11]?.end || teachingStart,
+    weeks,
+    breakRanges: [{ start: breakStart, end: breakEnd, phase: 'break' }],
+    swotvac: { start: swotvacStart, end: swotvacEnd, phase: 'swotvac' },
+    exams: { start: examStartDate.toISOString().slice(0, 10), end: examEndDate.toISOString().slice(0, 10), phase: 'exams' }
+  }
+}
+
 function parseDate(value: string) {
   const date = new Date(`${value}T00:00:00`)
   return Number.isNaN(date.getTime()) ? null : date
@@ -79,8 +125,13 @@ export function getCurrentMonashCalendar(date = new Date()): SemesterCalendar | 
   }) || CALENDARS[0] || null
 }
 
-export function getCurrentSemesterWeek(date = new Date(), calendarOverride?: SemesterCalendar | null) {
-  const calendar = calendarOverride || getCurrentMonashCalendar(date)
+export function getCurrentUniversityCalendar(date = new Date(), universityName?: string | null): SemesterCalendar | null {
+  if (matchesMonashUniversity(universityName)) return getCurrentMonashCalendar(date)
+  return getGenericSemesterCalendar(date)
+}
+
+export function getCurrentSemesterWeek(date = new Date(), calendarOverride?: SemesterCalendar | null, universityName?: string | null) {
+  const calendar = calendarOverride || getCurrentUniversityCalendar(date, universityName)
   if (!calendar) return null
 
   for (const week of calendar.weeks) {
@@ -122,8 +173,8 @@ export function getCurrentSemesterWeek(date = new Date(), calendarOverride?: Sem
   return { calendar, label: 'Out of semester', start: calendar.teachingStart, end: calendar.teachingEnd, phase: 'other' as SemesterPhase, weekNumber: undefined }
 }
 
-export function getSemesterTimeline(date = new Date(), calendarOverride?: SemesterCalendar | null): SemesterTimelineEntry[] {
-  const calendar = calendarOverride || getCurrentMonashCalendar(date)
+export function getSemesterTimeline(date = new Date(), calendarOverride?: SemesterCalendar | null, universityName?: string | null): SemesterTimelineEntry[] {
+  const calendar = calendarOverride || getCurrentUniversityCalendar(date, universityName)
   if (!calendar) return []
 
   const timeline: SemesterTimelineEntry[] = calendar.weeks.map((week) => ({

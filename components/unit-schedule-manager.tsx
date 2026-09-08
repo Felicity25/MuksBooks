@@ -56,7 +56,7 @@ function mapApiRow(row: any): ScheduleRow {
 const emptyDraft: ScheduleRow = { weekNumber: 1, startDate: null, endDate: null, topic: '', additionalTopics: [], activities: [], assessmentReferences: [], notes: null, isBreak: false }
 
 export function UnitScheduleManager() {
-  const { requireAuth } = useAuth()
+  const { requireAuth, settings } = useAuth()
   const [units, setUnits] = useState<UnitOption[]>([])
   const [selectedUnitId, setSelectedUnitId] = useState<string>('')
   const [rows, setRows] = useState<ScheduleRow[]>([])
@@ -80,7 +80,7 @@ export function UnitScheduleManager() {
       try {
         const [unitsRes, calendarRes] = await Promise.all([
           fetch('/api/app-state/courses', { cache: 'no-store' }),
-          fetch('/api/semester-calendar', { cache: 'no-store' })
+          fetch(`/api/semester-calendar?university=${encodeURIComponent(settings.institution || '')}`, { cache: 'no-store' })
         ])
         const unitsPayload = await unitsRes.json().catch(() => null)
         if (unitsPayload?.ok) {
@@ -97,7 +97,7 @@ export function UnitScheduleManager() {
       }
     }
     void load()
-  }, [])
+  }, [settings.institution])
 
   const loadSchedule = async (unitId: string) => {
     if (!unitId) { setRows([]); return }

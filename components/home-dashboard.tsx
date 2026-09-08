@@ -141,7 +141,7 @@ export function HomeDashboard() {
 
         {studyPlan && (
           <Card className="p-4 bg-green-50 border-green-200">
-            <p className="text-sm font-semibold text-green-800">Suggested Study Plan:</p>
+            <p className="text-sm font-semibold text-green-800">Suggested MuksFocus Plan:</p>
             <p className="mt-2 text-sm text-green-700">{studyPlan}</p>
           </Card>
         )}
