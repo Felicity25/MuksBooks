@@ -9,6 +9,7 @@ import {
   normalizeUserSettings,
   type UserSettings
 } from '@/lib/user-settings'
+import { resolveThemeId } from '@/lib/design/themes'
 
 interface AuthPromptState {
   open: boolean
@@ -131,13 +132,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const root = document.documentElement
     const media = window.matchMedia('(prefers-color-scheme: dark)')
     const apply = () => {
-      const resolvedTheme = settings.theme === 'system' ? (media.matches ? 'dark' : 'light') : settings.theme
+      const resolvedTheme = resolveThemeId(settings.theme, media.matches)
       root.dataset.theme = resolvedTheme
       root.dataset.textSize = settings.textSize
       root.dataset.density = settings.density
       root.dataset.motion = settings.motion
       root.dataset.font = settings.font
-      root.style.colorScheme = resolvedTheme
+      root.style.colorScheme = resolvedTheme === 'midnight' ? 'dark' : 'light'
     }
     apply()
     media.addEventListener('change', apply)

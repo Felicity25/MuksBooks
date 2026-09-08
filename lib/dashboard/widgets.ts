@@ -14,7 +14,7 @@ export interface WidgetDefinition {
 
 export const WIDGETS: WidgetDefinition[] = [
   { id: 'suggested-actions', title: 'Suggested Actions', description: 'Ranked academic and opportunity recommendations.', category: 'Study', sizes: ['small', 'medium', 'large', 'wide'], defaultSize: 'large', refreshable: true },
-  { id: 'planner', title: 'Weekly Planner', description: 'Tasks and study blocks that are coming up.', category: 'Study', sizes: ['medium', 'large', 'wide'], defaultSize: 'large' },
+  { id: 'planner', title: 'Today', description: 'Your current, upcoming, and completed plans for today.', category: 'Study', sizes: ['medium', 'large', 'wide'], defaultSize: 'large', refreshable: true },
   { id: 'todays-classes', title: "Today's Classes", description: 'Confirmed classes and preparation.', category: 'Study', sizes: ['small', 'medium', 'large'], defaultSize: 'medium' },
   { id: 'current-week', title: 'This Week', description: 'Current teaching week and unit topics.', category: 'Study', sizes: ['small', 'medium', 'large'], defaultSize: 'medium' },
   { id: 'units', title: 'Units', description: 'Active units and current mastery.', category: 'Study', sizes: ['medium', 'large', 'wide'], defaultSize: 'large' },

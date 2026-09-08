@@ -5,6 +5,7 @@ import { getAuthenticatedUser } from '@/lib/supabase/server'
 import { listCloudDocuments, deleteCloudDocument } from '@/lib/supabase/documents-service'
 
 export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
 function mapCloudDoc(d: any) {
   return {

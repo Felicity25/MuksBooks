@@ -31,3 +31,5 @@ logs/**/*.log
 .tmp-home/
 .prisma-cache/
 *.tsbuildinfo
+.vercel
+.env*

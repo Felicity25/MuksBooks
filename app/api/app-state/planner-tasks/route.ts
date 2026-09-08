@@ -1,15 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { completePlannerTask, createPlannerTask, deletePlannerTask, listPlannerTasks, upsertCourse } from '@/lib/app-state/service'
+import { createPlannerTask, deletePlannerTask, listPlannerTasks, setPlannerTaskCompletion, updatePlannerTask, upsertCourse } from '@/lib/app-state/service'
 import {
   createUserTask,
   deleteUserTask,
   ensureUserUnitForCode,
   listUserTasks,
-  setUserTaskCompletion
+  setUserTaskCompletion,
+  updateUserTask
 } from '@/lib/cloud/service'
 import { createSupabaseServerClient, getAuthenticatedUser } from '@/lib/supabase/server'
 
 export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
 function mapCloudTask(task: any) {
   return {
@@ -81,7 +83,8 @@ export async function POST(request: NextRequest) {
       priority: body.priority,
       planned_date: body.plannedDate,
       due_date: body.dueDate,
-      estimated_minutes: body.estimatedMinutes
+      estimated_minutes: body.estimatedMinutes,
+      created_by: body.generatedBy || 'user'
     })
 
     if (!task?.id) {
@@ -139,12 +142,34 @@ export async function PATCH(request: NextRequest) {
   }
 
   if (cloudClient) {
-    const task = await setUserTaskCompletion(user.id, body.taskId, body.completed !== false)
+    let courseId = body.courseId as string | null | undefined
+    if (body.courseCode && !courseId) {
+      const unit = await ensureUserUnitForCode(user.id, String(body.courseCode))
+      courseId = unit?.id || null
+    }
+    const hasTaskChanges = ['title', 'description', 'taskType', 'priority', 'plannedDate', 'dueDate', 'estimatedMinutes', 'assessmentId', 'courseId', 'courseCode']
+      .some((field) => Object.prototype.hasOwnProperty.call(body, field))
+    const task = hasTaskChanges
+      ? await updateUserTask({
+          userId: user.id,
+          taskId: body.taskId,
+          unit_id: courseId,
+          assessment_id: body.assessmentId,
+          title: body.title,
+          description: body.description,
+          task_type: body.taskType,
+          priority: body.priority,
+          planned_date: body.plannedDate,
+          due_date: body.dueDate,
+          estimated_minutes: body.estimatedMinutes,
+          status: body.completed === undefined ? undefined : body.completed ? 'completed' : 'pending'
+        })
+      : await setUserTaskCompletion(user.id, body.taskId, body.completed !== false)
     if (!task) {
       return NextResponse.json({ ok: false, error: 'Task not found.' }, { status: 404 })
     }
 
-    if (task.career_assessment_id) {
+    if (task.career_assessment_id && body.completed !== undefined && task.task_type !== 'assessment_work') {
       const completed = body.completed !== false
       await cloudClient
         .from('career_assessments')
@@ -160,7 +185,27 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ ok: true })
   }
 
-  completePlannerTask(body.taskId)
+  let courseId = body.courseId as string | null | undefined
+  if (body.courseCode && !courseId) {
+    courseId = upsertCourse({ courseCode: String(body.courseCode).toUpperCase(), source: 'planner', userId: user.id }).id
+  }
+  const hasTaskChanges = ['title', 'description', 'taskType', 'priority', 'plannedDate', 'dueDate', 'estimatedMinutes', 'assessmentId', 'courseId', 'courseCode']
+    .some((field) => Object.prototype.hasOwnProperty.call(body, field))
+  if (hasTaskChanges) {
+    const updated = updatePlannerTask(body.taskId, user.id, {
+      courseId,
+      assessmentId: body.assessmentId,
+      title: body.title,
+      description: body.description,
+      taskType: body.taskType,
+      priority: body.priority,
+      plannedDate: body.plannedDate,
+      dueDate: body.dueDate,
+      estimatedMinutes: body.estimatedMinutes
+    })
+    if (!updated) return NextResponse.json({ ok: false, error: 'Task not found.' }, { status: 404 })
+  }
+  if (body.completed !== undefined) setPlannerTaskCompletion(body.taskId, user.id, Boolean(body.completed))
   return NextResponse.json({ ok: true })
 }
 

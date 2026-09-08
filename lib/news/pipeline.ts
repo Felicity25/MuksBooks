@@ -169,15 +169,19 @@ export async function collectNews(): Promise<CollectResult> {
             confidence: 0.7
           })
 
-          await upsertPrismaBackupNews({
-            title,
-            source: source.name,
-            publishedDate: item.isoDate || item.pubDate || null,
-            summary,
-            url,
-            category,
-            relevance: whyItMatters
-          })
+          try {
+            await upsertPrismaBackupNews({
+              title,
+              source: source.name,
+              publishedDate: item.isoDate || item.pubDate || null,
+              summary,
+              url,
+              category,
+              relevance: whyItMatters
+            })
+          } catch (error) {
+            logs.push(`${source.name}: backup fallback skipped (${error instanceof Error ? error.message : String(error)})`)
+          }
 
           if (result.created) sourceStored += 1
         } catch (error) {

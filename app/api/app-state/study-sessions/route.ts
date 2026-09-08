@@ -3,6 +3,7 @@ import { createSupabaseServerClient, getAuthenticatedUser } from '@/lib/supabase
 import { createStudySession, getTodayStudySummary, listStudySessions } from '@/lib/cloud/service'
 
 export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
 export async function GET() {
   const user = await getAuthenticatedUser()

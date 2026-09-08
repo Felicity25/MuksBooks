@@ -1,22 +1,25 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import { Card } from '@/components/ui/card'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { CalendarDays, Check, ChevronLeft, ChevronRight, Clock3, Pencil, Plus, Sparkles, Trash2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { emitAppStateUpdate, onAppStateUpdate } from '@/lib/app-state/client-events'
+import { Card } from '@/components/ui/card'
 import { useAuth } from '@/components/auth-provider'
-
-interface StudySession {
-  id: string
-  title: string
-  unit: string
-  window: string
-  day: string
-  dueDate?: string | null
-  taskType?: string | null
-  generatedBy?: string | null
-}
+import { emitAppStateUpdate, onAppStateUpdate } from '@/lib/app-state/client-events'
+import {
+  dateKey,
+  durationLabel,
+  isUntimedTask,
+  localDateTime,
+  shiftDateKey,
+  tasksForDate,
+  timeKey,
+  timeLabel,
+  todayKey,
+  type PlannerDraft,
+  type PlannerTaskRecord,
+  UNTIMED_MARKER
+} from '@/lib/planning/day'
 
 interface ClassEvent {
   id: string
@@ -28,20 +31,6 @@ interface ClassEvent {
   location: string | null
 }
 
-interface Recommendation {
-  id: string
-  unitCode: string | null
-  title: string
-  detail: string
-  kind: string
-  sources: string[]
-  estimatedMinutes: number
-  askTutorHref: string | null
-  openDocumentId: string | null
-  durationOptionsMinutes?: number[]
-  suggestedTask: { title: string; courseCode: string | null; taskType: string; estimatedMinutes: number; priority: number; plannedDate?: string | null; assessmentId?: string | null }
-}
-
 interface Assessment {
   id: string
   unitCode: string | null
@@ -49,631 +38,256 @@ interface Assessment {
   assessmentType: string
   dueDate: string | null
   weighting: number | null
+  status?: string | null
 }
 
-const ASSESSMENT_TYPE_OPTIONS = ['Assignment', 'Quiz', 'Test', 'Mid-semester test', 'Presentation', 'Report', 'Project', 'Exam', 'Other']
+interface Proposal { summary: string; items: PlannerDraft[] }
 
-const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+const EMPTY_FORM = { title: '', courseCode: '', date: '', startTime: '', estimatedMinutes: '60', taskType: 'study', assessmentId: '' }
+const AI_EXAMPLES = ['Plan my day', 'Fit in 2 hours of study', 'Plan around my classes', 'Help me finish my assignment', 'Reschedule my unfinished tasks', 'Make tomorrow less busy']
+const ASSESSMENT_TYPES = ['Assignment', 'Quiz', 'Test', 'Presentation', 'Report', 'Project', 'Exam', 'Other']
+
+function displayDate(key: string, timezone: string) {
+  const today = todayKey(timezone)
+  const prefix = key === today ? 'Today · ' : key === shiftDateKey(today, -1) ? 'Yesterday · ' : key === shiftDateKey(today, 1) ? 'Tomorrow · ' : ''
+  const date = new Date(`${key}T12:00:00`)
+  return `${prefix}${date.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' })}`
+}
+
+function eventDateKey(event: ClassEvent, timezone: string) {
+  return dateKey(event.startsAt, timezone)
+}
+
+function TimelineItem({ task, timezone, onToggle, onEdit, onDelete }: {
+  task: PlannerTaskRecord
+  timezone: string
+  onToggle: (task: PlannerTaskRecord) => void
+  onEdit: (task: PlannerTaskRecord) => void
+  onDelete: (id: string) => void
+}) {
+  const completed = Boolean(task.completed)
+  const start = timeLabel(task.planned_date, timezone)
+  const end = task.planned_date && task.estimated_minutes
+    ? timeLabel(new Date(new Date(task.planned_date).getTime() + task.estimated_minutes * 60000).toISOString(), timezone)
+    : null
+  return <div className={`group grid grid-cols-[4.25rem_2rem_minmax(0,1fr)_auto] items-start gap-3 border-b border-slate-100 py-4 transition-opacity ${completed ? 'opacity-50' : ''}`}>
+    <div className="pt-0.5 text-right text-sm font-semibold tabular-nums text-slate-700">{start || ''}</div>
+    <button type="button" onClick={() => onToggle(task)} aria-label={`${completed ? 'Mark incomplete' : 'Mark complete'}: ${task.title}`} className={`mt-0.5 flex h-6 w-6 items-center justify-center rounded-full border transition ${completed ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-300 bg-white hover:border-emerald-500'}`}>{completed ? <Check className="h-4 w-4" /> : null}</button>
+    <div className="min-w-0">
+      <p className={`font-medium text-slate-950 ${completed ? 'line-through' : ''}`}>{task.title}</p>
+      <p className="mt-1 text-xs text-slate-500">{[task.course_code, end ? `${start}–${end}` : durationLabel(task.estimated_minutes), task.assessment_id ? 'Assessment work' : null].filter(Boolean).join(' · ') || 'Personal'}</p>
+    </div>
+    <div className="flex gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100">
+      <button onClick={() => onEdit(task)} className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900" aria-label={`Edit ${task.title}`}><Pencil className="h-4 w-4" /></button>
+      <button onClick={() => onDelete(task.id)} className="rounded-md p-1.5 text-slate-500 hover:bg-rose-50 hover:text-rose-700" aria-label={`Delete ${task.title}`}><Trash2 className="h-4 w-4" /></button>
+    </div>
+  </div>
+}
 
 export function PlannerManager() {
-  const { requireAuth } = useAuth()
-  const [sessions, setSessions] = useState<StudySession[]>([])
-  const [classEvents, setClassEvents] = useState<ClassEvent[]>([])
-  const [recommendations, setRecommendations] = useState<Recommendation[]>([])
-  const [courseOptions, setCourseOptions] = useState<string[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [showForm, setShowForm] = useState(false)
-  const [editingSession, setEditingSession] = useState<StudySession | null>(null)
-  const [formData, setFormData] = useState({ title: '', unit: '', window: '', day: 'Monday' })
-  const [acceptedIds, setAcceptedIds] = useState<Set<string>>(new Set())
-  const [selectedDurations, setSelectedDurations] = useState<Record<string, number>>({})
-  const [timetableUnit, setTimetableUnit] = useState('')
-  const [timetableStatus, setTimetableStatus] = useState<string | null>(null)
+  const { requireAuth, settings } = useAuth()
+  const timezone = settings.timezone || 'Australia/Melbourne'
+  const [selectedDate, setSelectedDate] = useState(() => todayKey(timezone))
+  const [tasks, setTasks] = useState<PlannerTaskRecord[]>([])
+  const [events, setEvents] = useState<ClassEvent[]>([])
+  const [courses, setCourses] = useState<string[]>([])
   const [assessments, setAssessments] = useState<Assessment[]>([])
-  const [showAssessmentForm, setShowAssessmentForm] = useState(false)
-  const [assessmentStatus, setAssessmentStatus] = useState<string | null>(null)
-  const [assessmentForm, setAssessmentForm] = useState({
-    unit: '',
-    name: '',
-    assessmentType: 'Assignment',
-    customType: '',
-    dueDate: '',
-    dueTime: '',
-    weighting: '',
-    estimatedHours: '',
-    notes: ''
-  })
-
-  const dayNames = DAY_NAMES
-
-  const formatWindow = (plannedDate?: string | null, estimatedMinutes?: number | null) => {
-    if (!plannedDate) return 'Flexible block'
-    const start = new Date(plannedDate)
-    if (Number.isNaN(start.getTime())) return 'Flexible block'
-    const end = new Date(start.getTime() + (estimatedMinutes || 60) * 60000)
-    const pad = (value: number) => String(value).padStart(2, '0')
-    return `${pad(start.getHours())}:${pad(start.getMinutes())} - ${pad(end.getHours())}:${pad(end.getMinutes())}`
-  }
-
-  const dateFromDay = (day: string, window: string) => {
-    const target = dayNames.indexOf(day)
-    const now = new Date()
-    const date = new Date(now)
-    const offset = (target - now.getDay() + 7) % 7
-    date.setDate(now.getDate() + offset)
-
-    const [start] = window.split('-').map((part) => part.trim())
-    const [hour, minute] = start.split(':').map((part) => Number(part))
-    if (Number.isFinite(hour) && Number.isFinite(minute)) {
-      date.setHours(hour, minute, 0, 0)
-    } else {
-      date.setHours(9, 0, 0, 0)
-    }
-
-    return date.toISOString()
-  }
-
-  const durationFromWindow = (window: string) => {
-    const [start, end] = window.split('-').map((part) => part.trim())
-    if (!start || !end) return 60
-    const [sh, sm] = start.split(':').map((part) => Number(part))
-    const [eh, em] = end.split(':').map((part) => Number(part))
-    if (![sh, sm, eh, em].every(Number.isFinite)) return 60
-    const minutes = (eh * 60 + em) - (sh * 60 + sm)
-    return minutes > 0 ? minutes : 60
-  }
+  const [loading, setLoading] = useState(true)
+  const [formOpen, setFormOpen] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [form, setForm] = useState({ ...EMPTY_FORM, date: selectedDate })
+  const [aiOpen, setAiOpen] = useState(false)
+  const [aiInput, setAiInput] = useState('')
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiError, setAiError] = useState('')
+  const [proposal, setProposal] = useState<Proposal | null>(null)
+  const [toolsOpen, setToolsOpen] = useState(false)
+  const [timetableUnit, setTimetableUnit] = useState('')
+  const [toolStatus, setToolStatus] = useState('')
+  const [assessmentForm, setAssessmentForm] = useState({ unit: '', name: '', type: 'Assignment', dueDate: '', dueTime: '', estimatedHours: '' })
 
   const loadPlanner = useCallback(async () => {
-    setIsLoading(true)
+    setLoading(true)
     try {
-      const [taskResponse, contextResponse, assessmentsResponse] = await Promise.all([
+      const [tasksResponse, contextResponse, assessmentsResponse] = await Promise.all([
         fetch('/api/app-state/planner-tasks', { cache: 'no-store' }),
-        fetch('/api/app-state/planner-context', { cache: 'no-store' }),
+        fetch(`/api/app-state/planner-context?date=${encodeURIComponent(selectedDate)}`, { cache: 'no-store' }),
         fetch('/api/app-state/assessments', { cache: 'no-store' })
       ])
-
-      const taskPayload = await taskResponse.json()
-      const contextPayload = await contextResponse.json()
-      const assessmentsPayload = await assessmentsResponse.json().catch(() => null)
-
-      if (assessmentsPayload?.ok) {
-        setAssessments(Array.isArray(assessmentsPayload.assessments) ? assessmentsPayload.assessments : [])
-      }
-
+      const [taskPayload, contextPayload, assessmentPayload] = await Promise.all([tasksResponse.json(), contextResponse.json(), assessmentsResponse.json()])
+      if (taskPayload?.ok) setTasks(taskPayload.tasks || [])
       if (contextPayload?.ok) {
-        const codes = (contextPayload.data?.courses || []).map((course: any) => course.course_code).filter(Boolean)
-        setCourseOptions(codes)
-        setRecommendations(Array.isArray(contextPayload.data?.recommendations) ? contextPayload.data.recommendations : [])
-
-        const events = Array.isArray(contextPayload.data?.calendarEvents) ? contextPayload.data.calendarEvents : []
-        setClassEvents(events
-          .filter((event: any) => !event.isAssessment)
-          .map((event: any) => ({
-            id: event.id,
-            unitCode: event.unitCode || null,
-            title: event.title,
-            activityType: event.activityType,
-            startsAt: event.startsAt,
-            endsAt: event.endsAt,
-            location: event.location
-          })))
+        setCourses((contextPayload.data?.courses || []).map((course: any) => course.course_code).filter(Boolean))
+        setEvents((contextPayload.data?.calendarEvents || []).filter((event: any) => !event.isAssessment).map((event: any) => ({ id: event.id, unitCode: event.unitCode || null, title: event.title, activityType: event.activityType, startsAt: event.startsAt, endsAt: event.endsAt, location: event.location })))
       }
-
-      if (taskPayload?.ok) {
-        const mapped = (taskPayload.tasks || []).map((task: any) => {
-          const plannedDate = task.planned_date || task.due_date || task.created_at
-          const date = new Date(plannedDate)
-          return {
-            id: task.id,
-            title: task.title,
-            unit: task.course_code || 'General',
-            window: formatWindow(plannedDate, task.estimated_minutes),
-            day: dayNames[date.getDay()] || 'Monday',
-            dueDate: task.due_date,
-            taskType: task.task_type,
-            generatedBy: task.generated_by
-          } as StudySession
-        })
-        setSessions(mapped)
-      }
-    } finally {
-      setIsLoading(false)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+      if (assessmentPayload?.ok) setAssessments(assessmentPayload.assessments || [])
+    } finally { setLoading(false) }
+  }, [selectedDate])
 
   useEffect(() => {
     void loadPlanner()
-    return onAppStateUpdate((updateType) => {
-      if (['courses', 'uploads', 'settings', 'tasks', 'planner'].includes(updateType)) {
-        void loadPlanner()
-      }
-    })
+    return onAppStateUpdate((type) => { if (['tasks', 'planner', 'courses', 'uploads'].includes(type)) void loadPlanner() })
   }, [loadPlanner])
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (requireAuth('Sign in to save your planner and study sessions.')) return
-    const plannedDate = dateFromDay(formData.day, formData.window)
-    const estimatedMinutes = durationFromWindow(formData.window)
+  const selectedTasks = useMemo(() => tasksForDate(tasks, selectedDate, timezone), [tasks, selectedDate, timezone])
+  const selectedEvents = useMemo(() => events.filter((event) => eventDateKey(event, timezone) === selectedDate).sort((a, b) => a.startsAt.localeCompare(b.startsAt)), [events, selectedDate, timezone])
+  const timedTasks = selectedTasks.filter((task) => !isUntimedTask(task)).sort((a, b) => String(a.planned_date).localeCompare(String(b.planned_date)))
+  const untimedTasks = selectedTasks.filter(isUntimedTask)
+  const completed = selectedTasks.filter((task) => Boolean(task.completed)).length
+  const unfinishedPast = tasks.filter((task) => !task.completed && task.planned_date && dateKey(task.planned_date, timezone) < todayKey(timezone))
+  const selectedAssessments = useMemo(() => {
+    const forDay = assessments.filter((assessment) => assessment.dueDate && dateKey(assessment.dueDate, timezone) === selectedDate)
+    if (forDay.length) return forDay
+    return assessments.filter((assessment) => assessment.status !== 'completed').slice(0, 4)
+  }, [assessments, selectedDate, timezone])
 
-    if (editingSession) {
-      await fetch(`/api/app-state/planner-tasks?taskId=${encodeURIComponent(editingSession.id)}`, {
-        method: 'DELETE'
-      })
-    }
+  const openCreate = () => { setEditingId(null); setForm({ ...EMPTY_FORM, date: selectedDate }); setFormOpen(true) }
+  const openEdit = (task: PlannerTaskRecord) => {
+    setEditingId(task.id)
+    setForm({ title: task.title, courseCode: task.course_code || '', date: task.planned_date ? dateKey(task.planned_date, timezone) : selectedDate, startTime: task.planned_date && !isUntimedTask(task) ? timeKey(task.planned_date, timezone) : '', estimatedMinutes: String(task.estimated_minutes || 60), taskType: task.task_type || 'study', assessmentId: task.assessment_id || '' })
+    setFormOpen(true)
+  }
 
-    await fetch('/api/app-state/planner-tasks', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        title: formData.title,
-        courseCode: formData.unit,
-        plannedDate,
-        estimatedMinutes,
-        taskType: 'study',
-        generatedBy: editingSession ? 'user_edit' : 'user'
-      })
-    })
-
+  const saveTask = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (requireAuth('Sign in to save your planner.')) return
+    const payload = { taskId: editingId || undefined, title: form.title.trim(), description: form.startTime ? null : UNTIMED_MARKER, courseCode: form.courseCode || undefined, plannedDate: localDateTime(form.date, form.startTime || null, timezone), estimatedMinutes: Number(form.estimatedMinutes), taskType: form.taskType, assessmentId: form.assessmentId || null, generatedBy: 'user' }
+    const response = await fetch('/api/app-state/planner-tasks', { method: editingId ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+    if (!response.ok) return
+    setSelectedDate(form.date)
+    setFormOpen(false)
+    setEditingId(null)
     await loadPlanner()
     emitAppStateUpdate('planner')
-    setEditingSession(null)
-    setFormData({ title: '', unit: '', window: '', day: 'Monday' })
-    setShowForm(false)
   }
 
-  const handleEdit = (session: StudySession) => {
-    if (requireAuth('Sign in to edit your planner.')) return
-    setEditingSession(session)
-    setFormData({ title: session.title, unit: session.unit, window: session.window, day: session.day })
-    setShowForm(true)
+  const toggleTask = async (task: PlannerTaskRecord) => {
+    const completed = !Boolean(task.completed)
+    setTasks((current) => current.map((item) => item.id === task.id ? { ...item, completed } : item))
+    const response = await fetch('/api/app-state/planner-tasks', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: task.id, completed }) })
+    if (!response.ok) await loadPlanner()
+    emitAppStateUpdate('planner')
   }
 
-  const handleDelete = async (id: string) => {
+  const deleteTask = async (id: string) => {
     if (requireAuth('Sign in to manage your planner.')) return
     await fetch(`/api/app-state/planner-tasks?taskId=${encodeURIComponent(id)}`, { method: 'DELETE' })
-    await loadPlanner()
-    emitAppStateUpdate('tasks')
-  }
-
-  const handleAcceptRecommendation = async (recommendation: Recommendation, overrideMinutes?: number) => {
-    if (requireAuth('Sign in to add this to your planner.')) return
-    const estimatedMinutes = overrideMinutes ?? recommendation.suggestedTask.estimatedMinutes
-    await fetch('/api/app-state/planner-tasks', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        title: recommendation.suggestedTask.title,
-        courseCode: recommendation.suggestedTask.courseCode,
-        estimatedMinutes,
-        priority: recommendation.suggestedTask.priority,
-        taskType: recommendation.suggestedTask.taskType,
-        plannedDate: recommendation.suggestedTask.plannedDate ?? undefined,
-        assessmentId: recommendation.suggestedTask.assessmentId ?? undefined,
-        generatedBy: 'planner_ai'
-      })
-    })
-    setAcceptedIds((prev) => new Set(prev).add(recommendation.id))
-    await loadPlanner()
+    setTasks((current) => current.filter((task) => task.id !== id))
     emitAppStateUpdate('planner')
   }
 
-  const handleAddAssessment = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (requireAuth('Sign in to record assessments and assignments.')) return
-    const resolvedType = assessmentForm.assessmentType === 'Other' ? assessmentForm.customType.trim() : assessmentForm.assessmentType
-    if (!resolvedType) {
-      setAssessmentStatus('Please provide an assessment type.')
-      return
+  const askPlanner = async (message = aiInput) => {
+    if (!message.trim() || requireAuth('Sign in to use AI planning.')) return
+    setAiLoading(true); setAiError(''); setProposal(null)
+    const response = await fetch('/api/planner/ai-proposal', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message, selectedDate }) })
+    const payload = await response.json().catch(() => null)
+    if (response.ok && payload?.ok) setProposal(payload.proposal)
+    else setAiError(payload?.error || 'Could not create a proposal.')
+    setAiLoading(false)
+  }
+
+  const acceptDrafts = async () => {
+    if (!proposal || requireAuth('Sign in to add this proposal.')) return
+    const accepted = proposal.items.filter((item) => !item.conflict)
+    for (const item of accepted) {
+      await fetch('/api/app-state/planner-tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: item.title, description: item.startTime ? null : UNTIMED_MARKER, courseCode: item.courseCode || undefined, plannedDate: localDateTime(item.date, item.startTime, timezone), estimatedMinutes: item.estimatedMinutes, taskType: item.taskType, assessmentId: item.assessmentId, generatedBy: 'planner_ai' }) })
     }
-    setAssessmentStatus('Saving…')
+    setProposal(null); setAiOpen(false); setAiInput('')
+    await loadPlanner(); emitAppStateUpdate('planner')
+  }
+
+  const importTimetable = async (file: File) => {
+    const data = new FormData(); data.append('file', file); if (timetableUnit) data.append('unitCode', timetableUnit)
+    const response = await fetch('/api/app-state/calendar', { method: 'POST', body: data }); const payload = await response.json()
+    setToolStatus(payload?.ok ? `Imported ${payload.imported} class event(s).` : payload?.error || 'Import failed.')
+    if (payload?.ok) await loadPlanner()
+  }
+
+  const addAssessment = async (event: React.FormEvent) => {
+    event.preventDefault()
+    const response = await fetch('/api/app-state/assessments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ courseCode: assessmentForm.unit, name: assessmentForm.name, assessmentType: assessmentForm.type, dueDate: assessmentForm.dueDate, dueTime: assessmentForm.dueTime || undefined, estimatedMinutes: assessmentForm.estimatedHours ? Number(assessmentForm.estimatedHours) * 60 : undefined }) })
+    const payload = await response.json(); setToolStatus(payload?.ok ? 'Assessment saved.' : payload?.error || 'Could not save assessment.')
+    if (payload?.ok) { setAssessmentForm({ unit: '', name: '', type: 'Assignment', dueDate: '', dueTime: '', estimatedHours: '' }); await loadPlanner() }
+  }
+
+  const toggleAssessment = async (assessmentId: string, completed: boolean) => {
+    const previous = assessments
+    setAssessments((current) => current.map((assessment) => assessment.id === assessmentId ? { ...assessment, status: completed ? 'completed' : 'upcoming' } : assessment))
     const response = await fetch('/api/app-state/assessments', {
-      method: 'POST',
+      method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        courseCode: assessmentForm.unit,
-        name: assessmentForm.name,
-        assessmentType: resolvedType,
-        dueDate: assessmentForm.dueDate || undefined,
-        dueTime: assessmentForm.dueTime || undefined,
-        weighting: assessmentForm.weighting || undefined,
-        estimatedMinutes: assessmentForm.estimatedHours ? Math.round(Number(assessmentForm.estimatedHours) * 60) : undefined,
-        notes: assessmentForm.notes || undefined
-      })
+      body: JSON.stringify({ assessmentId, completed })
     })
-    const payload = await response.json()
-    if (payload?.ok) {
-      setAssessmentStatus(null)
-      setAssessmentForm({ unit: '', name: '', assessmentType: 'Assignment', customType: '', dueDate: '', dueTime: '', weighting: '', estimatedHours: '', notes: '' })
-      setShowAssessmentForm(false)
-      await loadPlanner()
-      emitAppStateUpdate('planner')
-    } else {
-      setAssessmentStatus(payload?.error || 'Could not save this assessment.')
-    }
-  }
-
-  const handleDeleteAssessment = async (id: string) => {
-    if (requireAuth('Sign in to manage your assessments.')) return
-    await fetch(`/api/app-state/assessments?assessmentId=${encodeURIComponent(id)}`, { method: 'DELETE' })
-    await loadPlanner()
+    if (!response.ok) setAssessments(previous)
+    emitAppStateUpdate('dashboard')
     emitAppStateUpdate('planner')
   }
 
-  const handleOpenContent = async (documentId: string) => {
-    const response = await fetch(`/api/app-state/documents/signed-url?documentId=${encodeURIComponent(documentId)}`, { cache: 'no-store' })
-    const payload = await response.json()
-    if (payload?.ok && payload.url) {
-      window.open(payload.url, '_blank', 'noopener,noreferrer')
-    }
-  }
+  const weekDates = Array.from({ length: 7 }, (_, index) => shiftDateKey(selectedDate, index - 3))
 
-  const handleImportTimetable = async (file: File) => {
-    if (requireAuth('Sign in to import your class timetable.')) return
-    setTimetableStatus('Importing…')
-    const form = new FormData()
-    form.append('file', file)
-    if (timetableUnit) form.append('unitCode', timetableUnit)
-
-    const response = await fetch('/api/app-state/calendar', { method: 'POST', body: form })
-    const payload = await response.json()
-    if (payload?.ok) {
-      setTimetableStatus(`Imported ${payload.imported} class event(s).`)
-      await loadPlanner()
-      emitAppStateUpdate('courses')
-    } else {
-      setTimetableStatus(payload?.error || 'Could not import this timetable.')
-    }
-  }
-
-  const generateWeekPlan = async () => {
-    if (requireAuth('Sign in to accept suggestions into your planner.')) return
-    const pending = recommendations.filter((rec) => !acceptedIds.has(rec.id) && rec.kind !== 'timetable_nudge')
-    for (const recommendation of pending) {
-      // eslint-disable-next-line no-await-in-loop
-      await handleAcceptRecommendation(recommendation)
-    }
-  }
-
-  const sessionsByDay = sessions.reduce((acc, session) => {
-    if (!acc[session.day]) acc[session.day] = []
-    acc[session.day].push(session)
-    return acc
-  }, {} as Record<string, StudySession[]>)
-
-  const weekStart = (() => {
-    const now = new Date()
-    const monday = new Date(now)
-    const offsetFromMonday = (now.getDay() + 6) % 7
-    monday.setDate(now.getDate() - offsetFromMonday)
-    monday.setHours(0, 0, 0, 0)
-    return monday
-  })()
-  const weekEnd = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000)
-
-  const classesByDay = classEvents.reduce((acc, event) => {
-    const start = new Date(event.startsAt)
-    if (Number.isNaN(start.getTime()) || start < weekStart || start >= weekEnd) return acc
-    const dayName = dayNames[start.getDay()]
-    if (!acc[dayName]) acc[dayName] = []
-    acc[dayName].push(event)
-    return acc
-  }, {} as Record<string, ClassEvent[]>)
-
-  return (
-    <div className="space-y-4">
-      {recommendations.length > 0 && (
-        <Card className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Suggested for you</p>
-              <p className="text-xs text-slate-500">Based on your real units, schedule, timetable and uploads.</p>
-            </div>
-            <Button onClick={generateWeekPlan}>Accept all</Button>
-          </div>
-          <div className="grid gap-3">
-            {recommendations.map((recommendation) => {
-              const accepted = acceptedIds.has(recommendation.id)
-              const durationOptions = recommendation.durationOptionsMinutes
-              const selectedMinutes = selectedDurations[recommendation.id] ?? recommendation.estimatedMinutes
-              return (
-                <div key={recommendation.id} className="rounded-3xl border border-slate-200 bg-white p-4">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline">Suggestion</Badge>
-                        {recommendation.unitCode && <Badge>{recommendation.unitCode}</Badge>}
-                      </div>
-                      <p className="mt-2 font-semibold text-slate-950">{recommendation.title}</p>
-                      <p className="text-sm text-slate-600">{recommendation.detail}</p>
-                      <details className="mt-2 text-xs text-slate-500">
-                        <summary className="cursor-pointer select-none">Why this is here</summary>
-                        <ul className="mt-1 list-inside list-disc">
-                          {recommendation.sources.map((source, index) => <li key={index}>{source}</li>)}
-                        </ul>
-                      </details>
-                    </div>
-                    <div className="flex shrink-0 flex-col gap-2">
-                      {durationOptions && durationOptions.length > 1 && !accepted && (
-                        <select
-                          value={selectedMinutes}
-                          onChange={(e) => setSelectedDurations((prev) => ({ ...prev, [recommendation.id]: Number(e.target.value) }))}
-                          className="rounded-md border border-slate-300 px-2 py-1 text-xs"
-                        >
-                          {durationOptions.map((minutes) => (
-                            <option key={minutes} value={minutes}>{Math.round((minutes / 60) * 10) / 10}h session</option>
-                          ))}
-                        </select>
-                      )}
-                      {recommendation.openDocumentId && (
-                        <Button size="sm" variant="outline" onClick={() => handleOpenContent(recommendation.openDocumentId as string)}>
-                          Open content
-                        </Button>
-                      )}
-                      {recommendation.askTutorHref && (
-                        <Button size="sm" variant="outline" onClick={() => window.open(recommendation.askTutorHref as string, '_self')}>
-                          Ask tutor
-                        </Button>
-                      )}
-                      {recommendation.kind !== 'timetable_nudge' && (
-                        <Button size="sm" disabled={accepted} onClick={() => handleAcceptRecommendation(recommendation, durationOptions ? selectedMinutes : undefined)}>
-                          {accepted ? 'Added' : 'Add to planner'}
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </Card>
-      )}
-
-      <Card className="space-y-4">
-        <div className="flex items-center justify-between">
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Import your class timetable</p>
+  return <div className="space-y-6">
+    <section className="border-b border-slate-200 pb-5">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Daily planner</p>
+          <h2 className="mt-1 text-2xl font-semibold text-slate-950">{displayDate(selectedDate, timezone)}</h2>
+          <p className="mt-1 text-sm text-slate-500">{completed} of {selectedTasks.length} complete</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <input
-            type="text"
-            placeholder="Unit (e.g. ETC3420)"
-            value={timetableUnit}
-            onChange={(e) => setTimetableUnit(e.target.value)}
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm"
-            list="planner-unit-options"
-          />
-          <input
-            type="file"
-            accept=".ics"
-            onChange={(e) => {
-              const file = e.target.files?.[0]
-              if (file) void handleImportTimetable(file)
-              e.target.value = ''
-            }}
-            className="text-sm"
-          />
-          {timetableStatus && <span className="text-xs text-slate-500">{timetableStatus}</span>}
+          <button onClick={() => setSelectedDate(shiftDateKey(selectedDate, -1))} className="rounded-md border border-slate-200 p-2 hover:bg-slate-50" aria-label="Previous day"><ChevronLeft className="h-4 w-4" /></button>
+          <Button variant="outline" size="sm" onClick={() => setSelectedDate(todayKey(timezone))}>Today</Button>
+          <label className="relative flex h-9 items-center gap-2 rounded-md border border-slate-200 px-3 text-sm text-slate-700"><CalendarDays className="h-4 w-4" /><span>Choose date</span><input type="date" value={selectedDate} onChange={(event) => event.target.value && setSelectedDate(event.target.value)} className="absolute inset-0 cursor-pointer opacity-0" aria-label="Choose planner date" /></label>
+          <button onClick={() => setSelectedDate(shiftDateKey(selectedDate, 1))} className="rounded-md border border-slate-200 p-2 hover:bg-slate-50" aria-label="Next day"><ChevronRight className="h-4 w-4" /></button>
+          <Button size="sm" onClick={openCreate}><Plus className="mr-1 h-4 w-4" />Add</Button>
+          <Button size="sm" variant="outline" onClick={() => setAiOpen(true)}><Sparkles className="mr-1 h-4 w-4" />Plan my day</Button>
         </div>
-      </Card>
+      </div>
+      <div className="mt-5 grid grid-cols-7 gap-1" aria-label="Week overview">{weekDates.map((key) => { const count = tasksForDate(tasks, key, timezone).length; return <button key={key} onClick={() => setSelectedDate(key)} className={`min-w-0 border-t-2 px-1 py-2 text-center ${key === selectedDate ? 'border-sky-600 text-sky-800' : 'border-transparent text-slate-500 hover:bg-slate-50'}`}><span className="block text-[11px] uppercase">{new Date(`${key}T12:00:00`).toLocaleDateString('en-AU', { weekday: 'short' })}</span><span className="block text-sm font-semibold">{Number(key.slice(-2))}</span><span className="block text-[10px]">{count || '·'}</span></button> })}</div>
+    </section>
 
-      <Card className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Assessments &amp; assignments</p>
-            <p className="text-xs text-slate-500">Recorded manually — the Planner will suggest work sessions before each deadline.</p>
-          </div>
-          <Button onClick={() => setShowAssessmentForm((prev) => !prev)}>+ Add Assessment/Assignment</Button>
+    {unfinishedPast.length > 0 && selectedDate === todayKey(timezone) ? <div className="flex items-center justify-between gap-4 border-b border-amber-200 bg-amber-50 px-3 py-2 text-sm"><span>{unfinishedPast.length} unfinished task{unfinishedPast.length === 1 ? '' : 's'} from earlier days.</span><button className="font-semibold text-amber-900" onClick={() => { setAiOpen(true); setAiInput('Reschedule my unfinished tasks somewhere sensible today.') }}>Reschedule with AI</button></div> : null}
+
+    <section aria-label={`Plan for ${selectedDate}`}>
+      {loading ? <p className="py-12 text-center text-sm text-slate-500">Loading your day…</p> : null}
+      {!loading && !timedTasks.length && !selectedEvents.length ? <div className="py-10 text-center"><Clock3 className="mx-auto h-6 w-6 text-slate-300" /><p className="mt-3 font-medium text-slate-800">No timed plans yet</p><button onClick={openCreate} className="mt-2 text-sm font-semibold text-sky-700">Add the first item</button></div> : null}
+      <div className="divide-y divide-slate-100">
+        {[...selectedEvents.map((event) => ({ kind: 'event' as const, at: event.startsAt, event })), ...timedTasks.map((task) => ({ kind: 'task' as const, at: task.planned_date || '', task }))].sort((a, b) => a.at.localeCompare(b.at)).map((item) => item.kind === 'task' ? <TimelineItem key={`task-${item.task.id}`} task={item.task} timezone={timezone} onToggle={toggleTask} onEdit={openEdit} onDelete={deleteTask} /> : <div key={`event-${item.event.id}`} className="grid grid-cols-[4.25rem_2rem_minmax(0,1fr)] gap-3 py-4"><div className="pt-0.5 text-right text-sm font-semibold tabular-nums text-slate-700">{timeLabel(item.event.startsAt, timezone)}</div><div className="mx-auto h-full w-px bg-slate-300" /><div><p className="font-medium text-slate-950">{item.event.title}</p><p className="mt-1 text-xs text-slate-500">{[item.event.unitCode, item.event.activityType || 'Fixed event', `${timeLabel(item.event.startsAt, timezone)}–${timeLabel(item.event.endsAt, timezone)}`, item.event.location].filter(Boolean).join(' · ')}</p></div></div>)}</div>
+    </section>
+
+    <section className="border-t border-slate-200 pt-5"><div className="flex items-center justify-between"><div><h3 className="font-semibold text-slate-950">To do this day</h3><p className="text-xs text-slate-500">Tasks without a fixed time</p></div><button onClick={openCreate} className="text-sm font-semibold text-sky-700">+ Add</button></div><div className="mt-2">{untimedTasks.map((task) => <TimelineItem key={task.id} task={task} timezone={timezone} onToggle={toggleTask} onEdit={openEdit} onDelete={deleteTask} />)}{!untimedTasks.length ? <p className="py-5 text-sm text-slate-500">Nothing else to do.</p> : null}</div></section>
+
+    <section className="border-t border-slate-200 pt-5">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h3 className="font-semibold text-slate-950">Assessment deadlines</h3>
+          <p className="text-xs text-slate-500">Mark the real assessment complete here without affecting assessment-work study blocks.</p>
         </div>
-
-        {showAssessmentForm && (
-          <form onSubmit={handleAddAssessment} className="mt-2 space-y-4 border-t pt-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <input
-                type="text"
-                placeholder="Unit (e.g. ETC3420)"
-                value={assessmentForm.unit}
-                onChange={(e) => setAssessmentForm({ ...assessmentForm, unit: e.target.value })}
-                className="rounded-md border border-slate-300 px-3 py-2 text-sm"
-                list="planner-unit-options"
-                required
-              />
-              <input
-                type="text"
-                placeholder="Assessment name (e.g. Assignment 2)"
-                value={assessmentForm.name}
-                onChange={(e) => setAssessmentForm({ ...assessmentForm, name: e.target.value })}
-                className="rounded-md border border-slate-300 px-3 py-2 text-sm"
-                required
-              />
-              <select
-                value={assessmentForm.assessmentType}
-                onChange={(e) => setAssessmentForm({ ...assessmentForm, assessmentType: e.target.value })}
-                className="rounded-md border border-slate-300 px-3 py-2 text-sm"
-              >
-                {ASSESSMENT_TYPE_OPTIONS.map((type) => <option key={type} value={type}>{type}</option>)}
-              </select>
-              {assessmentForm.assessmentType === 'Other' && (
-                <input
-                  type="text"
-                  placeholder="Custom assessment type"
-                  value={assessmentForm.customType}
-                  onChange={(e) => setAssessmentForm({ ...assessmentForm, customType: e.target.value })}
-                  className="rounded-md border border-slate-300 px-3 py-2 text-sm"
-                  required
-                />
-              )}
-              <input
-                type="date"
-                value={assessmentForm.dueDate}
-                onChange={(e) => setAssessmentForm({ ...assessmentForm, dueDate: e.target.value })}
-                className="rounded-md border border-slate-300 px-3 py-2 text-sm"
-                required
-              />
-              <input
-                type="time"
-                placeholder="Due time (optional)"
-                value={assessmentForm.dueTime}
-                onChange={(e) => setAssessmentForm({ ...assessmentForm, dueTime: e.target.value })}
-                className="rounded-md border border-slate-300 px-3 py-2 text-sm"
-              />
-              <input
-                type="number"
-                min="0"
-                max="100"
-                placeholder="Weight % (optional)"
-                value={assessmentForm.weighting}
-                onChange={(e) => setAssessmentForm({ ...assessmentForm, weighting: e.target.value })}
-                className="rounded-md border border-slate-300 px-3 py-2 text-sm"
-              />
-              <input
-                type="number"
-                min="0"
-                step="0.5"
-                placeholder="Estimated work (hours, optional)"
-                value={assessmentForm.estimatedHours}
-                onChange={(e) => setAssessmentForm({ ...assessmentForm, estimatedHours: e.target.value })}
-                className="rounded-md border border-slate-300 px-3 py-2 text-sm"
-              />
-              <textarea
-                placeholder="Notes (optional)"
-                value={assessmentForm.notes}
-                onChange={(e) => setAssessmentForm({ ...assessmentForm, notes: e.target.value })}
-                className="rounded-md border border-slate-300 px-3 py-2 text-sm sm:col-span-2"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <Button type="submit">Save Assessment</Button>
-              <Button type="button" variant="outline" onClick={() => setShowAssessmentForm(false)}>Cancel</Button>
-              {assessmentStatus && <span className="text-xs text-slate-500">{assessmentStatus}</span>}
-            </div>
-          </form>
-        )}
-
-        <div className="space-y-2">
-          {assessments.length === 0 ? <p className="text-sm text-slate-600">No assessments recorded yet.</p> : null}
-          {assessments.map((assessment) => (
-            <div key={assessment.id} className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+        <button onClick={() => setToolsOpen(true)} className="text-sm font-semibold text-sky-700">Add assessment</button>
+      </div>
+      <div className="mt-3 space-y-3">
+        {selectedAssessments.map((assessment) => {
+          const overdue = assessment.status !== 'completed' && assessment.dueDate && new Date(assessment.dueDate).getTime() < Date.now()
+          const completedAssessment = assessment.status === 'completed'
+          return (
+            <div key={assessment.id} className={`flex flex-col gap-3 rounded-2xl border p-3 sm:flex-row sm:items-center sm:justify-between ${completedAssessment ? 'border-emerald-200 bg-emerald-50/70' : overdue ? 'border-rose-200 bg-rose-50/70' : 'border-slate-200 bg-white'}`}>
               <div>
-                <p className="text-sm font-semibold text-slate-950">{assessment.unitCode ? `${assessment.unitCode} · ` : ''}{assessment.name}</p>
-                <p className="text-xs text-slate-500">
-                  {assessment.assessmentType}
-                  {assessment.dueDate ? ` · Due ${new Date(assessment.dueDate).toLocaleDateString('en-AU')}` : ''}
-                  {assessment.weighting != null ? ` · ${assessment.weighting}%` : ''}
-                </p>
+                <p className={`font-medium text-slate-950 ${completedAssessment ? 'line-through' : ''}`}>{assessment.name}</p>
+                <p className="mt-1 text-xs text-slate-500">{assessment.unitCode || 'General'} · {assessment.assessmentType}{assessment.weighting ? ` · ${assessment.weighting}%` : ''}{assessment.dueDate ? ` · ${new Date(assessment.dueDate).toLocaleString('en-AU', { dateStyle: 'medium', timeStyle: 'short' })}` : ''}</p>
               </div>
-              <Button size="sm" variant="outline" onClick={() => handleDeleteAssessment(assessment.id)}>Delete</Button>
+              <button type="button" onClick={() => void toggleAssessment(assessment.id, !completedAssessment)} className="text-sm font-semibold text-sky-700">{completedAssessment ? 'Mark incomplete' : overdue ? 'Mark complete' : 'Complete'}</button>
             </div>
-          ))}
-        </div>
-      </Card>
+          )
+        })}
+        {!selectedAssessments.length ? <p className="text-sm text-slate-500">No assessment deadlines matched this day yet.</p> : null}
+      </div>
+    </section>
 
-      <Card className="space-y-4">
-        <div className="flex items-center justify-between">
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Weekly calendar</p>
-          <div className="flex gap-2">
-            <Button onClick={() => setShowForm(true)}>Add Session</Button>
-          </div>
-        </div>
+    <section className="border-t border-slate-200 pt-4"><button onClick={() => setToolsOpen((open) => !open)} className="text-sm font-semibold text-slate-700">{toolsOpen ? 'Hide' : 'Show'} assessments and timetable tools</button>{toolsOpen ? <div className="mt-4 grid gap-6 lg:grid-cols-2"><div><h3 className="font-semibold text-slate-950">Import class timetable</h3><div className="mt-3 flex flex-wrap gap-2"><input value={timetableUnit} onChange={(event) => setTimetableUnit(event.target.value)} placeholder="Unit code" className="h-9 w-32 rounded-md border border-slate-300 px-3 text-sm" /><input type="file" accept=".ics" className="text-sm" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importTimetable(file) }} /></div></div><form onSubmit={addAssessment}><h3 className="font-semibold text-slate-950">Add assessment</h3><div className="mt-3 grid gap-2 sm:grid-cols-2"><input required value={assessmentForm.name} onChange={(event) => setAssessmentForm({ ...assessmentForm, name: event.target.value })} placeholder="Assessment name" className="rounded-md border border-slate-300 px-3 py-2 text-sm" /><input required value={assessmentForm.unit} onChange={(event) => setAssessmentForm({ ...assessmentForm, unit: event.target.value })} list="planner-course-options" placeholder="Unit" className="rounded-md border border-slate-300 px-3 py-2 text-sm" /><select value={assessmentForm.type} onChange={(event) => setAssessmentForm({ ...assessmentForm, type: event.target.value })} className="rounded-md border border-slate-300 px-3 py-2 text-sm">{ASSESSMENT_TYPES.map((type) => <option key={type}>{type}</option>)}</select><input required type="date" value={assessmentForm.dueDate} onChange={(event) => setAssessmentForm({ ...assessmentForm, dueDate: event.target.value })} className="rounded-md border border-slate-300 px-3 py-2 text-sm" /><input type="time" value={assessmentForm.dueTime} onChange={(event) => setAssessmentForm({ ...assessmentForm, dueTime: event.target.value })} className="rounded-md border border-slate-300 px-3 py-2 text-sm" /><input type="number" min="0.25" step="0.25" value={assessmentForm.estimatedHours} onChange={(event) => setAssessmentForm({ ...assessmentForm, estimatedHours: event.target.value })} placeholder="Work hours" className="rounded-md border border-slate-300 px-3 py-2 text-sm" /></div><Button className="mt-3" size="sm" type="submit">Save assessment</Button></form><div className="lg:col-span-2 text-xs text-slate-500">{toolStatus}</div><div className="lg:col-span-2 flex flex-wrap gap-x-5 gap-y-2 text-xs text-slate-500">{assessments.map((assessment) => <span key={assessment.id}>{assessment.unitCode ? `${assessment.unitCode} · ` : ''}{assessment.name}{assessment.dueDate ? ` · ${new Date(assessment.dueDate).toLocaleDateString('en-AU')}` : ''}</span>)}</div></div> : null}</section>
 
-        {showForm && (
-          <form onSubmit={handleSubmit} className="mt-4 space-y-4 border-t pt-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <input
-                type="text"
-                placeholder="Session title"
-                value={formData.title}
-                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                className="rounded-md border border-slate-300 px-3 py-2 text-sm"
-                required
-              />
-              <input
-                type="text"
-                placeholder="Unit"
-                value={formData.unit}
-                onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                className="rounded-md border border-slate-300 px-3 py-2 text-sm"
-                list="planner-unit-options"
-                required
-              />
-              <datalist id="planner-unit-options">
-                {courseOptions.map((code) => <option key={code} value={code} />)}
-              </datalist>
-              <input
-                type="text"
-                placeholder="Time window (e.g., 10:00 - 11:00)"
-                value={formData.window}
-                onChange={(e) => setFormData({ ...formData, window: e.target.value })}
-                className="rounded-md border border-slate-300 px-3 py-2 text-sm"
-                required
-              />
-              <select
-                value={formData.day}
-                onChange={(e) => setFormData({ ...formData, day: e.target.value })}
-                className="rounded-md border border-slate-300 px-3 py-2 text-sm"
-              >
-                {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(day => (
-                  <option key={day} value={day}>{day}</option>
-                ))}
-              </select>
-            </div>
-            <div className="flex gap-2">
-              <Button type="submit">{editingSession ? 'Update' : 'Add'} Session</Button>
-              <Button type="button" variant="outline" onClick={() => { setShowForm(false); setEditingSession(null) }}>
-                Cancel
-              </Button>
-            </div>
-          </form>
-        )}
+    <datalist id="planner-course-options">{courses.map((course) => <option key={course} value={course} />)}</datalist>
 
-        <div className="grid gap-4">
-          {!isLoading && sessions.length === 0 && classEvents.length === 0 ? <p className="text-sm text-slate-600">No planner tasks or timetable classes yet. Add a session, import your timetable, or accept a suggestion above.</p> : null}
-          {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(day => (
-            <div key={day} className="space-y-2">
-              <h3 className="font-semibold text-slate-950">{day}</h3>
-              <div className="space-y-2">
-                {(classesByDay[day] || []).map((event) => {
-                  const start = new Date(event.startsAt)
-                  const end = new Date(event.endsAt)
-                  const pad = (value: number) => String(value).padStart(2, '0')
-                  const timeLabel = Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())
-                    ? ''
-                    : `${pad(start.getHours())}:${pad(start.getMinutes())} - ${pad(end.getHours())}:${pad(end.getMinutes())}`
-                  return (
-                    <div key={event.id} className="rounded-3xl border border-dashed border-slate-300 bg-white p-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-semibold text-slate-950">{event.activityType || 'Class'}{event.unitCode ? ` · ${event.unitCode}` : ''}</p>
-                          <p className="text-sm text-slate-600">{event.title}{event.location ? ` · ${event.location}` : ''}</p>
-                          <p className="mt-2 text-xs uppercase tracking-[0.18em] text-slate-400">{timeLabel} · Class</p>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-                {(sessionsByDay[day] || []).map((session) => (
-                  <div key={session.id} className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <p className="font-semibold text-slate-950">{session.title}</p>
-                          {session.generatedBy === 'planner_ai' && <Badge variant="outline">Suggested</Badge>}
-                        </div>
-                        <p className="text-sm text-slate-600">{session.unit}</p>
-                        <p className="mt-2 text-xs uppercase tracking-[0.18em] text-slate-400">{session.window}</p>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button size="sm" variant="outline" onClick={() => handleEdit(session)}>Edit</Button>
-                        <Button size="sm" variant="outline" onClick={() => handleDelete(session.id)}>Delete</Button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      </Card>
-    </div>
-  )
+    {formOpen ? <div className="fixed inset-0 z-50 flex items-end bg-slate-950/35 sm:items-center sm:justify-center sm:p-6" role="dialog" aria-modal="true" aria-label={editingId ? 'Edit planner item' : 'Add planner item'}><form onSubmit={saveTask} className="w-full max-w-xl rounded-t-lg bg-white p-5 shadow-xl sm:rounded-lg"><div className="flex items-center justify-between"><h2 className="text-lg font-semibold text-slate-950">{editingId ? 'Edit item' : 'Add to your day'}</h2><button type="button" onClick={() => setFormOpen(false)} aria-label="Close"><X className="h-5 w-5" /></button></div><div className="mt-5 grid gap-3 sm:grid-cols-2"><input autoFocus required value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} placeholder="What are you doing?" className="sm:col-span-2 rounded-md border border-slate-300 px-3 py-2" /><input required type="date" value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} className="rounded-md border border-slate-300 px-3 py-2" /><label className="text-xs text-slate-500">Start time <span className="text-slate-400">(optional)</span><input type="time" value={form.startTime} onChange={(event) => setForm({ ...form, startTime: event.target.value })} className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm" /></label><label className="text-xs text-slate-500">Duration<input type="number" min="5" max="480" step="5" value={form.estimatedMinutes} onChange={(event) => setForm({ ...form, estimatedMinutes: event.target.value })} className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm" /></label><select value={form.taskType} onChange={(event) => setForm({ ...form, taskType: event.target.value })} className="rounded-md border border-slate-300 px-3 py-2 text-sm"><option value="study">Academic</option><option value="personal">Personal</option><option value="fixed">Fixed event</option><option value="assessment_work">Assessment work</option><option value="task">Task</option></select><input value={form.courseCode} onChange={(event) => setForm({ ...form, courseCode: event.target.value })} list="planner-course-options" placeholder="Unit (optional)" className="rounded-md border border-slate-300 px-3 py-2 text-sm" /><select value={form.assessmentId} onChange={(event) => setForm({ ...form, assessmentId: event.target.value })} className="rounded-md border border-slate-300 px-3 py-2 text-sm"><option value="">No linked assessment</option>{assessments.map((assessment) => <option key={assessment.id} value={assessment.id}>{assessment.unitCode ? `${assessment.unitCode} · ` : ''}{assessment.name}</option>)}</select></div><div className="mt-5 flex justify-end gap-2"><Button type="button" variant="outline" onClick={() => setFormOpen(false)}>Cancel</Button><Button type="submit">{editingId ? 'Save changes' : 'Add item'}</Button></div></form></div> : null}
+
+    {aiOpen ? <div className="fixed inset-0 z-50 flex items-end bg-slate-950/35 sm:items-center sm:justify-center sm:p-6" role="dialog" aria-modal="true" aria-label="AI Planner"><div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-t-lg bg-white p-5 shadow-xl sm:rounded-lg"><div className="flex items-center justify-between"><div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-700">AI Planner</p><h2 className="mt-1 text-xl font-semibold text-slate-950">Plan {displayDate(selectedDate, timezone).toLowerCase()}</h2></div><button onClick={() => setAiOpen(false)} aria-label="Close AI Planner"><X className="h-5 w-5" /></button></div>{!proposal ? <><div className="mt-4 flex flex-wrap gap-2">{AI_EXAMPLES.map((example) => <button key={example} onClick={() => { setAiInput(example); void askPlanner(example) }} className="rounded-full border border-slate-200 px-3 py-1.5 text-xs text-slate-700 hover:border-sky-300">{example}</button>)}</div><textarea value={aiInput} onChange={(event) => setAiInput(event.target.value)} placeholder="Tell MuksBooks what you need to fit into this day…" className="mt-4 min-h-28 w-full rounded-md border border-slate-300 p-3 text-sm" /><div className="mt-3 flex items-center justify-between gap-3"><p className="text-xs text-slate-500">Nothing changes until you review and add the proposal.</p><Button disabled={aiLoading || !aiInput.trim()} onClick={() => void askPlanner()}>{aiLoading ? 'Planning…' : 'Create proposal'}</Button></div>{aiError ? <p className="mt-3 text-sm text-rose-700">{aiError}</p> : null}</> : <><p className="mt-4 text-sm text-slate-600">{proposal.summary}</p><div className="mt-4 divide-y divide-slate-100">{proposal.items.map((item) => <div key={item.id} className="py-3"><div className="flex justify-between gap-4"><div><p className="font-medium text-slate-950">{item.title}</p><p className="mt-1 text-xs text-slate-500">{item.date} · {item.startTime || 'Untimed'} · {durationLabel(item.estimatedMinutes)}{item.courseCode ? ` · ${item.courseCode}` : ''}</p><p className="mt-1 text-xs text-slate-500">{item.rationale}</p>{item.conflict ? <p className="mt-1 text-xs font-medium text-amber-700">Warning: {item.conflict}</p> : null}</div><span className="text-xs font-semibold uppercase text-sky-700">Suggested</span></div></div>)}</div><div className="mt-5 flex justify-end gap-2"><Button variant="outline" onClick={() => setProposal(null)}>Adjust</Button><Button variant="outline" onClick={() => { setProposal(null); setAiOpen(false) }}>Cancel</Button><Button disabled={!proposal.items.some((item) => !item.conflict)} onClick={() => void acceptDrafts()}>Add all without conflicts</Button></div></>}</div></div> : null}
+  </div>
 }

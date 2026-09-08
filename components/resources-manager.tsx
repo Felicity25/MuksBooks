@@ -62,27 +62,32 @@ function DistributionChart({ points, discrete, comparison = [], fixedYMax }: { p
   const yScale = (value: number) => height - padding - value / maxY * (height - padding * 2)
   const path = points.map((point, index) => `${index ? 'L' : 'M'} ${xScale(point.x)} ${yScale(point.y)}`).join(' ')
   const comparisonPath = comparison.map((point, index) => `${index ? 'L' : 'M'} ${xScale(point.x)} ${yScale(point.y)}`).join(' ')
+  const grid = 'var(--border)'
+  const axisText = 'var(--text-muted)'
+  const primaryLine = 'var(--accent-strong)'
+  const primaryFill = 'var(--accent-subtle)'
+  const secondaryLine = 'var(--warning)'
 
   return (
     <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
       <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Probability distribution plot" className="block h-auto w-full">
-        <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} stroke="#cbd5e1" />
-        <line x1={padding} y1={padding} x2={padding} y2={height - padding} stroke="#cbd5e1" />
+        <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} stroke={grid} />
+        <line x1={padding} y1={padding} x2={padding} y2={height - padding} stroke={grid} />
         {discrete ? points.map((point) => (
           <g key={point.x}>
-            <line x1={xScale(point.x)} x2={xScale(point.x)} y1={height - padding} y2={yScale(point.y)} stroke="#0f766e" strokeWidth="4" />
-            <circle cx={xScale(point.x)} cy={yScale(point.y)} r="4" fill="#0f766e" />
+            <line x1={xScale(point.x)} x2={xScale(point.x)} y1={height - padding} y2={yScale(point.y)} stroke={primaryLine} strokeWidth="4" />
+            <circle cx={xScale(point.x)} cy={yScale(point.y)} r="4" fill={primaryLine} />
           </g>
         )) : (
           <>
-            <path d={`${path} L ${xScale(maxX)} ${height - padding} L ${xScale(minX)} ${height - padding} Z`} fill="#ccfbf1" />
-            <path d={path} fill="none" stroke="#0f766e" strokeWidth="4" strokeLinejoin="round" />
+            <path d={`${path} L ${xScale(maxX)} ${height - padding} L ${xScale(minX)} ${height - padding} Z`} fill={primaryFill} />
+            <path d={path} fill="none" stroke={primaryLine} strokeWidth="4" strokeLinejoin="round" />
           </>
         )}
-        {!!comparison.length && <path d={comparisonPath} fill="none" stroke="#fbbf24" strokeWidth="3" strokeDasharray="8 6" strokeLinejoin="round" />}
-        <text x={padding} y={height - 8} fontSize="12" fill="#64748b">{compactNumber(minX)}</text>
-        <text x={width - padding} y={height - 8} textAnchor="end" fontSize="12" fill="#64748b">{compactNumber(maxX)}</text>
-        <text x={padding + 4} y={padding - 8} fontSize="12" fill="#64748b">{compactNumber(maxY)}</text>
+        {!!comparison.length && <path d={comparisonPath} fill="none" stroke={secondaryLine} strokeWidth="3" strokeDasharray="8 6" strokeLinejoin="round" />}
+        <text x={padding} y={height - 8} fontSize="12" fill={axisText}>{compactNumber(minX)}</text>
+        <text x={width - padding} y={height - 8} textAnchor="end" fontSize="12" fill={axisText}>{compactNumber(maxX)}</text>
+        <text x={padding + 4} y={padding - 8} fontSize="12" fill={axisText}>{compactNumber(maxY)}</text>
       </svg>
     </div>
   )

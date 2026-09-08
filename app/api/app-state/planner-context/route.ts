@@ -1,18 +1,21 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedUser } from '@/lib/supabase/server'
 import { getPlanningContext } from '@/lib/planning/context'
 import { generatePlannerRecommendations } from '@/lib/planning/recommendations'
 
 export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const user = await getAuthenticatedUser()
     if (!user) {
       return NextResponse.json({ ok: false, error: 'Authentication required', data: null }, { status: 401 })
     }
 
-    const context = await getPlanningContext(user.id)
+    const selectedDate = request.nextUrl.searchParams.get('date')
+    const referenceDate = selectedDate && /^\d{4}-\d{2}-\d{2}$/.test(selectedDate) ? new Date(`${selectedDate}T12:00:00`) : new Date()
+    const context = await getPlanningContext(user.id, referenceDate)
     if (!context.authenticated) {
       return NextResponse.json({ ok: false, error: 'Planning context is unavailable', data: null }, { status: 503 })
     }

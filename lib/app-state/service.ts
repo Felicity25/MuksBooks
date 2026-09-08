@@ -1005,8 +1005,8 @@ export function getDashboard(userId = 'default') {
     SELECT t.*, c.course_code, c.course_name
     FROM planner_tasks t
     LEFT JOIN courses c ON c.id = t.course_id
-    WHERE t.user_id = ? AND t.completed = 0 AND (t.planned_date IS NULL OR substr(t.planned_date,1,10) <= ?)
-    ORDER BY COALESCE(t.priority, 0) DESC, COALESCE(t.due_date, t.planned_date) ASC
+    WHERE t.user_id = ? AND substr(COALESCE(t.planned_date, t.due_date),1,10) = ?
+    ORDER BY t.completed ASC, COALESCE(t.planned_date, t.due_date) ASC
     LIMIT 12
   `).all(userId, today) as any[]
 
@@ -1236,21 +1236,64 @@ export function createPlannerTask(input: {
   return taskId
 }
 
-export function completePlannerTask(taskId: string) {
+export function updatePlannerTask(taskId: string, userId: string, input: {
+  courseId?: string | null
+  assessmentId?: string | null
+  title?: string
+  description?: string | null
+  taskType?: string
+  priority?: number
+  plannedDate?: string | null
+  dueDate?: string | null
+  estimatedMinutes?: number
+}) {
+  const assignments: string[] = []
+  const values: unknown[] = []
+  const fields = [
+    ['course_id', input.courseId],
+    ['assessment_id', input.assessmentId],
+    ['title', input.title],
+    ['description', input.description],
+    ['task_type', input.taskType],
+    ['priority', input.priority],
+    ['planned_date', input.plannedDate],
+    ['due_date', input.dueDate],
+    ['estimated_minutes', input.estimatedMinutes]
+  ] as const
+  for (const [column, value] of fields) {
+    if (value !== undefined) {
+      assignments.push(`${column} = ?`)
+      values.push(value)
+    }
+  }
+  if (!assignments.length) return false
+  assignments.push('updated_at = ?')
+  values.push(nowIso(), taskId, userId)
+  const result = getDb().prepare(`UPDATE planner_tasks SET ${assignments.join(', ')} WHERE id = ? AND user_id = ?`).run(...values)
+  if (result.changes) createEvent('TASK_UPDATED', { taskId, userId })
+  return result.changes > 0
+}
+
+export function setPlannerTaskCompletion(taskId: string, userId: string, completed: boolean) {
   const db = getDb()
   const now = nowIso()
-  db.prepare('UPDATE planner_tasks SET completed = 1, completed_at = ?, updated_at = ? WHERE id = ?').run(now, now, taskId)
+  db.prepare('UPDATE planner_tasks SET completed = ?, completed_at = ?, updated_at = ? WHERE id = ? AND user_id = ?')
+    .run(completed ? 1 : 0, completed ? now : null, now, taskId, userId)
 
-  const linked = db.prepare('SELECT career_assessment_id FROM planner_tasks WHERE id = ?').get(taskId) as { career_assessment_id?: string | null } | undefined
-  if (linked?.career_assessment_id) {
+  const linked = db.prepare('SELECT career_assessment_id, task_type FROM planner_tasks WHERE id = ?').get(taskId) as { career_assessment_id?: string | null; task_type?: string | null } | undefined
+  if (linked?.career_assessment_id && linked.task_type !== 'assessment_work') {
     db.prepare(`
       UPDATE career_assessments
-      SET status = 'Completed', completed_at_utc = COALESCE(completed_at_utc, ?), planner_task_id = ?, updated_at = ?
+      SET status = ?, completed_at_utc = ?, planner_task_id = ?, updated_at = ?
       WHERE id = ?
-    `).run(now, taskId, now, linked.career_assessment_id)
+    `).run(completed ? 'Completed' : 'Incomplete', completed ? now : null, taskId, now, linked.career_assessment_id)
   }
 
-  createEvent('TASK_COMPLETED', { taskId })
+  createEvent(completed ? 'TASK_COMPLETED' : 'TASK_UPDATED', { taskId, completed })
+}
+
+export function completePlannerTask(taskId: string) {
+  setPlannerTaskCompletion(taskId, 'default', true)
 }
 
 export function deletePlannerTask(taskId: string) {

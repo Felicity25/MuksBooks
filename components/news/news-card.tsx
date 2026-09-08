@@ -34,12 +34,16 @@ function timeAgo(iso: string) {
 export function NewsCard({
   item,
   saved,
+  selected,
   onToggleSave,
+  onToggleSelect,
   onSelectConcept
 }: {
   item: NewsItem
   saved: boolean
+  selected?: boolean
   onToggleSave: (item: NewsItem) => void
+  onToggleSelect?: (item: NewsItem) => void
   onSelectConcept: (concept: string) => void
 }) {
   const isRegulation = item.category === 'REGULATION'
@@ -127,6 +131,16 @@ export function NewsCard({
           <p>{timeAgo(item.lastCheckedAt)}</p>
         </div>
         <div className="flex items-center gap-3">
+          {onToggleSelect ? (
+            <button
+              type="button"
+              onClick={() => onToggleSelect(item)}
+              className={selected ? 'text-sm font-medium text-sky-700' : 'text-sm font-medium text-slate-600 hover:text-slate-950'}
+              aria-label={selected ? `Deselect ${item.title}` : `Select ${item.title} for MuksBrief`}
+            >
+              {selected ? 'Selected ✓' : 'Select'}
+            </button>
+          ) : null}
           <button
             onClick={() => onToggleSave(item)}
             className="text-sm font-medium text-slate-600 hover:text-slate-950"

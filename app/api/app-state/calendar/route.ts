@@ -4,6 +4,7 @@ import { deleteCalendarEvent } from '@/lib/supabase/documents-service'
 import { GET, POST } from '@/app/api/calendar-events/route'
 
 export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
 export async function DELETE(request: NextRequest) {
   const user = await getAuthenticatedUser()

@@ -76,6 +76,7 @@ export interface PlanningTask {
   unitId: string | null
   unitCode: string | null
   title: string
+  description: string | null
   taskType: string | null
   status: string
   plannedDate: string | null
@@ -97,6 +98,7 @@ export interface PlanningContext {
   tasks: PlanningTask[]
   proactivityLevel: ProactivityLevel
   proactivityControls: ProactivityControls
+  timezone: string
 }
 
 function emptyContext(): PlanningContext {
@@ -113,20 +115,21 @@ function emptyContext(): PlanningContext {
     tasks: [],
     proactivityLevel: defaults.proactivityLevel,
     proactivityControls: defaults.proactivityControls
+    , timezone: defaults.timezone
   }
 }
 
 async function getCloudProactivitySettings(userId: string) {
   const client = createSupabaseServerClient()
   const defaults = normalizeUserSettings(null)
-  if (!client) return { level: defaults.proactivityLevel, controls: defaults.proactivityControls }
+  if (!client) return { level: defaults.proactivityLevel, controls: defaults.proactivityControls, timezone: defaults.timezone }
 
   try {
     const { data } = await client.from('user_settings').select('preferences').eq('user_id', userId).maybeSingle()
     const normalized = normalizeUserSettings(data?.preferences || null)
-    return { level: normalized.proactivityLevel, controls: normalized.proactivityControls }
+    return { level: normalized.proactivityLevel, controls: normalized.proactivityControls, timezone: normalized.timezone }
   } catch {
-    return { level: defaults.proactivityLevel, controls: defaults.proactivityControls }
+    return { level: defaults.proactivityLevel, controls: defaults.proactivityControls, timezone: defaults.timezone }
   }
 }
 
@@ -138,10 +141,10 @@ async function getCloudProactivitySettings(userId: string) {
  * This is cloud-first and returns an empty-but-valid context for unauthenticated users —
  * the Planner should prompt sign-in rather than fabricate demo data in that case.
  */
-export async function getPlanningContext(userId: string | undefined | null): Promise<PlanningContext> {
+export async function getPlanningContext(userId: string | undefined | null, referenceDate = new Date()): Promise<PlanningContext> {
   if (!userId) return emptyContext()
 
-  const now = new Date()
+  const now = referenceDate
   const calendarRangeStart = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000).toISOString()
   const calendarRangeEnd = new Date(now.getTime() + 21 * 24 * 60 * 60 * 1000).toISOString()
 
@@ -239,6 +242,7 @@ export async function getPlanningContext(userId: string | undefined | null): Pro
     unitId: task.unit_id ?? null,
     unitCode: task.units?.code ?? null,
     title: task.title,
+    description: task.description ?? null,
     taskType: task.task_type ?? null,
     status: task.status || 'pending',
     plannedDate: task.planned_date ?? null,
@@ -263,6 +267,7 @@ export async function getPlanningContext(userId: string | undefined | null): Pro
     assessments,
     tasks,
     proactivityLevel: proactivity.level,
-    proactivityControls: proactivity.controls
+    proactivityControls: proactivity.controls,
+    timezone: proactivity.timezone
   }
 }

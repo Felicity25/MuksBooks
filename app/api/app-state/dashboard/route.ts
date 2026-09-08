@@ -6,8 +6,10 @@ import { getSemesterCalendarSnapshot } from '@/lib/semester-calendar-server'
 import { listCloudUnits, listAllScheduleEntries, listCalendarEvents } from '@/lib/supabase/documents-service'
 import { getPlanningContext } from '@/lib/planning/context'
 import { generatePlannerRecommendations } from '@/lib/planning/recommendations'
+import { tasksForDate, todayKey } from '@/lib/planning/day'
 
 export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
 export async function GET() {
   try {
@@ -30,6 +32,19 @@ export async function GET() {
     // active course list so a deleted/renamed unit is reflected immediately on Home.
     if (user) {
       const planningContext = await getPlanningContext(user.id)
+      data.todayTasks = tasksForDate(planningContext.tasks.map((task) => ({
+        id: task.id,
+        title: task.title,
+        description: task.description,
+        course_code: task.unitCode,
+        task_type: task.taskType,
+        planned_date: task.plannedDate,
+        due_date: task.dueDate,
+        estimated_minutes: task.estimatedMinutes,
+        completed: task.status === 'completed' ? 1 : 0,
+        generated_by: task.generatedBy,
+        assessment_id: task.assessmentId
+      })), todayKey(planningContext.timezone), planningContext.timezone)
       data.academicRecommendations = generatePlannerRecommendations(planningContext)
       data.upcomingAssessments = [...planningContext.assessments]
         .filter((assessment) => assessment.dueDate)
@@ -40,7 +55,8 @@ export async function GET() {
           name: assessment.name,
           due_date: assessment.dueDate,
           course_code: assessment.unitCode,
-          weighting: assessment.weighting
+          weighting: assessment.weighting,
+          status: assessment.status
         }))
       const todayStart = new Date()
       todayStart.setHours(0, 0, 0, 0)

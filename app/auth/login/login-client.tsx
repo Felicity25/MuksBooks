@@ -79,15 +79,22 @@ export function LoginClient() {
       return
     }
 
-    window.location.href = '/'
+    const next = mode === 'sign-up' ? '/onboarding' : (searchParams.get('next') || '/')
+    window.location.href = next
   }
 
   return (
     <main className="mx-auto flex min-h-screen max-w-md items-center justify-center px-4">
       <div className="w-full rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
-        <p className="text-sm font-semibold uppercase tracking-[0.18em] text-sky-700">MukBooks</p>
-        <h1 className="mt-3 text-3xl font-semibold text-slate-950">{mode === 'sign-in' ? 'Sign in' : 'Create account'}</h1>
-        <p className="mt-2 text-sm text-slate-600">Access your streamlined academic workload and cloud-persisted study data.</p>
+        <div className="flex items-center gap-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900 text-sm font-semibold text-white">MB</div>
+          <div>
+            <p className="text-lg font-semibold text-slate-950">MuksBooks</p>
+            <p className="text-[0.62rem] font-medium uppercase tracking-[0.22em] text-slate-500">For you, by you.</p>
+          </div>
+        </div>
+        <h1 className="mt-5 text-3xl font-semibold text-slate-950">{mode === 'sign-in' ? 'Sign in' : 'Create account'}</h1>
+        <p className="mt-2 text-sm text-slate-600">Your personalised learning and planning workspace.</p>
 
         <div className="mt-5 inline-flex rounded-full border border-slate-200 bg-slate-100 p-1">
           <button

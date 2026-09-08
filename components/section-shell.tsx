@@ -12,11 +12,11 @@ interface SectionShellProps {
 
 export function SectionShell({ title, description, actionLabel, contentClassName, children }: SectionShellProps) {
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-sky-700">{title}</p>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">{description}</h1>
+          <p className="text-caption font-semibold uppercase tracking-[0.18em] text-sky-700">{title}</p>
+          <h1 className="mt-2 text-page-title text-slate-950">{description}</h1>
         </div>
         {actionLabel ? <Button variant="secondary">{actionLabel}</Button> : null}
       </div>

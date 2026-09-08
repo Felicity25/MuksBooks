@@ -3,6 +3,7 @@ import { getDocumentForUser } from '@/lib/app-state/service'
 import { getAuthenticatedUser } from '@/lib/supabase/server'
 
 export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
 export async function GET(_request: NextRequest, { params }: { params: { documentId: string } }) {
   const { documentId } = params

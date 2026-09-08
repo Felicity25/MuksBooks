@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createPlannerTask, updateUserSettings, upsertCourse } from '@/lib/app-state/service'
 
 export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
 interface LegacyUnit {
   code?: string

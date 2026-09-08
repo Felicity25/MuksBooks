@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict'
 import type { PlanningContext } from './context'
-import { generatePlannerRecommendations } from './recommendations'
+import { generatePlannerRecommendations } from './recommendations.ts'
 
 const referenceDate = new Date('2026-08-17T00:00:00.000Z')
 const baseContext: PlanningContext = {
+  timezone: 'Australia/Melbourne',
   authenticated: true,
   generatedAt: referenceDate.toISOString(),
   currentWeek: { weekNumber: 5, label: 'Week 5', start: '2026-08-17', end: '2026-08-23', phase: 'teaching' },

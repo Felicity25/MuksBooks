@@ -1043,6 +1043,49 @@ export async function createUserAssessment(userId: string, input: CreateAssessme
   }
 }
 
+/** Update the completion state or editable fields of an owned academic assessment. */
+export async function updateUserAssessment(userId: string, assessmentId: string, updates: {
+  status?: 'upcoming' | 'completed'
+  name?: string
+  assessmentType?: string
+  dueDate?: string | null
+  dueTimeKnown?: boolean
+  weighting?: number | null
+  estimatedMinutes?: number | null
+  notes?: string | null
+}) {
+  const client = createSupabaseServerClient()
+  if (!client) return { ok: false as const, error: 'Cloud storage is unavailable.' }
+
+  const payload: Record<string, unknown> = {}
+  if (updates.status !== undefined) payload.status = updates.status
+  if (updates.name !== undefined) payload.name = updates.name
+  if (updates.assessmentType !== undefined) payload.assessment_type = updates.assessmentType
+  if (updates.dueDate !== undefined) payload.due_date = updates.dueDate
+  if (updates.dueTimeKnown !== undefined) payload.due_time_known = updates.dueTimeKnown
+  if (updates.weighting !== undefined) payload.weighting = updates.weighting
+  if (updates.estimatedMinutes !== undefined) payload.estimated_minutes = updates.estimatedMinutes
+  if (updates.notes !== undefined) payload.notes = updates.notes
+
+  try {
+    const { data, error } = await client
+      .from('assessments')
+      .update(payload)
+      .eq('user_id', userId)
+      .eq('id', assessmentId)
+      .select(ASSESSMENT_COLUMNS)
+      .maybeSingle()
+
+    if (error || !data) {
+      return { ok: false as const, error: error?.message || 'Assessment not found.' }
+    }
+
+    return { ok: true as const, assessment: data }
+  } catch (err) {
+    return { ok: false as const, error: err instanceof Error ? err.message : 'Could not update this assessment.' }
+  }
+}
+
 /** Delete a manually recorded (or any owned) assessment. Linked tasks keep their history via ON DELETE SET NULL. */
 export async function deleteUserAssessment(userId: string, assessmentId: string): Promise<boolean> {
   const client = createSupabaseServerClient()

@@ -11,7 +11,7 @@ const NewsPageClient = dynamic(
 
 export default function NewsPage() {
   return (
-    <SectionShell title="Actuarial News" description="Daily actuarial, insurance, risk and financial intelligence.">
+    <SectionShell title="News" description="Daily actuarial, insurance, risk and financial intelligence.">
       <NewsPageClient />
     </SectionShell>
   )

@@ -198,7 +198,7 @@ export function ErrorManager() {
 
   return (
     <>
-      <div className="fixed bottom-4 right-4 z-50 flex flex-col items-end gap-2">
+      <div className="fixed bottom-4 right-4 z-30 flex flex-col items-end gap-2">
         {reportStatus && (
           <div className="rounded-3xl border border-slate-200 bg-white/95 p-3 text-sm text-slate-700 shadow-lg">
             {reportStatus}
@@ -210,7 +210,7 @@ export function ErrorManager() {
       </div>
 
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/40 p-4">
           <div className="max-w-md rounded-3xl border border-slate-200 bg-white p-5 shadow-xl">
             <h2 className="text-lg font-semibold text-slate-950">Report an issue</h2>
             <p className="mt-2 text-sm text-slate-600">We will capture the current page state, your notes, and session data.</p>

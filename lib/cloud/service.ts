@@ -156,6 +156,7 @@ export async function createUserTask(input: {
   due_date?: string | null
   planned_date?: string | null
   estimated_minutes?: number
+  created_by?: string
 }) {
   const client = createSupabaseServerClient()
   if (!client) return null
@@ -173,7 +174,7 @@ export async function createUserTask(input: {
     due_date: input.due_date ?? null,
     planned_date: input.planned_date ?? null,
     estimated_minutes: input.estimated_minutes ?? 45,
-    created_by: 'user'
+    created_by: input.created_by ?? 'user'
   }).select('*').single()
 
   if (error || !data) return null
@@ -198,16 +199,30 @@ export async function findUserTaskByCareerAssessment(userId: string, careerAsses
 export async function updateUserTask(input: {
   userId: string
   taskId: string
+  unit_id?: string | null
+  assessment_id?: string | null
+  title?: string
+  description?: string | null
+  task_type?: string
+  priority?: number
   due_date?: string | null
   planned_date?: string | null
+  estimated_minutes?: number
   status?: string
 }) {
   const client = createSupabaseServerClient()
   if (!client) return null
 
   const payload: Record<string, unknown> = {}
+  if (input.unit_id !== undefined) payload.unit_id = input.unit_id
+  if (input.assessment_id !== undefined) payload.assessment_id = input.assessment_id
+  if (input.title !== undefined) payload.title = input.title
+  if (input.description !== undefined) payload.description = input.description
+  if (input.task_type !== undefined) payload.task_type = input.task_type
+  if (input.priority !== undefined) payload.priority = input.priority
   if (input.due_date !== undefined) payload.due_date = input.due_date
   if (input.planned_date !== undefined) payload.planned_date = input.planned_date
+  if (input.estimated_minutes !== undefined) payload.estimated_minutes = input.estimated_minutes
   if (input.status !== undefined) payload.status = input.status
 
   const { data, error } = await client
@@ -215,7 +230,7 @@ export async function updateUserTask(input: {
     .update(payload)
     .eq('id', input.taskId)
     .eq('user_id', input.userId)
-    .select('id, user_id, career_assessment_id, due_date, planned_date, status')
+    .select('id, user_id, career_assessment_id, assessment_id, title, description, task_type, priority, due_date, planned_date, estimated_minutes, status')
     .maybeSingle()
 
   if (error || !data) return null

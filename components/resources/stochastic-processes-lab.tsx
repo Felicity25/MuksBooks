@@ -34,6 +34,17 @@ type PlotSeries = {
   opacity?: number
 }
 
+const CHART_COLORS = {
+  axis: 'var(--border)',
+  grid: 'var(--border)',
+  axisText: 'var(--text-muted)',
+  highlight: 'var(--warning)',
+  primary: 'var(--accent-strong)',
+  secondary: 'var(--primary)',
+  tertiary: 'var(--success)',
+  neutral: 'var(--text-secondary)'
+}
+
 interface PlotProps {
   title: string
   series: PlotSeries[]
@@ -129,9 +140,9 @@ function PathPlot({ title, series, highlightIndex = null, showLegend = true, onP
             onPickIndex(best)
           }}
         >
-          <rect x={padding.left} y={padding.top} width={width - padding.left - padding.right} height={height - padding.top - padding.bottom} fill="#f8fafc" />
-          <line x1={padding.left} x2={width - padding.right} y1={height - padding.bottom} y2={height - padding.bottom} stroke="#cbd5e1" />
-          <line x1={padding.left} x2={padding.left} y1={padding.top} y2={height - padding.bottom} stroke="#cbd5e1" />
+          <rect x={padding.left} y={padding.top} width={width - padding.left - padding.right} height={height - padding.top - padding.bottom} fill="var(--surface-secondary)" />
+          <line x1={padding.left} x2={width - padding.right} y1={height - padding.bottom} y2={height - padding.bottom} stroke={CHART_COLORS.axis} />
+          <line x1={padding.left} x2={padding.left} y1={padding.top} y2={height - padding.bottom} stroke={CHART_COLORS.axis} />
 
           {Array.from({ length: 6 }, (_, index) => {
             const ratio = index / 5
@@ -139,8 +150,8 @@ function PathPlot({ title, series, highlightIndex = null, showLegend = true, onP
             const value = yMax - ratio * (yMax - yMin)
             return (
               <g key={`grid-${index}`}>
-                <line x1={padding.left} x2={width - padding.right} y1={y} y2={y} stroke="#e2e8f0" strokeDasharray="4 5" />
-                <text x={8} y={y + 4} fontSize="12" fill="#64748b">{value.toFixed(2)}</text>
+                <line x1={padding.left} x2={width - padding.right} y1={y} y2={y} stroke={CHART_COLORS.grid} strokeDasharray="4 5" />
+                <text x={8} y={y + 4} fontSize="12" fill={CHART_COLORS.axisText}>{value.toFixed(2)}</text>
               </g>
             )
           })}
@@ -159,10 +170,10 @@ function PathPlot({ title, series, highlightIndex = null, showLegend = true, onP
             />
           ))}
 
-          {highlightX !== null ? <line x1={highlightX} x2={highlightX} y1={padding.top} y2={height - padding.bottom} stroke="#f97316" strokeWidth="2" /> : null}
+          {highlightX !== null ? <line x1={highlightX} x2={highlightX} y1={padding.top} y2={height - padding.bottom} stroke={CHART_COLORS.highlight} strokeWidth="2" /> : null}
 
-          <text x={width - 10} y={height - 8} textAnchor="end" fontSize="12" fill="#64748b">t</text>
-          <text x={12} y={16} fontSize="12" fill="#64748b">value</text>
+          <text x={width - 10} y={height - 8} textAnchor="end" fontSize="12" fill={CHART_COLORS.axisText}>t</text>
+          <text x={12} y={16} fontSize="12" fill={CHART_COLORS.axisText}>value</text>
         </svg>
       </div>
     </div>
@@ -343,27 +354,27 @@ export function StochasticProcessesLab() {
         ...randomWalk.paths.slice(0, Math.min(pathCount, 12)).map((path, idx) => ({
           id: `Walk ${idx + 1}`,
           points: randomWalk.times.map((t, i) => ({ t, y: path[i] })),
-          color: '#0ea5e9',
+          color: CHART_COLORS.primary,
           opacity: 0.25,
           width: 1.5
         })),
-        { id: 'Empirical mean', points: randomWalk.times.map((t, i) => ({ t, y: runningMean(randomWalk.paths)[i] })), color: '#f97316', width: 2.8 },
-        { id: 'Theoretical mean', points: randomWalk.times.map((t, i) => ({ t, y: expected[i] })), color: '#334155', dashed: true, width: 2 }
+        { id: 'Empirical mean', points: randomWalk.times.map((t, i) => ({ t, y: runningMean(randomWalk.paths)[i] })), color: CHART_COLORS.highlight, width: 2.8 },
+        { id: 'Theoretical mean', points: randomWalk.times.map((t, i) => ({ t, y: expected[i] })), color: CHART_COLORS.neutral, dashed: true, width: 2 }
       ]
     }
 
     if (conceptId === 'poisson') {
       const expected = poisson.map((point) => ({ t: point.t, y: lambda * point.t }))
       return [
-        { id: 'N_t sample path', points: poisson, color: '#0ea5e9', width: 2.6, step: true },
-        { id: 'E[N_t]=lambda t', points: expected, color: '#f97316', width: 2.4, dashed: true }
+        { id: 'N_t sample path', points: poisson, color: CHART_COLORS.primary, width: 2.6, step: true },
+        { id: 'E[N_t]=lambda t', points: expected, color: CHART_COLORS.highlight, width: 2.4, dashed: true }
       ]
     }
 
     if (conceptId === 'compound-poisson') {
       return [
-        { id: 'Arrivals N_t', points: compoundPoisson.arrivals, color: '#0ea5e9', width: 2.2, step: true },
-        { id: 'Aggregate S_t', points: compoundPoisson.aggregate, color: '#16a34a', width: 2.6, step: true }
+        { id: 'Arrivals N_t', points: compoundPoisson.arrivals, color: CHART_COLORS.primary, width: 2.2, step: true },
+        { id: 'Aggregate S_t', points: compoundPoisson.aggregate, color: CHART_COLORS.tertiary, width: 2.6, step: true }
       ]
     }
 
@@ -373,19 +384,19 @@ export function StochasticProcessesLab() {
         ...gbm.paths.slice(0, Math.min(pathCount, 15)).map((path, idx) => ({
           id: `GBM ${idx + 1}`,
           points: gbm.times.map((t, i) => ({ t, y: path[i] })),
-          color: '#0ea5e9',
+          color: CHART_COLORS.primary,
           opacity: 0.25,
           width: 1.4
         })),
-        { id: 'E[S_t]', points: expected, color: '#f97316', width: 2.8, dashed: true }
+        { id: 'E[S_t]', points: expected, color: CHART_COLORS.highlight, width: 2.8, dashed: true }
       ]
     }
 
     if (conceptId === 'ito-process') {
       return [
-        ...(showDrift ? [{ id: 'Drift only', points: driftBrownian.times.map((t, i) => ({ t, y: driftOnly[i] })), color: '#334155', width: 2.3, dashed: true } as PlotSeries] : []),
-        ...(showDiffusion ? [{ id: 'Diffusion only', points: driftBrownian.times.map((t, i) => ({ t, y: diffusionOnly[i] })), color: '#0ea5e9', width: 1.8, opacity: 0.8 } as PlotSeries] : []),
-        { id: 'Combined process', points: driftBrownian.times.map((t, i) => ({ t, y: combinedIto[i] })), color: '#16a34a', width: 2.6 }
+        ...(showDrift ? [{ id: 'Drift only', points: driftBrownian.times.map((t, i) => ({ t, y: driftOnly[i] })), color: CHART_COLORS.neutral, width: 2.3, dashed: true } as PlotSeries] : []),
+        ...(showDiffusion ? [{ id: 'Diffusion only', points: driftBrownian.times.map((t, i) => ({ t, y: diffusionOnly[i] })), color: CHART_COLORS.primary, width: 1.8, opacity: 0.8 } as PlotSeries] : []),
+        { id: 'Combined process', points: driftBrownian.times.map((t, i) => ({ t, y: combinedIto[i] })), color: CHART_COLORS.tertiary, width: 2.6 }
       ]
     }
 
@@ -393,22 +404,22 @@ export function StochasticProcessesLab() {
       const w = brownian.paths[0]
       const w2MinusT = driftBrownian.times.map((t, i) => ({ t, y: w[i] * w[i] - t }))
       return [
-        { id: 'W_t', points: driftBrownian.times.map((t, i) => ({ t, y: w[i] })), color: '#0ea5e9', width: 2 },
-        { id: 'W_t^2 - t', points: w2MinusT, color: '#f97316', width: 2.6 }
+        { id: 'W_t', points: driftBrownian.times.map((t, i) => ({ t, y: w[i] })), color: CHART_COLORS.primary, width: 2 },
+        { id: 'W_t^2 - t', points: w2MinusT, color: CHART_COLORS.highlight, width: 2.6 }
       ]
     }
 
     if (conceptId === 'martingale') {
       return [
-        { id: 'History path', points: brownian.times.slice(0, branchSim.branchAt + 1).map((t, i) => ({ t, y: brownian.paths[0][i] })), color: '#0f172a', width: 2.8 },
+        { id: 'History path', points: brownian.times.slice(0, branchSim.branchAt + 1).map((t, i) => ({ t, y: brownian.paths[0][i] })), color: CHART_COLORS.secondary, width: 2.8 },
         ...branchSim.futures.slice(0, 40).map((path, idx) => ({
           id: `Future ${idx + 1}`,
           points: branchSim.times.map((t, i) => ({ t, y: path[i] })),
-          color: '#0ea5e9',
+          color: CHART_COLORS.primary,
           opacity: 0.18,
           width: 1.3
         })),
-        { id: 'Branch conditional mean', points: branchSim.times.map((t, i) => ({ t, y: branchSim.avg[i] })), color: '#f97316', width: 2.8, dashed: true }
+        { id: 'Branch conditional mean', points: branchSim.times.map((t, i) => ({ t, y: branchSim.avg[i] })), color: CHART_COLORS.highlight, width: 2.8, dashed: true }
       ]
     }
 
@@ -416,8 +427,8 @@ export function StochasticProcessesLab() {
       const deterministic = smoothCurve
       const brownianOne = brownian.times.map((t, i) => ({ t, y: brownian.paths[0][i] }))
       return [
-        { id: 'Smooth deterministic curve', points: deterministic, color: '#16a34a', width: 2.8 },
-        { id: 'Brownian sample path', points: brownianOne, color: '#0ea5e9', width: 2.2 }
+        { id: 'Smooth deterministic curve', points: deterministic, color: CHART_COLORS.tertiary, width: 2.8 },
+        { id: 'Brownian sample path', points: brownianOne, color: CHART_COLORS.primary, width: 2.2 }
       ]
     }
 
@@ -427,14 +438,14 @@ export function StochasticProcessesLab() {
       ...pathSet.paths.slice(0, Math.min(pathCount, 20)).map((path, idx) => ({
         id: `Path ${idx + 1}`,
         points: pathSet.times.map((t, i) => ({ t, y: path[i] })),
-        color: '#0ea5e9',
+        color: CHART_COLORS.primary,
         width: 1.4,
         opacity: 0.22
       })),
-      { id: 'Empirical mean', points: pathSet.times.map((t, i) => ({ t, y: runningMean(pathSet.paths)[i] })), color: '#16a34a', width: 2.8 },
+      { id: 'Empirical mean', points: pathSet.times.map((t, i) => ({ t, y: runningMean(pathSet.paths)[i] })), color: CHART_COLORS.tertiary, width: 2.8 },
       ...(conceptId === 'brownian-motion'
-        ? [{ id: 'Theoretical mean = 0', points: pathSet.times.map((t) => ({ t, y: 0 })), color: '#334155', width: 2.2, dashed: true } as PlotSeries]
-        : [{ id: 'Theoretical mean', points: expected, color: '#f97316', width: 2.2, dashed: true } as PlotSeries])
+        ? [{ id: 'Theoretical mean = 0', points: pathSet.times.map((t) => ({ t, y: 0 })), color: CHART_COLORS.neutral, width: 2.2, dashed: true } as PlotSeries]
+        : [{ id: 'Theoretical mean', points: expected, color: CHART_COLORS.highlight, width: 2.2, dashed: true } as PlotSeries])
     ]
   }, [
     conceptId,

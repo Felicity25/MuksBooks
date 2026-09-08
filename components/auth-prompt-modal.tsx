@@ -60,7 +60,7 @@ export function AuthPromptModal() {
     }
 
     close()
-    window.location.href = returnPath
+    window.location.href = mode === 'sign-up' ? '/onboarding' : returnPath
   }
 
   return (

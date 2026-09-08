@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createUserAssessment, deleteUserAssessment, listCloudAssessments } from '@/lib/supabase/documents-service'
+import { createUserAssessment, deleteUserAssessment, listCloudAssessments, updateUserAssessment } from '@/lib/supabase/documents-service'
 import { ensureUserUnitForCode } from '@/lib/cloud/service'
 import { getAuthenticatedUser } from '@/lib/supabase/server'
 
 export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
 function mapAssessment(assessment: any) {
   return {
@@ -104,4 +105,29 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ ok: false, error: 'Assessment not found.' }, { status: 404 })
   }
   return NextResponse.json({ ok: true })
+}
+
+export async function PATCH(request: NextRequest) {
+  const user = await getAuthenticatedUser()
+  if (!user) {
+    return NextResponse.json({ ok: false, error: 'Authentication required', code: 'UNAUTHENTICATED' }, { status: 401 })
+  }
+
+  const body = await request.json().catch(() => null)
+  const assessmentId = typeof body?.assessmentId === 'string' ? body.assessmentId : ''
+  if (!assessmentId) {
+    return NextResponse.json({ ok: false, error: 'assessmentId is required' }, { status: 400 })
+  }
+
+  const status = body?.completed === true ? 'completed' : body?.completed === false ? 'upcoming' : null
+  if (!status) {
+    return NextResponse.json({ ok: false, error: 'completed must be provided as a boolean.' }, { status: 400 })
+  }
+
+  const result = await updateUserAssessment(user.id, assessmentId, { status })
+  if (!result.ok) {
+    return NextResponse.json({ ok: false, error: result.error }, { status: 400 })
+  }
+
+  return NextResponse.json({ ok: true, assessment: mapAssessment(result.assessment) })
 }

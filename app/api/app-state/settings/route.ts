@@ -4,6 +4,7 @@ import { createSupabaseServerClient, getAuthenticatedUser } from '@/lib/supabase
 import { normalizeUserSettings, parseUserSettingsUpdate, type UserSettings } from '@/lib/user-settings'
 
 export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
 export async function GET() {
   try {

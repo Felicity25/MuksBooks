@@ -5,9 +5,9 @@ interface BadgeProps extends PropsWithChildren<{ className?: string; variant?: '
 
 export function Badge({ children, className, variant = 'secondary', onClick }: BadgeProps) {
   const variantClasses = {
-    default: 'bg-slate-900 text-slate-50',
-    secondary: 'bg-slate-100 text-slate-700',
-    outline: 'border border-slate-300 bg-white text-slate-700'
+    default: 'bg-[var(--primary)] text-white',
+    secondary: 'bg-[var(--surface-secondary)] text-[var(--text-secondary)]',
+    outline: 'border border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)]'
   }
 
   return (

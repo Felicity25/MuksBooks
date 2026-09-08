@@ -1,10 +1,65 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { NewsCard } from '@/components/news/news-card'
 import { useAuth } from '@/components/auth-provider'
 import type { BriefItem, NewsItem, SavedNewsItem } from '@/lib/news/types'
+
+function buildMuksBrief(stories: NewsItem[], academicMode?: string, degree?: string) {
+  if (!stories.length) {
+    return {
+      title: 'Select stories to create a MuksBrief',
+      sections: [
+        {
+          heading: 'What happened',
+          body: 'Choose one or more articles from the feed to build a short briefing grounded in the selected stories.'
+        }
+      ],
+      sources: []
+    }
+  }
+
+  const primary = stories[0]
+  const context = academicMode === 'LEARNER'
+    ? 'This is useful for current affairs and classroom connections.'
+    : degree
+      ? `This is relevant to ${degree} and professional practice.`
+      : 'This is relevant to university-level practice and professional understanding.'
+
+  const sectionBodies = [
+    {
+      heading: 'What happened',
+      body: stories.length === 1
+        ? `The key story is ${primary.title}. Based on the selected source, it focuses on ${primary.summary || 'developments in the relevant sector'}.`
+        : `The selected stories cover ${stories.map((story) => story.title).join('; ')}. Together they show a cluster of developments across the sector, with the strongest common theme being ${stories[0].title}.`
+    },
+    {
+      heading: 'Why it matters',
+      body: `These developments matter because they affect the same decision-makers, markets, and risks that shape actuarial and professional work. ${context}`
+    },
+    {
+      heading: 'How these stories connect',
+      body: stories.length === 1
+        ? `${primary.title} is significant because it interacts with broader policy, pricing, risk, and market conditions. The main takeaway is that this item deserves attention for its operational and strategic implications.`
+        : `What connects these stories is that they are all part of a wider pattern: policy change, market pressure, and professional adaptation are moving together. When read together, they show how a sector response is emerging rather than isolated events.`
+    },
+    {
+      heading: 'What to watch next',
+      body: 'The next step is to monitor how firms, regulators, and markets respond. Watch for timing, implementation detail, firm guidance, and whether the issue becomes broader or settles into a narrower policy change.'
+    }
+  ]
+
+  return {
+    title: stories.length === 1 ? 'MuksBrief' : 'MuksBrief',
+    sections: sectionBodies,
+    sources: stories.map((story) => ({
+      label: story.sourceName,
+      url: story.url,
+      title: story.title
+    }))
+  }
+}
 
 const CATEGORIES = [
   'All',
@@ -57,7 +112,7 @@ interface NewsResponse {
 }
 
 export function NewsPageClient() {
-  const { user, isLoading: authLoading, requireAuth } = useAuth()
+  const { user, settings, isLoading: authLoading, requireAuth } = useAuth()
   const [data, setData] = useState<NewsResponse>({ items: [], brief: [], sinceYesterday: [], concepts: [], savedIds: [] })
   const [savedItems, setSavedItems] = useState<SavedNewsItem[]>([])
   const [savedUrls, setSavedUrls] = useState<string[]>([])
@@ -69,6 +124,11 @@ export function NewsPageClient() {
   const [query, setQuery] = useState('')
   const [concept, setConcept] = useState<string | null>(null)
   const [showSinceYesterday, setShowSinceYesterday] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [briefOpen, setBriefOpen] = useState(false)
+  const [briefMode, setBriefMode] = useState<'READ' | 'LISTEN'>('READ')
+  const [isSpeaking, setIsSpeaking] = useState(false)
+  const speechRef = useRef<SpeechSynthesisUtterance | null>(null)
 
   const loadSaved = useCallback(async () => {
     if (!user) {
@@ -167,6 +227,44 @@ export function NewsPageClient() {
   }, [load, query])
 
   const savedSet = useMemo(() => new Set(savedUrls), [savedUrls])
+  const selectedStories = useMemo(() => data.items.filter((item) => selectedIds.includes(item.id)), [data.items, selectedIds])
+  const briefSummary = useMemo(() => buildMuksBrief(selectedStories, settings.academicMode, settings.degree), [selectedStories, settings.academicMode, settings.degree])
+
+  const toggleSelection = useCallback((article: NewsItem) => {
+    setSelectedIds((previous) => previous.includes(article.id) ? previous.filter((id) => id !== article.id) : [...previous, article.id])
+  }, [])
+
+  const handleListen = useCallback(() => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return
+
+    const text = briefSummary.sections.map((section) => `${section.heading}. ${section.body}`).join(' ')
+    if (!text.trim()) return
+
+    if (isSpeaking) {
+      window.speechSynthesis.cancel()
+      setIsSpeaking(false)
+      return
+    }
+
+    const cleanText = text.replace(/\s+/g, ' ').trim()
+    const utterance = new SpeechSynthesisUtterance(cleanText)
+    speechRef.current = utterance
+
+    utterance.onstart = () => setIsSpeaking(true)
+    utterance.onend = () => setIsSpeaking(false)
+    utterance.onerror = () => setIsSpeaking(false)
+
+    window.speechSynthesis.cancel()
+    window.speechSynthesis.speak(utterance)
+  }, [briefSummary, isSpeaking])
+
+  useEffect(() => {
+    return () => {
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel()
+      }
+    }
+  }, [])
 
   const toggleSave = async (article: NewsItem) => {
     if (requireAuth('Sign in or create a MuksBooks account to keep articles in your personal Saved collection.', '/news')) return
@@ -212,6 +310,63 @@ export function NewsPageClient() {
           </Badge>
         ))}
       </div>
+
+      {category !== 'Saved' && (
+        <div className="rounded-3xl border border-sky-200 bg-sky-50 p-5 space-y-3">
+          <button type="button" onClick={() => setBriefOpen((value) => !value)} className="flex w-full items-center justify-between text-left">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-wide text-sky-700">✨ MuksBrief</p>
+              <p className="text-xs text-sky-600">{selectedStories.length ? `${selectedStories.length} story${selectedStories.length === 1 ? '' : 'ies'} selected` : 'Select articles to build a briefing'}</p>
+            </div>
+            <span className="text-sm font-medium text-sky-700">{briefOpen ? 'Hide' : 'Open'}</span>
+          </button>
+
+          {briefOpen && (
+            <div className="space-y-4">
+              <div className="flex flex-wrap gap-2">
+                <button type="button" onClick={() => setBriefMode('READ')} className={briefMode === 'READ' ? 'rounded-full bg-sky-700 px-3 py-1.5 text-sm font-medium text-white' : 'rounded-full border border-sky-200 bg-white px-3 py-1.5 text-sm font-medium text-sky-700'}>READ</button>
+                <button type="button" onClick={() => setBriefMode('LISTEN')} className={briefMode === 'LISTEN' ? 'rounded-full bg-sky-700 px-3 py-1.5 text-sm font-medium text-white' : 'rounded-full border border-sky-200 bg-white px-3 py-1.5 text-sm font-medium text-sky-700'}>LISTEN</button>
+              </div>
+
+              {selectedStories.length > 0 ? (
+                <>
+                  {briefMode === 'READ' ? (
+                    <div className="space-y-4 rounded-2xl border border-sky-100 bg-white p-4">
+                      <h3 className="text-base font-semibold text-slate-900">{briefSummary.title}</h3>
+                      {briefSummary.sections.map((section) => (
+                        <div key={section.heading} className="space-y-1">
+                          <p className="text-sm font-semibold uppercase tracking-wide text-slate-700">{section.heading}</p>
+                          <p className="text-sm leading-6 text-slate-700">{section.body}</p>
+                        </div>
+                      ))}
+                      <div className="space-y-2 border-t border-slate-200 pt-3">
+                        <p className="text-sm font-semibold uppercase tracking-wide text-slate-700">Sources</p>
+                        <ul className="space-y-1 text-sm text-slate-700">
+                          {briefSummary.sources.map((source) => (
+                            <li key={`${source.title}-${source.url}`}>
+                              <a href={source.url} target="_blank" rel="noreferrer" className="text-sky-700 underline">{source.title}</a>
+                              <span className="text-slate-500"> · {source.label}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-4 rounded-2xl border border-sky-100 bg-white p-4">
+                      <p className="text-sm text-slate-700">The briefing is read aloud from the selected stories only. No audio plays automatically.</p>
+                      <button type="button" onClick={handleListen} className="rounded-full bg-sky-700 px-4 py-2 text-sm font-medium text-white">
+                        {isSpeaking ? 'Pause' : 'Listen'}
+                      </button>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <p className="rounded-2xl border border-dashed border-sky-200 bg-white p-4 text-sm text-slate-600">Select one or more articles below to generate a briefing that connects the main developments.</p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {category !== 'Saved' && data.brief.length > 0 && (
         <div className="rounded-3xl border border-sky-200 bg-sky-50 p-5 space-y-2">
@@ -322,7 +477,9 @@ export function NewsPageClient() {
               key={item.id}
               item={item}
               saved={savedSet.has(item.url)}
+              selected={selectedIds.includes(item.id)}
               onToggleSave={toggleSave}
+              onToggleSelect={toggleSelection}
               onSelectConcept={(selectedConcept) => setConcept(concept === selectedConcept ? null : selectedConcept)}
             />
           ))}

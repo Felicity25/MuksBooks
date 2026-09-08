@@ -3,6 +3,7 @@ import { getAuthenticatedUser } from '@/lib/supabase/server'
 import { getCloudUploadByDocumentId, getSignedUrl } from '@/lib/supabase/documents-service'
 
 export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
 /** Return a short-lived signed URL so a student can open one of their own uploaded documents. */
 export async function GET(request: NextRequest) {

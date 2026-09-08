@@ -6,11 +6,12 @@ import { useAuth } from '@/components/auth-provider'
 
 const navItems = [
   { href: '/', label: 'Dashboard' },
+  { href: '/notes', label: 'MuksNotes' },
   { href: '/units', label: 'Units' },
   { href: '/planner', label: 'Planner' },
+  { href: '/news', label: 'News' },
   { href: '/uploads', label: 'Uploads' },
   { href: '/ai-tutor', label: 'AI Tutor' },
-  { href: '/news', label: 'Actuarial News' },
   { href: '/careers', label: 'Careers' },
   { href: '/resources', label: 'Resources' },
   { href: '/semester-timeline', label: 'Semester Timeline' },

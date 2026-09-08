@@ -79,30 +79,40 @@ export async function upsertPrismaBackupNews(input: {
   relevance?: string
 }) {
   const prisma = await getPrismaClient()
-  if (!prisma) return
+  if (!prisma) return false
 
   const publishedDate = input.publishedDate ? new Date(input.publishedDate) : new Date()
 
-  await prisma.actuarialNewsItem.upsert({
-    where: { url: input.url },
-    update: {
-      title: input.title,
-      source: input.source,
-      publishedDate,
-      summary: input.summary,
-      category: input.category,
-      relevance: input.relevance || null
-    },
-    create: {
-      title: input.title,
-      source: input.source,
-      publishedDate,
-      summary: input.summary,
+  try {
+    await prisma.actuarialNewsItem.upsert({
+      where: { url: input.url },
+      update: {
+        title: input.title,
+        source: input.source,
+        publishedDate,
+        summary: input.summary,
+        category: input.category,
+        relevance: input.relevance || null
+      },
+      create: {
+        title: input.title,
+        source: input.source,
+        publishedDate,
+        summary: input.summary,
+        url: input.url,
+        category: input.category,
+        relevance: input.relevance || null
+      }
+    })
+    return true
+  } catch (error) {
+    console.warn('Prisma News backup failed; continuing without the backup store.', {
       url: input.url,
-      category: input.category,
-      relevance: input.relevance || null
-    }
-  })
+      source: input.source,
+      error: error instanceof Error ? error.message : String(error)
+    })
+    return false
+  }
 }
 
 export async function queryPrismaBackupNews(filters: NewsQueryFilters): Promise<NewsItem[]> {

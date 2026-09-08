@@ -10,6 +10,7 @@ import {
 } from '@/lib/supabase/documents-service'
 
 export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
 function parseEntry(body: any): ScheduleEntryInput | null {
   const unitId = String(body?.unitId || '').trim()

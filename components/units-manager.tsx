@@ -278,7 +278,7 @@ export function UnitsManager() {
                       className="h-6 w-8 cursor-pointer border-0 bg-transparent p-0"
                     />
                   </label>
-                  <span className="rounded-full px-2 py-1 text-xs font-semibold" style={{ backgroundColor: withAlpha(formData.color, 0.14), color: '#0f172a' }}>
+                  <span className="rounded-full px-2 py-1 text-xs font-semibold" style={{ backgroundColor: withAlpha(formData.color, 0.14), color: 'var(--text-primary)' }}>
                     {normalizeColor(formData.color).toUpperCase()}
                   </span>
                 </div>

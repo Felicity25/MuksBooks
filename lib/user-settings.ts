@@ -1,10 +1,13 @@
-export type ThemePreference = 'light' | 'dark' | 'system'
+import type { ThemeId } from '@/lib/design/themes'
+
+export type ThemePreference = ThemeId | 'light' | 'dark' | 'system'
 export type TextSizePreference = 'small' | 'default' | 'large' | 'extra-large'
 export type DensityPreference = 'compact' | 'comfortable' | 'spacious'
 export type MotionPreference = 'normal' | 'reduced'
 export type FontPreference = 'modern' | 'readable' | 'academic'
 export type ProactivityLevel = 'quiet' | 'balanced' | 'proactive'
 export type WidgetSize = 'small' | 'medium' | 'large' | 'wide'
+export type YearLevel = 'first-year' | 'second-year' | 'third-year' | 'fourth-year' | 'postgraduate' | 'other'
 
 export type WidgetId =
   | 'suggested-actions'
@@ -30,6 +33,9 @@ export type WidgetId =
 
 export type HomepagePreset = 'academic-weapon' | 'study-focus' | 'career-focus' | 'minimal' | 'build-my-own'
 export type QuickActionId = 'upload' | 'ask-tutor' | 'add-task' | 'careers' | 'todays-classes'
+export type AcademicMode = 'UNIVERSITY' | 'LEARNER'
+export type LearnerCurriculum = 'IB Diploma Programme' | 'Other'
+export type LearnerYearLevel = 'DP1' | 'DP2' | 'Year 11' | 'Year 12' | 'Other'
 
 export interface WidgetLayoutItem {
   id: WidgetId
@@ -58,12 +64,38 @@ export interface ProactivityControls {
 }
 
 export interface UserSettings {
+  academicMode: AcademicMode
+  curriculum: LearnerCurriculum
+  schoolName: string
+  schoolCountry: string
+  schoolYear: LearnerYearLevel
+  examSession: string
   theme: ThemePreference
   name: string
+  institution: string
   degree: string
+  fieldOfStudy: string
+  major: string
+  yearLevel: YearLevel
+  careerInterests: string[]
+  academicInterests: string[]
   targetMarks: string
   feedbackStrictness: 'lenient' | 'normal' | 'strict'
   pomodoroLength: number
+  focusDurationMinutes: number
+  shortBreakMinutes: number
+  longBreakMinutes: number
+  focusCycleCount: number
+  autoStartBreaks: boolean
+  autoStartFocus: boolean
+  studyBellMuted: boolean
+  studyBellVolume: number
+  focusNotificationsEnabled: boolean
+  speechRate: number
+  speechVolume: number
+  speechMuted: boolean
+  speechVoiceURI: string
+  mathSpeechDetail: 'brief' | 'detailed'
   studyTimes: string
   timezone: string
   textSize: TextSizePreference
@@ -75,20 +107,6 @@ export interface UserSettings {
   quickActions: QuickActionId[]
   proactivityLevel: ProactivityLevel
   proactivityControls: ProactivityControls
-  focusDurationMinutes: number
-  shortBreakMinutes: number
-  longBreakMinutes: number
-  focusCycleCount: number
-  autoStartBreaks: boolean
-  autoStartFocus: boolean
-  studyBellMuted: boolean
-  studyBellVolume: number
-  focusNotificationsEnabled: boolean
-  speechRate: number
-  speechVoiceURI: string
-  speechVolume: number
-  speechMuted: boolean
-  mathSpeechDetail: 'brief' | 'detailed'
 }
 
 const layout = (items: Array<[WidgetId, WidgetSize]>): WidgetLayoutItem[] =>
@@ -187,23 +205,24 @@ export const PROACTIVITY_DEFAULTS: Record<ProactivityLevel, ProactivityControls>
 }
 
 export const DEFAULT_USER_SETTINGS: UserSettings = {
-  theme: 'light',
+  academicMode: 'UNIVERSITY',
+  curriculum: 'IB Diploma Programme',
+  schoolName: '',
+  schoolCountry: '',
+  schoolYear: 'DP1',
+  examSession: '',
+  theme: 'oxford',
   name: '',
+  institution: '',
   degree: '',
+  fieldOfStudy: '',
+  major: '',
+  yearLevel: 'other',
+  careerInterests: [],
+  academicInterests: [],
   targetMarks: '',
   feedbackStrictness: 'normal',
   pomodoroLength: 25,
-  studyTimes: '',
-  timezone: 'Australia/Melbourne',
-  textSize: 'default',
-  density: 'comfortable',
-  motion: 'normal',
-  font: 'modern',
-  homepagePreset: 'academic-weapon',
-  homepageLayout: HOMEPAGE_PRESETS['academic-weapon'],
-  quickActions: ['upload', 'ask-tutor', 'add-task'],
-  proactivityLevel: 'balanced',
-  proactivityControls: PROACTIVITY_DEFAULTS.balanced,
   focusDurationMinutes: 25,
   shortBreakMinutes: 5,
   longBreakMinutes: 20,
@@ -214,10 +233,21 @@ export const DEFAULT_USER_SETTINGS: UserSettings = {
   studyBellVolume: 0.6,
   focusNotificationsEnabled: false,
   speechRate: 1,
-  speechVoiceURI: '',
   speechVolume: 0.85,
   speechMuted: false,
-  mathSpeechDetail: 'brief'
+  speechVoiceURI: '',
+  mathSpeechDetail: 'brief',
+  studyTimes: '',
+  timezone: 'Australia/Melbourne',
+  textSize: 'default',
+  density: 'comfortable',
+  motion: 'normal',
+  font: 'modern',
+  homepagePreset: 'academic-weapon',
+  homepageLayout: HOMEPAGE_PRESETS['academic-weapon'],
+  quickActions: ['upload', 'ask-tutor', 'add-task'],
+  proactivityLevel: 'balanced',
+  proactivityControls: PROACTIVITY_DEFAULTS.balanced
 }
 
 export const GUEST_SETTINGS_KEY = 'muksbooks:user-settings:v2'
@@ -245,7 +275,10 @@ export function parseUserSettingsUpdate(value: unknown): SettingsParseResult {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return { valid: false, error: 'Settings must be a JSON object.' }
   const update = value as Record<string, unknown>
   const enums: Record<string, readonly string[]> = {
-    theme: ['light', 'dark', 'system'],
+    academicMode: ['UNIVERSITY', 'LEARNER'],
+    curriculum: ['IB Diploma Programme', 'Other'],
+    schoolYear: ['DP1', 'DP2', 'Year 11', 'Year 12', 'Other'],
+    theme: ['muks-classic', 'scholar-blue', 'rose-espresso', 'sage-library', 'lavender-notes', 'oxford', 'matcha-study', 'midnight', 'golden-hour', 'cloud', 'light', 'dark', 'system'],
     textSize: ['small', 'default', 'large', 'extra-large'],
     density: ['compact', 'comfortable', 'spacious'],
     motion: ['normal', 'reduced'],
@@ -253,13 +286,27 @@ export function parseUserSettingsUpdate(value: unknown): SettingsParseResult {
     feedbackStrictness: ['lenient', 'normal', 'strict'],
     proactivityLevel: ['quiet', 'balanced', 'proactive'],
     homepagePreset: ['academic-weapon', 'study-focus', 'career-focus', 'minimal', 'build-my-own'],
-    mathSpeechDetail: ['brief', 'detailed']
+    yearLevel: ['first-year', 'second-year', 'third-year', 'fourth-year', 'postgraduate', 'other']
   }
 
   for (const [field, allowed] of Object.entries(enums)) {
     if (field in update && !allowed.includes(update[field] as string)) return { valid: false, error: `Invalid ${field}.` }
   }
-  for (const field of ['name', 'degree', 'targetMarks', 'studyTimes', 'timezone']) {
+  for (const field of ['academicMode', 'curriculum', 'schoolName', 'schoolCountry', 'schoolYear', 'examSession', 'name', 'institution', 'degree', 'fieldOfStudy', 'major', 'targetMarks', 'studyTimes', 'timezone']) {
+    if (field in update && typeof update[field] !== 'string') return { valid: false, error: `${field} must be a string.` }
+  }
+    if ('careerInterests' in update) {
+      if (!Array.isArray(update.careerInterests) || update.careerInterests.some((item) => typeof item !== 'string')) {
+        return { valid: false, error: 'careerInterests must be a string array.' }
+      }
+    }
+    if ('academicInterests' in update) {
+      if (!Array.isArray(update.academicInterests) || update.academicInterests.some((item) => typeof item !== 'string')) {
+        return { valid: false, error: 'academicInterests must be a string array.' }
+      }
+    }
+
+  for (const field of ['speechVoiceURI']) {
     if (field in update && typeof update[field] !== 'string') return { valid: false, error: `${field} must be a string.` }
   }
   if ('pomodoroLength' in update && (!Number.isInteger(update.pomodoroLength) || Number(update.pomodoroLength) < 5 || Number(update.pomodoroLength) > 90)) {
@@ -277,16 +324,21 @@ export function parseUserSettingsUpdate(value: unknown): SettingsParseResult {
   if ('focusCycleCount' in update && (!Number.isInteger(update.focusCycleCount) || Number(update.focusCycleCount) < 1 || Number(update.focusCycleCount) > 12)) {
     return { valid: false, error: 'focusCycleCount must be an integer from 1 to 12.' }
   }
-  for (const field of ['studyBellVolume', 'speechRate', 'speechVolume']) {
-    if (field in update) {
-      const value = Number(update[field])
-      if (!Number.isFinite(value)) return { valid: false, error: `${field} must be a number.` }
-    }
+  if ('studyBellVolume' in update && (typeof update.studyBellVolume !== 'number' || Number(update.studyBellVolume) < 0 || Number(update.studyBellVolume) > 1)) {
+    return { valid: false, error: 'studyBellVolume must be a number from 0 to 1.' }
+  }
+  if ('speechRate' in update && (typeof update.speechRate !== 'number' || Number(update.speechRate) < 0.5 || Number(update.speechRate) > 2)) {
+    return { valid: false, error: 'speechRate must be a number from 0.5 to 2.' }
+  }
+  if ('speechVolume' in update && (typeof update.speechVolume !== 'number' || Number(update.speechVolume) < 0 || Number(update.speechVolume) > 1)) {
+    return { valid: false, error: 'speechVolume must be a number from 0 to 1.' }
   }
   for (const field of ['autoStartBreaks', 'autoStartFocus', 'studyBellMuted', 'focusNotificationsEnabled', 'speechMuted']) {
     if (field in update && typeof update[field] !== 'boolean') return { valid: false, error: `${field} must be a boolean.` }
   }
-  if ('speechVoiceURI' in update && typeof update.speechVoiceURI !== 'string') return { valid: false, error: 'speechVoiceURI must be a string.' }
+  if ('mathSpeechDetail' in update && !['brief', 'detailed'].includes(update.mathSpeechDetail as string)) {
+    return { valid: false, error: 'mathSpeechDetail must be brief or detailed.' }
+  }
   if ('quickActions' in update) {
     if (!Array.isArray(update.quickActions) || update.quickActions.some((id) => !QUICK_ACTION_IDS.includes(id as QuickActionId))) return { valid: false, error: 'quickActions contains an invalid action.' }
     if (new Set(update.quickActions).size !== update.quickActions.length) return { valid: false, error: 'quickActions contains duplicates.' }
@@ -326,12 +378,31 @@ export function normalizeUserSettings(value?: Partial<UserSettings> | null): Use
   const level = clean.proactivityLevel || DEFAULT_USER_SETTINGS.proactivityLevel
   const preset = clean.homepagePreset || DEFAULT_USER_SETTINGS.homepagePreset
   const fallbackLayout = HOMEPAGE_PRESETS[preset]
+  const hasSchoolProfile = Boolean(
+    clean.schoolName?.trim() ||
+    clean.schoolCountry?.trim() ||
+    clean.curriculum?.trim() ||
+    clean.schoolYear?.trim() ||
+    clean.examSession?.trim()
+  )
+  const academicMode = clean.academicMode
+    ? clean.academicMode
+    : hasSchoolProfile
+      ? 'LEARNER'
+      : DEFAULT_USER_SETTINGS.academicMode
 
   return {
     ...DEFAULT_USER_SETTINGS,
     ...clean,
+    academicMode,
     homepageLayout: Array.isArray(clean.homepageLayout) ? clean.homepageLayout : fallbackLayout,
     quickActions: Array.isArray(clean.quickActions) ? clean.quickActions : DEFAULT_USER_SETTINGS.quickActions,
+    careerInterests: Array.isArray(clean.careerInterests)
+      ? Array.from(new Set(clean.careerInterests.map((item) => `${item}`.trim()).filter(Boolean)))
+      : DEFAULT_USER_SETTINGS.careerInterests,
+    academicInterests: Array.isArray(clean.academicInterests)
+      ? Array.from(new Set(clean.academicInterests.map((item) => `${item}`.trim()).filter(Boolean)))
+      : DEFAULT_USER_SETTINGS.academicInterests,
     proactivityControls: {
       ...PROACTIVITY_DEFAULTS[level],
       ...(clean.proactivityControls || {})

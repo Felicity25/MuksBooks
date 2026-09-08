@@ -3,7 +3,7 @@ import { SettingsManager } from '@/components/settings-manager'
 
 export default function SettingsPage() {
   return (
-    <SectionShell title="Settings" description="Manage profile, onboarding, interface and study preferences" actionLabel="Update settings">
+    <SectionShell title="Personalisation" description="Profile, appearance, onboarding, and study preferences" actionLabel="Update settings">
       <SettingsManager />
     </SectionShell>
   )

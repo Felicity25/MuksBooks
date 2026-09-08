@@ -4,6 +4,7 @@ import { getUnitMastery } from '@/lib/app-state/service'
 import { setCloudUnitMastery, listCloudUnits } from '@/lib/supabase/documents-service'
 
 export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
 export async function GET() {
   try {

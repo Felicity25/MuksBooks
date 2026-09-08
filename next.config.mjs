@@ -4,9 +4,12 @@ const nextConfig = {
     serverComponentsExternalPackages: ['node-ical']
   },
   webpack: (config, { dev }) => {
-    if (dev) {
-      // Avoid filesystem pack cache writes/reads that can hang on synced folders.
+    if (!process.env.VERCEL) {
+      // Avoid filesystem pack cache races on local synced folders.
       config.cache = false
+    }
+
+    if (dev) {
       config.snapshot = {
         ...(config.snapshot || {}),
         managedPaths: []
