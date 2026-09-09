@@ -38,6 +38,12 @@ for (const country of ['South Africa', 'Australia', 'United Kingdom', 'Canada', 
 	assert.equal(new Set(catalogue.programmes.map((programme) => programme.id)).size, catalogue.programmes.length, `${country} programme IDs must be unique`)
 }
 
+for (const country of ['South Africa', 'Australia', 'United Kingdom', 'Canada', 'United States']) {
+	for (const query of ['Computer Science', 'Engineering', 'Medicine', 'Economics', 'Law', 'Psychology', 'Finance', 'Business', 'Science', 'Education']) {
+		assert.ok(searchUniversityCatalogue(query, { country }).length > 0, `${country} should include a relevant ${query} result`)
+	}
+}
+
 assert.ok(searchUniversityCatalogue('NUS').some((entry) => entry.institution.id === 'nus'), 'NUS alias should resolve')
 assert.ok(searchUniversityCatalogue('law').slice(0, 2).every((entry) => entry.programme.studyAreas.includes('Law') || entry.programme.normalizedName.includes('law')), 'Law search should prioritise programme-relevant results')
 assert.ok(searchUniversityCatalogue('economics', { region: 'England' }).every((entry) => entry.region === 'England'), 'Region filters should constrain results')

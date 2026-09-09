@@ -93,6 +93,57 @@ const areaProgrammes: Record<string, string[]> = {
   'Actuarial Science': ['Actuarial Science'], 'International Relations': ['International Relations'], Politics: ['Politics']
 }
 
+const VERIFIED_BREADTH_PROGRAMMES: Programme[] = [
+  {
+    id: 'uct-bcom-economics-finance', institutionId: 'uct', name: 'Bachelor of Commerce specialising in Economics and Finance', normalizedName: 'economics and finance', aliases: ['Economics', 'Finance'],
+    qualification: 'Bachelor of Commerce', degreeType: 'Bachelor', qualificationLevel: 'Undergraduate', faculty: 'Commerce', studyAreas: ['Economics', 'Finance'], industryAreas: ['Economics', 'Finance'], tags: ['economics', 'finance', 'commerce'],
+    country: 'South Africa', region: 'Western Cape', campus: 'Cape Town', deliveryMode: 'Check official programme page', intakeYears: [2027],
+    officialProgrammeUrl: 'https://commerce.uct.ac.za/applying-commerce/undergraduate-degrees-offered', curriculumRequirements: ['Requirements not yet structured. Confirm for your curriculum on the official site.'], prerequisiteSubjects: [], entryRequirements: ['Check the official programme and admissions pages for current requirements.'],
+    applicationInformation: 'Programme identity verified from the official UCT Commerce undergraduate degree list. Confirm the current curriculum and intake before applying.', active: true,
+    sourceUrl: 'https://commerce.uct.ac.za/applying-commerce/undergraduate-degrees-offered', sourceType: 'official-programme', sourceAcademicYear: '2027', admissionsCycle: '2027', confidenceStatus: 'VERIFIED_OFFICIAL', lastCheckedAt: CHECKED_AT, lastVerifiedAt: CHECKED_AT
+  },
+  {
+    id: 'mcgill-bcom-finance', institutionId: 'mcgill', name: 'Bachelor of Commerce - Major Finance', normalizedName: 'finance', aliases: ['BCom Finance', 'Finance Major'],
+    qualification: 'Bachelor of Commerce', degreeType: 'Bachelor', qualificationLevel: 'Undergraduate', faculty: 'Desautels Faculty of Management', studyAreas: ['Finance'], industryAreas: ['Finance'], tags: ['finance', 'commerce', 'investment'],
+    country: 'Canada', region: 'Quebec', campus: 'Montreal', deliveryMode: 'Check official programme page', intakeYears: [2027],
+    officialProgrammeUrl: 'https://www.mcgill.ca/desautels/programs/bcom/academics/areas-study/finance', curriculumRequirements: ['Requirements not yet structured. Confirm for your curriculum on the official site.'], prerequisiteSubjects: [], entryRequirements: ['Check the official programme and admissions pages for current requirements.'],
+    applicationInformation: 'Programme identity verified from the official McGill Desautels Finance area and programme list.', active: true,
+    sourceUrl: 'https://www.mcgill.ca/desautels/programs/bcom/academics/areas-study/finance', sourceType: 'official-programme', sourceAcademicYear: '2027', admissionsCycle: '2027', confidenceStatus: 'VERIFIED_OFFICIAL', lastCheckedAt: CHECKED_AT, lastVerifiedAt: CHECKED_AT
+  },
+  {
+    id: 'unc-medical-anthropology-ba', institutionId: 'unc', name: 'Medical Anthropology Major, B.A.', normalizedName: 'medical anthropology', aliases: ['Medicine pathway', 'Pre-med health studies'],
+    qualification: 'Bachelor of Arts', degreeType: 'BA', qualificationLevel: 'Undergraduate', faculty: 'Anthropology', studyAreas: ['Medical Anthropology', 'Medicine'], industryAreas: ['Health Sciences'], tags: ['medicine', 'medical anthropology', 'pre-med', 'health'],
+    country: 'United States', region: 'North Carolina', campus: 'Chapel Hill', deliveryMode: 'Check official programme page', intakeYears: [2027],
+    officialProgrammeUrl: 'https://catalog.unc.edu/undergraduate/programs-study/medical-anthropology-major-ba/', curriculumRequirements: ['This is an undergraduate health-related pathway, not a medical degree. Confirm professional-school prerequisites separately.'], prerequisiteSubjects: [], entryRequirements: ['Check the official programme and admissions pages for current requirements.'],
+    applicationInformation: 'Official UNC undergraduate major related to health and medicine. It is not an M.D. or a guarantee of medical-school entry.', active: true,
+    sourceUrl: 'https://catalog.unc.edu/undergraduate/programs-study/medical-anthropology-major-ba/', sourceType: 'official-programme', sourceAcademicYear: '2026-2027', admissionsCycle: '2027', confidenceStatus: 'VERIFIED_OFFICIAL', lastCheckedAt: CHECKED_AT, lastVerifiedAt: CHECKED_AT
+  },
+  {
+    id: 'berkeley-legal-studies-ba', institutionId: 'berkeley', name: 'Legal Studies, B.A.', normalizedName: 'legal studies', aliases: ['Law', 'Legal Studies'],
+    qualification: 'Bachelor of Arts', degreeType: 'BA', qualificationLevel: 'Undergraduate', faculty: 'Jurisprudence and Social Policy', studyAreas: ['Law', 'Legal Studies'], industryAreas: ['Law'], tags: ['law', 'legal studies'],
+    country: 'United States', region: 'California', campus: 'Berkeley', deliveryMode: 'Check official programme page', intakeYears: [2027],
+    officialProgrammeUrl: 'https://jsp-ls.berkeley.edu/undergraduate', curriculumRequirements: ['This is an undergraduate legal studies degree, not a professional J.D. Confirm graduate law-school requirements separately.'], prerequisiteSubjects: [], entryRequirements: ['Check the official programme and admissions pages for current requirements.'],
+    applicationInformation: 'Programme identity verified from UC Berkeley Legal Studies. This is not a professional law degree.', active: true,
+    sourceUrl: 'https://jsp-ls.berkeley.edu/undergraduate', sourceType: 'official-programme', sourceAcademicYear: '2027', admissionsCycle: '2027', confidenceStatus: 'VERIFIED_OFFICIAL', lastCheckedAt: CHECKED_AT, lastVerifiedAt: CHECKED_AT
+  },
+  {
+    id: 'nyu-stern-bs-business-finance', institutionId: 'nyu', name: 'BS in Business - Finance Concentration', normalizedName: 'finance', aliases: ['Finance', 'BS Business Finance'],
+    qualification: 'Bachelor of Science', degreeType: 'BS', qualificationLevel: 'Undergraduate', faculty: 'Stern School of Business', studyAreas: ['Finance', 'Business'], industryAreas: ['Finance'], tags: ['finance', 'business'],
+    country: 'United States', region: 'New York', campus: 'New York', deliveryMode: 'Check official programme page', intakeYears: [2027],
+    officialProgrammeUrl: 'https://www.stern.nyu.edu/programs-admissions/undergraduate/academics/bs-degree-business', curriculumRequirements: ['Requirements not yet structured. Confirm for your curriculum on the official site.'], prerequisiteSubjects: [], entryRequirements: ['Check the official programme and admissions pages for current requirements.'],
+    applicationInformation: 'Official NYU Stern BS in Business with Finance available as a concentration.', active: true,
+    sourceUrl: 'https://www.stern.nyu.edu/programs-admissions/undergraduate/academics/bs-degree-business', sourceType: 'official-programme', sourceAcademicYear: '2027', admissionsCycle: '2027', confidenceStatus: 'VERIFIED_OFFICIAL', lastCheckedAt: CHECKED_AT, lastVerifiedAt: CHECKED_AT
+  },
+  {
+    id: 'michigan-education-empowerment-ba', institutionId: 'umich', name: 'Education for Empowerment, B.A.', normalizedName: 'education for empowerment', aliases: ['Education'],
+    qualification: 'Bachelor of Arts', degreeType: 'BA', qualificationLevel: 'Undergraduate', faculty: 'Marsal Family School of Education', studyAreas: ['Education'], industryAreas: ['Education'], tags: ['education', 'teaching', 'learning'],
+    country: 'United States', region: 'Michigan', campus: 'Ann Arbor', deliveryMode: 'Check official programme page', intakeYears: [2027],
+    officialProgrammeUrl: 'https://marsal.umich.edu/academics-admissions/degrees/undergraduate/education-empowerment', curriculumRequirements: ['Requirements not yet structured. Confirm for your curriculum on the official site.'], prerequisiteSubjects: [], entryRequirements: ['Check the official programme and admissions pages for current requirements.'],
+    applicationInformation: 'Programme identity verified from the official University of Michigan School of Education page.', active: true,
+    sourceUrl: 'https://marsal.umich.edu/academics-admissions/degrees/undergraduate/education-empowerment', sourceType: 'official-programme', sourceAcademicYear: '2027', admissionsCycle: '2027', confidenceStatus: 'VERIFIED_OFFICIAL', lastCheckedAt: CHECKED_AT, lastVerifiedAt: CHECKED_AT
+  }
+]
+
 function titleFor(code: CountryCode, subject: string) {
   if (code === 'US') return ['Engineering', 'Computer Science', 'Software Engineering', 'Data Science', 'Mathematics', 'Statistics', 'Physics', 'Chemistry', 'Biological Sciences', 'Nursing', 'Biomedical Science'].includes(subject) ? `BS ${subject}` : `BA ${subject}`
   if (code === 'GB') return ['Law'].includes(subject) ? 'LLB Law' : ['History', 'Politics', 'Languages', 'International Relations', 'Media and Communications'].includes(subject) ? `BA ${subject}` : `BSc ${subject}`
@@ -176,6 +227,10 @@ export function deepenExistingInstitutions(catalogues: CountryCatalogue[]) {
     const programmes = [...catalogue.programmes]
     for (const candidate of buildDepthProgrammes(institutions)) {
       const duplicate = programmes.some((entry) => entry.id === candidate.id || (entry.institutionId === candidate.institutionId && entry.normalizedName === candidate.normalizedName))
+      if (!duplicate) programmes.push(candidate)
+    }
+    for (const candidate of VERIFIED_BREADTH_PROGRAMMES.filter((entry) => entry.country === catalogue.name)) {
+      const duplicate = programmes.some((entry) => entry.id === candidate.id)
       if (!duplicate) programmes.push(candidate)
     }
     return { ...catalogue, status: 'partial' as const, institutions, programmes }
