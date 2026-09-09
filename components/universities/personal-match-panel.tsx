@@ -22,7 +22,7 @@ export function PersonalMatchPanel({ institution, programme }: { institution: In
   if (!loaded) return <Card className="p-5 text-sm text-slate-600">Loading your comparison…</Card>
 
   const planning = profile?.universityPlanning ?? {
-    citizenships: [], residenceCountry: '', preferredCountries: [], studyAreas: [], priorities: [], englishTests: []
+    citizenships: [], residenceCountry: '', preferredCountries: [], studyAreas: [], priorities: [], englishTests: [], admissionsTests: []
   }
   const match = matchProgramme(programme, profile, planning)
   const applicant = resolveApplicantContext(profile, planning, institution.country)

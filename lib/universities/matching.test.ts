@@ -20,7 +20,8 @@ const profile: LearnerProfile = {
     studyAreas: ['Finance', 'Technology'],
     priorities: ['Course fit'],
     predictedOverall: 40,
-    englishTests: [{ test: 'IELTS', overall: 7 }]
+    englishTests: [{ test: 'IELTS', overall: 7 }],
+    admissionsTests: []
   }
 }
 

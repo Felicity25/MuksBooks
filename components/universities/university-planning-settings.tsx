@@ -1,9 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { getLearnerProfile, saveLearnerProfile, type LearnerEnglishTest, type LearnerProfile } from '@/lib/learner/store'
+import { getLearnerProfile, saveLearnerProfile, type LearnerAdmissionsTest, type LearnerEnglishTest, type LearnerProfile } from '@/lib/learner/store'
 import { INTEREST_AREAS } from '@/lib/universities/discovery'
 
 const COUNTRIES = ['South Africa', 'Australia', 'United Kingdom', 'United States', 'Canada', 'Singapore', 'Malaysia']
@@ -24,9 +25,25 @@ export function UniversityPlanningSettings() {
   const planning = profile.universityPlanning
   const english = planning.englishTests[0]
   const updateEnglish = (updates: Partial<LearnerEnglishTest>) => {
-    const next: LearnerEnglishTest = { ...(english ?? { test: 'IELTS' as const }), ...updates }
+    const now = new Date().toISOString()
+    const next: LearnerEnglishTest = { ...(english ?? { id: `english-${Date.now()}`, test: 'IELTS' as const, createdAt: now }), ...updates, source: 'MANUAL', updatedAt: now }
     setProfile({ ...profile, universityPlanning: { ...planning, englishTests: [next] } })
   }
+  const updateEnglishComponent = (component: string, value: string) => {
+    const components = { ...(english?.components || {}) }
+    if (value) components[component] = Number(value)
+    else delete components[component]
+    updateEnglish({ components })
+  }
+  const updateAdmissionsTest = (index: number, updates: Partial<LearnerAdmissionsTest>) => setProfile({
+    ...profile,
+    universityPlanning: { ...planning, admissionsTests: planning.admissionsTests.map((test, testIndex) => testIndex === index ? { ...test, ...updates, source: 'MANUAL', updatedAt: new Date().toISOString() } : test) }
+  })
+  const addAdmissionsTest = () => {
+    const now = new Date().toISOString()
+    setProfile({ ...profile, universityPlanning: { ...planning, admissionsTests: [...planning.admissionsTests, { id: `test-${Date.now()}`, test: 'SAT', resultStatus: 'BOOKED', source: 'MANUAL', createdAt: now, updatedAt: now }] } })
+  }
+  const removeAdmissionsTest = (index: number) => setProfile({ ...profile, universityPlanning: { ...planning, admissionsTests: planning.admissionsTests.filter((_, testIndex) => testIndex !== index) } })
   const updateList = (field: 'preferredCountries' | 'studyAreas' | 'priorities', value: string) => setProfile({ ...profile, universityPlanning: { ...planning, [field]: toggle(planning[field], value) } })
   const save = () => {
     setProfile(saveLearnerProfile({ ...profile, updatedAt: new Date().toISOString() }))
@@ -40,6 +57,10 @@ export function UniversityPlanningSettings() {
         <label className="text-sm font-medium text-slate-700">Citizenships<input value={planning.citizenships.join(', ')} onChange={(event) => setProfile({ ...profile, universityPlanning: { ...planning, citizenships: event.target.value.split(',').map((item) => item.trim()).filter(Boolean) } })} placeholder="South Africa, Australia" className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2" /><span className="mt-1 block text-xs font-normal text-slate-500">Separate multiple citizenships with commas.</span></label>
         <label className="text-sm font-medium text-slate-700">Country of residence<input value={planning.residenceCountry} onChange={(event) => setProfile({ ...profile, universityPlanning: { ...planning, residenceCountry: event.target.value } })} placeholder="Australia" className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2" /></label>
         <label className="text-sm font-medium text-slate-700">Predicted overall score<input type="number" value={planning.predictedOverall ?? ''} onChange={(event) => setProfile({ ...profile, universityPlanning: { ...planning, predictedOverall: event.target.value ? Number(event.target.value) : undefined } })} placeholder={profile.curriculum === 'IB' ? '40' : 'Optional'} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2" /><span className="mt-1 block text-xs font-normal text-slate-500">Predicted scores inform matching. Target grades remain aspirational.</span></label>
+        <label className="text-sm font-medium text-slate-700">Primary language<input value={profile.primaryLanguage ?? ''} onChange={(event) => setProfile({ ...profile, primaryLanguage: event.target.value })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2" placeholder="Optional" /></label>
+        <label className="text-sm font-medium text-slate-700">Language of instruction<input value={profile.languageOfInstruction ?? ''} onChange={(event) => setProfile({ ...profile, languageOfInstruction: event.target.value })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2" placeholder="e.g. English" /></label>
+        <label className="text-sm font-medium text-slate-700">Years studied in English<input type="number" min="0" max="20" value={profile.yearsStudiedInEnglish ?? ''} onChange={(event) => setProfile({ ...profile, yearsStudiedInEnglish: event.target.value ? Number(event.target.value) : undefined })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2" /></label>
+        <label className="text-sm font-medium text-slate-700">Previous qualifications<input value={(profile.previousQualifications ?? []).join(', ')} onChange={(event) => setProfile({ ...profile, previousQualifications: event.target.value.split(',').map((item) => item.trim()).filter(Boolean) })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2" placeholder="Separate with commas" /></label>
       </div>
       <fieldset><legend className="text-sm font-medium text-slate-700">Preferred study countries</legend><div className="mt-2 flex flex-wrap gap-2">{COUNTRIES.map((country) => <button key={country} type="button" onClick={() => updateList('preferredCountries', country)} aria-pressed={planning.preferredCountries.includes(country)} className={`rounded-full border px-3 py-1.5 text-sm ${planning.preferredCountries.includes(country) ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-300 bg-white text-slate-700'}`}>{country}</button>)}</div></fieldset>
       <fieldset><legend className="text-sm font-medium text-slate-700">Study areas</legend><div className="mt-2 flex max-h-40 flex-wrap gap-2 overflow-y-auto">{STUDY_AREAS.map((area) => <button key={area} type="button" onClick={() => updateList('studyAreas', area)} aria-pressed={planning.studyAreas.includes(area)} className={`rounded-full border px-3 py-1.5 text-sm ${planning.studyAreas.includes(area) ? 'border-sky-700 bg-sky-700 text-white' : 'border-slate-300 bg-white text-slate-700'}`}>{area}</button>)}</div></fieldset>
@@ -49,6 +70,10 @@ export function UniversityPlanningSettings() {
         <label className="text-sm font-medium text-slate-700">Overall score<input type="number" step="0.5" value={english?.overall ?? ''} onChange={(event) => updateEnglish({ overall: event.target.value ? Number(event.target.value) : undefined })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2" /></label>
         <label className="text-sm font-medium text-slate-700">Test date<input type="date" value={english?.testDate ?? ''} onChange={(event) => updateEnglish({ testDate: event.target.value })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2" /></label>
       </div>
+      {english?.test === 'TOEFL' ? <label className="block max-w-xs text-sm font-medium text-slate-700">TOEFL score scale<select value={english.scoreScale ?? ''} onChange={(event) => updateEnglish({ scoreScale: event.target.value || undefined })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2"><option value="">Select score scale</option><option value="1-120">1-120 (tests before 21 Jan 2026)</option><option value="1-6">1-6 (tests from 21 Jan 2026)</option></select></label> : null}
+      {english?.test === 'CAMBRIDGE' ? <label className="block max-w-xs text-sm font-medium text-slate-700">Cambridge qualification<input value={english.qualification ?? ''} onChange={(event) => updateEnglish({ qualification: event.target.value })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2" placeholder="e.g. C1 Advanced" /></label> : null}
+      <fieldset><legend className="text-sm font-medium text-slate-700">English component scores</legend><div className="mt-2 grid gap-3 sm:grid-cols-4">{['listening', 'reading', 'speaking', 'writing'].map((component) => <label key={component} className="text-xs font-medium capitalize text-slate-600">{component}<input type="number" step="0.5" value={english?.components?.[component] ?? ''} onChange={(event) => updateEnglishComponent(component, event.target.value)} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" /></label>)}</div></fieldset>
+      <fieldset><div className="flex flex-wrap items-center justify-between gap-3"><div><legend className="text-sm font-medium text-slate-700">Admissions tests</legend><p className="mt-1 text-xs text-slate-500">Record booked sittings and received results. A booking is not treated as a qualifying score.</p></div><Button type="button" size="sm" variant="secondary" onClick={addAdmissionsTest}><Plus className="mr-2 h-4 w-4" />Add test</Button></div><div className="mt-3 space-y-3">{planning.admissionsTests.map((test, index) => <div key={test.id || `${test.test}-${index}`} className="grid gap-3 border-t border-slate-200 pt-3 sm:grid-cols-[1fr_1fr_1fr_1fr_auto]"><label className="text-xs font-medium text-slate-600">Test<select value={test.test} onChange={(event) => updateAdmissionsTest(index, { test: event.target.value as LearnerAdmissionsTest['test'] })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"><option value="SAT">SAT</option><option value="ACT">ACT</option><option value="NBT_AQL">NBT AQL</option><option value="NBT_MAT">NBT MAT</option><option value="UCAT">UCAT</option><option value="UCAT_ANZ">UCAT ANZ</option><option value="GAMSAT">GAMSAT</option><option value="LNAT">LNAT</option><option value="TMUA">TMUA</option><option value="ESAT">ESAT</option><option value="ISAT">ISAT</option></select></label><label className="text-xs font-medium text-slate-600">Status<select value={test.resultStatus ?? 'BOOKED'} onChange={(event) => updateAdmissionsTest(index, { resultStatus: event.target.value as LearnerAdmissionsTest['resultStatus'] })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"><option value="BOOKED">Booked</option><option value="AWAITING_RESULT">Awaiting result</option><option value="RESULT_RECEIVED">Result received</option></select></label><label className="text-xs font-medium text-slate-600">Score<input type="number" step="0.5" value={test.score ?? ''} onChange={(event) => updateAdmissionsTest(index, { score: event.target.value ? Number(event.target.value) : undefined })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" /></label><label className="text-xs font-medium text-slate-600">Test date<input type="date" value={test.testDate ?? ''} onChange={(event) => updateAdmissionsTest(index, { testDate: event.target.value })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" /></label><Button type="button" size="sm" variant="ghost" className="h-10 w-10 self-end px-0" onClick={() => removeAdmissionsTest(index)} title="Remove test"><Trash2 className="h-4 w-4" /><span className="sr-only">Remove test</span></Button></div>)}</div></fieldset>
       <div className="flex items-center gap-3"><Button type="button" onClick={save}>Save university planning</Button>{message ? <p role="status" className="text-sm font-medium text-emerald-700">{message}</p> : null}</div>
     </Card>
   )

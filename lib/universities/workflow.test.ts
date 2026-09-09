@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import { createApplication, universityStorage } from './storage.ts'
 import { getModeAwareHomepageLayout, normalizeUserSettings } from '../user-settings.ts'
-import { APPLICATION_STATUSES, addOffer, createUniversityApplication, deadlinesForApplication, describeOfferCondition, describeResultsTiming, formatDeadlineDate, matchResultsEvent, normalizeUniversityApplication, plannerPayloadForTask, reconcileDeadline, syncDeadlineTasks } from './application-domain.ts'
-import type { AdmissionsDeadline, CurriculumResultsEvent, UniversityOffer } from './types.ts'
+import { APPLICATION_STATUSES, addOffer, createAdmissionsTestTasks, createUniversityApplication, deadlinesForApplication, describeOfferCondition, describeResultsTiming, formatDeadlineDate, matchResultsEvent, normalizeUniversityApplication, plannerPayloadForTask, reconcileDeadline, syncDeadlineTasks, syncTestSessionTasks } from './application-domain.ts'
+import type { AdmissionsDeadline, AdmissionsTestSession, CurriculumResultsEvent, UniversityOffer } from './types.ts'
 
 const values = new Map<string, string>()
 Object.defineProperty(globalThis, 'window', {
@@ -70,5 +70,23 @@ const offer: UniversityOffer = { id: 'offer-1', applicationId: transfer.id, offe
 assert.equal(addOffer(transfer, offer).status, 'CONDITIONAL_OFFER')
 const plannerPayload = plannerPayloadForTask(transfer, { id: 'task-1', title: 'Upload transcript', dueAt: '2026-09-20', completed: false, createdAt: '2026-09-09', updatedAt: '2026-09-09' })
 assert.equal(plannerPayload.taskType, 'university_application')
+
+const tmuaSession: AdmissionsTestSession = { id: 'tmua-test', test: 'TMUA', label: 'TMUA window', registrationDeadline: '2026-09-28T18:00:00+01:00', testStartsAt: '2026-10-12T00:00:00+01:00', testEndsAt: '2026-10-16T23:59:00+01:00', status: 'BOOKING_OPEN', bookingUrl: 'https://esat-tmua.ac.uk/register/', source: { title: 'Official TMUA dates', url: 'https://esat-tmua.ac.uk/', sourceType: 'official-test-provider', lastVerifiedAt: '2026-09-09', admissionsCycle: '2027 entry' } }
+const testTasks = createAdmissionsTestTasks('TMUA', 'TMUA', tmuaSession, new Date('2026-09-09T10:00:00Z'))
+assert.deepEqual(testTasks.map((task) => task.title), ['Register for TMUA', 'Take TMUA', 'Submit TMUA results'])
+assert.equal(testTasks[0].dueAt, '2026-09-28T18:00:00+01:00', 'Provider timezone offsets must survive task creation')
+assert.equal(testTasks[0].sourceTestMilestone, 'REGISTRATION_DEADLINE')
+assert.equal(testTasks[1].sourceTestMilestone, 'TEST_DATE')
+assert.equal(testTasks[2].dueAt, undefined, 'A score-submission due date must not be invented')
+const testTaskApplication = { ...transfer, tasks: testTasks }
+universityStorage.saveApplications([testTaskApplication])
+assert.equal(universityStorage.getApplications()[0].tasks[0].sourceTestSessionId, 'tmua-test', 'Test task metadata must survive guest persistence')
+const revisedTmua = { ...tmuaSession, registrationDeadline: '2026-09-29T18:00:00+01:00', testStartsAt: '2026-10-13T00:00:00+01:00' }
+const testSync = syncTestSessionTasks(testTaskApplication, [revisedTmua], new Date('2026-09-10T00:00:00Z'))
+assert.deepEqual(testSync.changedTaskIds, [testTasks[0].id, testTasks[1].id])
+assert.equal(testSync.application.tasks[0].dueAt, revisedTmua.registrationDeadline)
+assert.equal(testSync.application.tasks[1].dueAt, revisedTmua.testStartsAt)
+assert.match(testSync.application.timeline.at(-1)?.description ?? '', /Admissions test date updated/)
+assert.match(plannerPayloadForTask(testTaskApplication, testTasks[0]).description, /Test: TMUA/, 'Planner payload must preserve test identity')
 
 console.log('University workflow tests passed')

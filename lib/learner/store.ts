@@ -73,10 +73,30 @@ export interface LearnerApplication {
 }
 
 export interface LearnerEnglishTest {
+  id?: string
   test: 'IELTS' | 'TOEFL' | 'PTE' | 'CAMBRIDGE'
   overall?: number
   components?: Record<string, number>
   testDate?: string
+  scoreScale?: string
+  qualification?: string
+  source?: 'MANUAL' | 'DOCUMENT_EXTRACTION'
+  linkedUploadId?: string
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface LearnerAdmissionsTest {
+  id?: string
+  test: 'SAT' | 'ACT' | 'NBT_AQL' | 'NBT_MAT' | 'UCAT' | 'UCAT_ANZ' | 'GAMSAT' | 'LNAT' | 'TMUA' | 'ESAT' | 'ISAT'
+  score?: number
+  components?: Record<string, number>
+  testDate?: string
+  resultStatus?: 'BOOKED' | 'AWAITING_RESULT' | 'RESULT_RECEIVED'
+  source?: 'MANUAL' | 'DOCUMENT_EXTRACTION'
+  linkedUploadId?: string
+  createdAt?: string
+  updatedAt?: string
 }
 
 export interface UniversityPlanningProfile {
@@ -87,6 +107,7 @@ export interface UniversityPlanningProfile {
   priorities: string[]
   predictedOverall?: number
   englishTests: LearnerEnglishTest[]
+  admissionsTests: LearnerAdmissionsTest[]
 }
 
 export interface LearnerProfile {
@@ -96,6 +117,10 @@ export interface LearnerProfile {
   curriculumLabel: string
   yearLevel: string
   expectedGraduationYear: string
+  primaryLanguage?: string
+  languageOfInstruction?: string
+  yearsStudiedInEnglish?: number
+  previousQualifications?: string[]
   academicGoals: string[]
   universityPlanningPreferences: string[]
   universityPlanning: UniversityPlanningProfile
@@ -119,6 +144,9 @@ export const DEFAULT_LEARNER_PROFILE: LearnerProfile = {
   curriculumLabel: 'IB',
   yearLevel: '',
   expectedGraduationYear: '',
+  primaryLanguage: '',
+  languageOfInstruction: '',
+  previousQualifications: [],
   academicGoals: [],
   universityPlanningPreferences: [],
   universityPlanning: {
@@ -127,7 +155,8 @@ export const DEFAULT_LEARNER_PROFILE: LearnerProfile = {
     preferredCountries: [],
     studyAreas: [],
     priorities: [],
-    englishTests: []
+    englishTests: [],
+    admissionsTests: []
   },
   learningPreferences: [],
   onboardingCompleted: false,
@@ -199,6 +228,10 @@ export function normalizeLearnerProfile(input: unknown): LearnerProfile {
     curriculumLabel: source.curriculumLabel ? String(source.curriculumLabel) : (source.curriculum ? String(source.curriculum) : DEFAULT_LEARNER_PROFILE.curriculumLabel),
     yearLevel: source.yearLevel ? String(source.yearLevel) : '',
     expectedGraduationYear: source.expectedGraduationYear ? String(source.expectedGraduationYear) : '',
+    primaryLanguage: typeof source.primaryLanguage === 'string' ? source.primaryLanguage : '',
+    languageOfInstruction: typeof source.languageOfInstruction === 'string' ? source.languageOfInstruction : '',
+    yearsStudiedInEnglish: typeof source.yearsStudiedInEnglish === 'number' ? source.yearsStudiedInEnglish : undefined,
+    previousQualifications: Array.isArray(source.previousQualifications) ? source.previousQualifications.map(String).filter(Boolean) : [],
     academicGoals: Array.isArray(source.academicGoals) ? source.academicGoals.map((goal) => String(goal)).filter(Boolean) : [],
     universityPlanningPreferences: Array.isArray(source.universityPlanningPreferences) ? source.universityPlanningPreferences.map((item) => String(item)).filter(Boolean) : [],
     universityPlanning: {
@@ -211,10 +244,34 @@ export function normalizeLearnerProfile(input: unknown): LearnerProfile {
       englishTests: Array.isArray(planning.englishTests) ? planning.englishTests.flatMap((entry) => {
         if (!entry || typeof entry !== 'object' || !['IELTS', 'TOEFL', 'PTE', 'CAMBRIDGE'].includes(String(entry.test))) return []
         return [{
+          id: typeof entry.id === 'string' ? entry.id : undefined,
           test: entry.test as LearnerEnglishTest['test'],
           overall: typeof entry.overall === 'number' ? entry.overall : undefined,
           components: entry.components && typeof entry.components === 'object' ? entry.components : undefined,
-          testDate: typeof entry.testDate === 'string' ? entry.testDate : undefined
+          testDate: typeof entry.testDate === 'string' ? entry.testDate : undefined,
+          scoreScale: typeof entry.scoreScale === 'string' ? entry.scoreScale : undefined,
+          qualification: typeof entry.qualification === 'string' ? entry.qualification : undefined,
+          source: ['MANUAL', 'DOCUMENT_EXTRACTION'].includes(String(entry.source)) ? entry.source as LearnerEnglishTest['source'] : undefined,
+          linkedUploadId: typeof entry.linkedUploadId === 'string' ? entry.linkedUploadId : undefined,
+          createdAt: typeof entry.createdAt === 'string' ? entry.createdAt : undefined,
+          updatedAt: typeof entry.updatedAt === 'string' ? entry.updatedAt : undefined
+        }]
+      }) : [],
+      admissionsTests: Array.isArray(planning.admissionsTests) ? planning.admissionsTests.flatMap((entry) => {
+        if (!entry || typeof entry !== 'object' || !['SAT', 'ACT', 'NBT_AQL', 'NBT_MAT', 'UCAT', 'UCAT_ANZ', 'GAMSAT', 'LNAT', 'TMUA', 'ESAT', 'ISAT'].includes(String(entry.test))) return []
+        return [{
+          id: typeof entry.id === 'string' ? entry.id : undefined,
+          test: entry.test as LearnerAdmissionsTest['test'],
+          score: typeof entry.score === 'number' ? entry.score : undefined,
+          components: entry.components && typeof entry.components === 'object' ? entry.components : undefined,
+          testDate: typeof entry.testDate === 'string' ? entry.testDate : undefined,
+          resultStatus: ['BOOKED', 'AWAITING_RESULT', 'RESULT_RECEIVED'].includes(String(entry.resultStatus))
+            ? entry.resultStatus as LearnerAdmissionsTest['resultStatus']
+            : undefined,
+          source: ['MANUAL', 'DOCUMENT_EXTRACTION'].includes(String(entry.source)) ? entry.source as LearnerAdmissionsTest['source'] : undefined,
+          linkedUploadId: typeof entry.linkedUploadId === 'string' ? entry.linkedUploadId : undefined,
+          createdAt: typeof entry.createdAt === 'string' ? entry.createdAt : undefined,
+          updatedAt: typeof entry.updatedAt === 'string' ? entry.updatedAt : undefined
         }]
       }) : []
     },

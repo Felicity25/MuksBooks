@@ -95,6 +95,14 @@ const areaProgrammes: Record<string, string[]> = {
 
 const VERIFIED_BREADTH_PROGRAMMES: Programme[] = [
   {
+    id: 'unsw-medicine', institutionId: 'unsw', name: 'Bachelor of Medical Studies / Doctor of Medicine', normalizedName: 'medicine', aliases: ['Medicine', 'BMed MD'],
+    qualification: 'Bachelor of Medical Studies / Doctor of Medicine', degreeType: 'Combined undergraduate/postgraduate', qualificationLevel: 'Undergraduate entry', faculty: 'Medicine & Health', studyAreas: ['Medicine', 'Health Sciences'], industryAreas: ['Medicine'], tags: ['medicine', 'health', 'ucat anz'],
+    country: 'Australia', region: 'New South Wales', campus: 'Sydney', deliveryMode: 'On campus', intakeYears: [2027],
+    officialProgrammeUrl: 'https://www.unsw.edu.au/study/undergraduate/bachelor-of-medical-studies-doctor-of-medicine', admissionsUrl: 'https://www.unsw.edu.au/medicine-health/study-with-us/undergraduate/applying-to-medicine', curriculumRequirements: ['Academic selection requirements vary by applicant route and qualification. Confirm the exact route on the official page.'], prerequisiteSubjects: [], entryRequirements: ['Domestic general-entry applicants complete UCAT ANZ and may be invited to interview based on the published selection process.'], standardisedTests: ['UCAT ANZ for domestic general entry'],
+    applicationInformation: 'The indexed testing rule is scoped to domestic general entry for 2027. International and other pathways must use their own official selection instructions.', active: true,
+    sourceUrl: 'https://www.unsw.edu.au/medicine-health/study-with-us/undergraduate/applying-to-medicine', sourceType: 'official-programme', sourceAcademicYear: '2027', admissionsCycle: '2027', confidenceStatus: 'VERIFIED_OFFICIAL', lastCheckedAt: CHECKED_AT, lastVerifiedAt: CHECKED_AT
+  },
+  {
     id: 'uct-bcom-economics-finance', institutionId: 'uct', name: 'Bachelor of Commerce specialising in Economics and Finance', normalizedName: 'economics and finance', aliases: ['Economics', 'Finance'],
     qualification: 'Bachelor of Commerce', degreeType: 'Bachelor', qualificationLevel: 'Undergraduate', faculty: 'Commerce', studyAreas: ['Economics', 'Finance'], industryAreas: ['Economics', 'Finance'], tags: ['economics', 'finance', 'commerce'],
     country: 'South Africa', region: 'Western Cape', campus: 'Cape Town', deliveryMode: 'Check official programme page', intakeYears: [2027],

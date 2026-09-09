@@ -3,12 +3,187 @@ import type { LearnerCurriculumId } from '@/lib/learner/store'
 export type CountryCode = 'ZA' | 'AU' | 'GB' | 'US' | 'CA' | 'SG' | 'MY' | 'ID' | 'TH' | 'VN' | 'PH'
 export type InstitutionType = 'University' | 'University of Technology' | 'College' | 'Institute' | 'Polytechnic' | 'Conservatory' | 'Other Higher Education Institution'
 export type CatalogueStatus = 'building' | 'partial' | 'substantial' | 'verified'
-export type SourceType = 'official-programme' | 'official-course-finder' | 'official-prospectus' | 'official-admissions' | 'official-institution' | 'official-application-portal' | 'official-curriculum' | 'government-register'
+export type SourceType = 'official-programme' | 'official-course-finder' | 'official-prospectus' | 'official-admissions' | 'official-institution' | 'official-application-portal' | 'official-curriculum' | 'official-test-provider' | 'government-register'
 export type ConfidenceStatus = 'VERIFIED_OFFICIAL' | 'AUTO_EXTRACTED_OFFICIAL' | 'NEEDS_REVIEW' | 'STALE' | 'CONFLICTING' | 'UNKNOWN'
 export type CoverageLevel = 'none' | 'building' | 'partial' | 'substantial' | 'near-complete'
 export type ApplicantType = 'DOMESTIC' | 'INTERNATIONAL' | 'UNCERTAIN'
 export type MatchState = 'STRONG_MATCH' | 'POTENTIAL_MATCH' | 'REACH' | 'PREREQUISITE_GAP' | 'ENGLISH_CHECK' | 'MISSING_INFORMATION' | 'REQUIREMENTS_NOT_STRUCTURED'
 export type EnglishTest = 'IELTS' | 'TOEFL' | 'PTE' | 'CAMBRIDGE'
+export type AdmissionsTestId = 'SAT' | 'ACT' | 'NBT_AQL' | 'NBT_MAT' | 'UCAT' | 'UCAT_ANZ' | 'GAMSAT' | 'LNAT' | 'TMUA' | 'ESAT' | 'ISAT'
+export type AdmissionsTestRequirementStatus = 'REQUIRED' | 'RECOMMENDED' | 'OPTIONAL' | 'TEST_OPTIONAL' | 'POSSIBLE_EXEMPTION' | 'NOT_REQUIRED' | 'UNKNOWN'
+export type AdmissionsRequirementState = 'SATISFIED_APPEARS' | 'LIKELY_SATISFIED' | 'ACTION_NEEDED' | 'ACTION_REQUIRED' | 'TEST_REQUIRED' | 'TEST_RECOMMENDED' | 'POSSIBLE_EXEMPTION' | 'MISSING_INFORMATION' | 'OPTIONAL' | 'NOT_REQUIRED' | 'NOT_APPLICABLE' | 'NEEDS_VERIFICATION' | 'CONFLICTING_INFORMATION' | 'UNKNOWN'
+export type AdmissionsReadinessState = 'READY_APPEARS' | 'ACTION_NEEDED' | 'MISSING_INFORMATION' | 'UNKNOWN'
+export type AdmissionsRequirementCategory = 'ACADEMIC' | 'ENGLISH' | 'PREREQUISITE' | 'ADMISSIONS_TEST' | 'INTERVIEW' | 'PORTFOLIO' | 'DOCUMENT' | 'OTHER'
+
+export interface OfficialAdmissionsSource {
+  url: string
+  sourceType: SourceType
+  title: string
+  lastVerifiedAt: string
+  admissionsCycle?: string
+}
+
+export interface EnglishSubjectExemptionRule {
+  curriculum: LearnerCurriculumId
+  subjectNames: string[]
+  levels?: string[]
+  minimumNumericGrade?: number
+  acceptedLetterGrades?: string[]
+  source: OfficialAdmissionsSource
+}
+
+export interface EnglishInstructionRule {
+  language: string
+  minimumYears: number
+  eligibleCountries?: string[]
+  recognizedSchoolRequired?: boolean
+  source: OfficialAdmissionsSource
+}
+
+export interface EnglishScoreRule {
+  test: EnglishTest
+  minimumOverall: number
+  minimumComponents?: Record<string, number>
+  validOnOrAfter?: string
+  validOnOrBefore?: string
+  scoreScale?: string
+  source: OfficialAdmissionsSource
+}
+
+export interface StructuredEnglishRequirement {
+  id: string
+  label: string
+  exemptions: EnglishSubjectExemptionRule[]
+  languageOfInstructionRules?: EnglishInstructionRule[]
+  acceptedTests: EnglishScoreRule[]
+  source: OfficialAdmissionsSource
+}
+
+export interface AdmissionsTestRequirement {
+  id: string
+  label: string
+  acceptedTests: AdmissionsTestId[]
+  requiredness: AdmissionsTestRequirementStatus
+  applicantRoutes?: ApplicantRoute[]
+  notes?: string
+  source: OfficialAdmissionsSource
+}
+
+export interface AdditionalAdmissionsRequirement {
+  id: string
+  category: Exclude<AdmissionsRequirementCategory, 'ACADEMIC' | 'ENGLISH' | 'PREREQUISITE' | 'ADMISSIONS_TEST'>
+  label: string
+  requiredness: 'REQUIRED' | 'OPTIONAL' | 'CONDITIONAL'
+  applicantRoutes?: ApplicantRoute[]
+  notes?: string
+  action?: string
+  source: OfficialAdmissionsSource
+}
+
+export interface AdmissionsPolicy {
+  id: string
+  institutionId: string
+  programmeIds?: string[]
+  intakeYears: number[]
+  admissionsCycle: string
+  applicantRoutes?: ApplicantRoute[]
+  applicantTypes?: ApplicantType[]
+  english?: StructuredEnglishRequirement
+  admissionsTests?: AdmissionsTestRequirement[]
+  additionalRequirements?: AdditionalAdmissionsRequirement[]
+  source: OfficialAdmissionsSource
+  confidenceStatus: Extract<ConfidenceStatus, 'VERIFIED_OFFICIAL' | 'STALE' | 'CONFLICTING'>
+  coverageLevel: 'PARTIAL' | 'COMPLETE'
+  changeHistory?: FreshDataChange[]
+}
+
+export interface AdmissionsReadinessCheck {
+  id: string
+  category: AdmissionsRequirementCategory
+  label: string
+  state: AdmissionsRequirementState
+  explanation: string
+  actions: string[]
+  source?: OfficialAdmissionsSource
+  evidence?: string[]
+}
+
+export interface AdmissionsReadinessResult {
+  state: AdmissionsReadinessState
+  institutionId: string
+  programmeId: string
+  intakeYear: number
+  admissionsCycle?: string
+  checks: AdmissionsReadinessCheck[]
+  nextActions: string[]
+  coverage: ConfidenceStatus
+  coverageByCategory: {
+    academic: 'VERIFIED' | 'NOT_INDEXED'
+    english: 'VERIFIED' | 'NOT_INDEXED'
+    testRequirement: 'VERIFIED' | 'NOT_INDEXED'
+    testDate: 'VERIFIED' | 'NOT_INDEXED'
+    admissionsReadiness: 'VERIFIED' | 'PARTIAL' | 'NOT_INDEXED'
+  }
+}
+
+export interface AdmissionsTestFee {
+  id: string
+  test: AdmissionsTestId
+  amount: number
+  currency: string
+  regionLabel: string
+  countryCodes?: CountryCode[]
+  validFrom: string
+  validUntil: string
+  source: OfficialAdmissionsSource
+  changeHistory?: FreshDataChange[]
+}
+
+export interface AdmissionsTestSession {
+  id: string
+  test: AdmissionsTestId
+  label: string
+  countryCodes?: CountryCode[]
+  region?: string
+  registrationOpensAt?: string
+  bookingOpensAt?: string
+  registrationDeadline: string
+  lateRegistrationDeadline?: string
+  testStartsAt: string
+  testEndsAt: string
+  scoreReleaseAt?: string
+  deliveryModes?: Array<'TEST_CENTRE' | 'ONLINE' | 'HOME'>
+  status: 'UPCOMING' | 'BOOKING_OPEN' | 'BOOKING_CLOSED' | 'COMPLETED'
+  bookingUrl: string
+  source: OfficialAdmissionsSource
+  changeHistory?: FreshDataChange[]
+}
+
+export interface FreshDataChange {
+  detectedAt: string
+  previousValue: string
+  currentValue: string
+  sourceUrl: string
+}
+
+export interface AdmissionsTestDefinition {
+  id: AdmissionsTestId | EnglishTest
+  name: string
+  provider: string
+  officialUrl: string
+  bookingUrl: string
+  bookingNote?: string
+  summary?: string
+  components?: string[]
+  preparationUrl?: string
+  supportedCountries?: CountryCode[]
+  testType: 'ENGLISH_LANGUAGE' | 'UNDERGRADUATE_ADMISSIONS' | 'MEDICAL_ADMISSIONS' | 'LAW_ADMISSIONS' | 'QUANTITATIVE_ADMISSIONS' | 'OTHER'
+  scoreScale?: string
+  sourceUrl: string
+  lastCheckedAt: string
+  lastVerifiedAt?: string
+  scoreValidityMonths?: number
+}
 
 export interface AcademicRequirement {
   curriculum: LearnerCurriculumId
@@ -219,6 +394,10 @@ export interface ApplicationTask {
   completed: boolean
   plannerTaskId?: string
   sourceDeadlineId?: string
+  sourceTestId?: AdmissionsTestId
+  sourceRequirementId?: string
+  sourceTestSessionId?: string
+  sourceTestMilestone?: 'REGISTRATION_DEADLINE' | 'TEST_DATE' | 'SCORE_SUBMISSION_DEADLINE'
   createdAt: string
   updatedAt: string
 }
@@ -280,7 +459,7 @@ export interface UniversityApplication {
   updatedAt: string
 }
 
-export type FreshUniversityDataKind = 'PROGRAMMES' | 'APPLICATION_DEADLINES' | 'RESULT_RELEASE_DATES' | 'ADMISSIONS_REQUIREMENTS' | 'TEST_REQUIREMENTS' | 'TEST_DATES' | 'SCHOLARSHIPS' | 'SCHOLARSHIP_DEADLINES' | 'FEES'
+export type FreshUniversityDataKind = 'PROGRAMMES' | 'APPLICATION_DEADLINES' | 'RESULT_RELEASE_DATES' | 'ADMISSIONS_REQUIREMENTS' | 'ENGLISH_REQUIREMENTS' | 'TEST_REQUIREMENTS' | 'TEST_DATES' | 'TEST_FEES' | 'TEST_BOOKING' | 'INTERVIEW_REQUIREMENTS' | 'PORTFOLIO_REQUIREMENTS' | 'ENGLISH_REQUIREMENT' | 'ENGLISH_EXEMPTION' | 'ADMISSIONS_TEST_REQUIREMENT' | 'TEST_MINIMUM_SCORE' | 'TEST_REGISTRATION_DATE' | 'TEST_DATE' | 'TEST_WINDOW' | 'TEST_FEE' | 'TEST_BOOKING_URL' | 'TEST_SCORE_SUBMISSION_DEADLINE' | 'INTERVIEW_REQUIREMENT' | 'PORTFOLIO_REQUIREMENT' | 'SCHOLARSHIPS' | 'SCHOLARSHIP_DEADLINES' | 'FEES'
 
 export interface FreshUniversitySource {
   id: string

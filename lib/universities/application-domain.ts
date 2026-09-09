@@ -1,5 +1,7 @@
 import type {
   AdmissionsDeadline,
+  AdmissionsTestId,
+  AdmissionsTestSession,
   ApplicantRoute,
   ApplicationDocument,
   ApplicationStatus,
@@ -169,6 +171,38 @@ export function syncDeadlineTasks(application: UniversityApplication, deadlines:
   }
 }
 
+export function createAdmissionsTestTasks(testId: AdmissionsTestId, testName: string, session: AdmissionsTestSession, now = new Date()): ApplicationTask[] {
+  const timestamp = now.toISOString()
+  return [
+    { id: `test-register-${now.getTime()}`, title: `Register for ${testName}`, dueAt: session.registrationDeadline, completed: false, sourceTestId: testId, sourceTestSessionId: session.id, sourceTestMilestone: 'REGISTRATION_DEADLINE', createdAt: timestamp, updatedAt: timestamp },
+    { id: `test-sit-${now.getTime()}`, title: `Take ${testName}`, dueAt: session.testStartsAt, completed: false, sourceTestId: testId, sourceTestSessionId: session.id, sourceTestMilestone: 'TEST_DATE', createdAt: timestamp, updatedAt: timestamp },
+    { id: `test-submit-${now.getTime()}`, title: `Submit ${testName} results`, completed: false, sourceTestId: testId, sourceRequirementId: `test-results-${testId}`, createdAt: timestamp, updatedAt: timestamp }
+  ]
+}
+
+export function syncTestSessionTasks(application: UniversityApplication, sessions: AdmissionsTestSession[], now = new Date()) {
+  const sessionMap = new Map(sessions.map((session) => [session.id, session]))
+  const changedTaskIds: string[] = []
+  const tasks = application.tasks.map((task) => {
+    const session = task.sourceTestSessionId ? sessionMap.get(task.sourceTestSessionId) : undefined
+    if (!session || !task.sourceTestMilestone) return task
+    const dueAt = task.sourceTestMilestone === 'REGISTRATION_DEADLINE' ? session.registrationDeadline : task.sourceTestMilestone === 'TEST_DATE' ? session.testStartsAt : task.dueAt
+    if (!dueAt || dueAt === task.dueAt) return task
+    changedTaskIds.push(task.id)
+    return { ...task, dueAt, updatedAt: now.toISOString() }
+  })
+  if (!changedTaskIds.length) return { application, changedTaskIds }
+  return {
+    application: {
+      ...application,
+      tasks,
+      timeline: [...application.timeline, { id: `test-date-update-${now.getTime()}`, type: 'TEST_DATE_UPDATED', occurredAt: now.toISOString(), description: `Admissions test date updated. ${changedTaskIds.length} linked task${changedTaskIds.length === 1 ? '' : 's'} changed.` }],
+      updatedAt: now.toISOString()
+    },
+    changedTaskIds
+  }
+}
+
 export function matchResultsEvent(curriculum: string, examSession: string, examYear: number, events: CurriculumResultsEvent[]) {
   return events.find((event) => event.curriculum === curriculum && event.examSession === examSession && event.examYear === examYear && event.eventType === 'RESULTS_RELEASE')
 }
@@ -205,7 +239,7 @@ export function addOffer(application: UniversityApplication, offer: UniversityOf
 export function plannerPayloadForTask(application: UniversityApplication, task: ApplicationTask) {
   return {
     title: task.title,
-    description: `University application: ${application.institutionId} / ${application.programmeId}`,
+    description: `University application: ${application.institutionId} / ${application.programmeId}${task.sourceTestId ? ` • Test: ${task.sourceTestId}` : ''}`,
     taskType: 'university_application',
     priority: 'high',
     plannedDate: task.dueAt,

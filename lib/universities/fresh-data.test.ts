@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict'
+import { ADMISSIONS_POLICIES, ADMISSIONS_TEST_FEES, ADMISSIONS_TEST_SESSIONS } from './admissions-data.ts'
 import { ADMISSIONS_DEADLINES, CURRICULUM_RESULTS_EVENTS, OFFICIAL_UNIVERSITY_SOURCES } from './fresh-data.ts'
-import { FreshUniversityDataService } from './fresh-data-service.ts'
+import { FRESH_SOURCE_PRIORITY, FreshUniversityDataService } from './fresh-data-service.ts'
 
 assert.ok(OFFICIAL_UNIVERSITY_SOURCES.length >= 100, 'Priority institutions should have refreshable official source records')
+assert.ok(OFFICIAL_UNIVERSITY_SOURCES.some((item) => item.kind === 'ENGLISH_REQUIREMENTS' && item.institutionId === 'ubc'), 'Verified English policies should participate in refresh monitoring')
+assert.ok(OFFICIAL_UNIVERSITY_SOURCES.some((item) => item.kind === 'TEST_DATES'), 'Official test dates should participate in refresh monitoring')
+assert.ok(OFFICIAL_UNIVERSITY_SOURCES.some((item) => item.kind === 'TEST_FEES'), 'Official test fees should participate in refresh monitoring')
 assert.ok(ADMISSIONS_DEADLINES.some((item) => item.institutionId === 'oxford' && item.dueAt.startsWith('2026-10-15')), 'Oxford 2027 UCAS deadline should be structured')
 assert.ok(ADMISSIONS_DEADLINES.some((item) => item.institutionId === 'manchester' && item.dueAt.startsWith('2027-01-13')), 'Most-course 2027 UCAS deadline should be structured')
 assert.equal(CURRICULUM_RESULTS_EVENTS.length, 0, 'Future result dates must not be guessed when the official source does not publish an exact date')
@@ -24,11 +28,44 @@ const refreshed = await service.refreshSource(source, async () => ({
 	status: 200,
 	url: source.url,
 	headers: { get: () => 'text/html; charset=utf-8' },
-	text: async () => '<html><head><title>Official dates</title><link rel="canonical" href="https://www.ucas.com/dates" /></head><body><main>Applications close on the published date.</main></body></html>'
+	text: async () => '<html><head><title>Official dates</title><link rel="canonical" href="https://www.ucas.com/dates" /></head><body><main>Applications are required by 15 October 2026. The fee is £70. An interview and portfolio may be required. <a href="https://apply.example.edu/register">Register</a></main></body></html>'
 }), '2026-09-10T00:00:00Z')
 assert.equal(refreshed.candidate?.pageTitle, 'Official dates')
 assert.equal(refreshed.candidate?.canonicalUrl, 'https://www.ucas.com/dates')
 assert.equal(refreshed.candidate?.confidenceStatus, 'NEEDS_REVIEW', 'Extracted claims must never become verified automatically')
+assert.deepEqual(refreshed.candidate?.signals.dates, ['15 October 2026'])
+assert.deepEqual(refreshed.candidate?.signals.fees, ['£70'])
+assert.deepEqual(refreshed.candidate?.signals.requirementTerms, ['required', 'interview', 'portfolio'])
+assert.deepEqual(refreshed.candidate?.signals.bookingUrls, ['https://apply.example.edu/register'])
+assert.ok(refreshed.candidate?.signals.claims.some((claim) => claim.requirementType === 'TEST_FEE' && claim.value === '£70'))
+assert.ok(refreshed.candidate?.signals.claims.some((claim) => claim.requirementType === 'INTERVIEW_REQUIREMENT'))
+assert.ok(refreshed.candidate?.signals.claims.every((claim) => claim.confidenceStatus === 'NEEDS_REVIEW'))
+
+const structuredCandidate = service.extractCandidate(source, '<html><body><p>SAT is test-optional for 2027 entry.</p><p>The IELTS minimum overall score is 6.5.</p><p>SAT registration deadline is 15 September 2026.</p><a href="https://satsuite.collegeboard.org/register">Book SAT</a></body></html>', '2026-09-10T00:00:00Z')
+assert.equal(structuredCandidate.signals.claims.find((claim) => claim.requirementType === 'ADMISSIONS_TEST_REQUIREMENT')?.status, 'TEST_OPTIONAL')
+assert.ok(structuredCandidate.signals.claims.some((claim) => claim.requirementType === 'ENGLISH_REQUIREMENT' && claim.test === 'IELTS'))
+assert.ok(structuredCandidate.signals.claims.some((claim) => claim.requirementType === 'TEST_REGISTRATION_DATE' && claim.value === '15 September 2026'))
+assert.ok(structuredCandidate.signals.claims.some((claim) => claim.requirementType === 'TEST_BOOKING_URL'))
+assert.ok(FRESH_SOURCE_PRIORITY['official-test-provider'] < FRESH_SOURCE_PRIORITY['official-admissions'])
+
+const originalPolicy = ADMISSIONS_POLICIES.find((policy) => policy.id === 'ubc-undergraduate-2027')!
+const weakerPolicy = { ...originalPolicy, coverageLevel: 'COMPLETE' as const, source: { ...originalPolicy.source, sourceType: 'government-register' as const } }
+const policyConflict = service.applyReviewedPolicyCandidates([originalPolicy], [weakerPolicy], '2026-09-10T00:00:00Z')
+assert.deepEqual(policyConflict.conflicts, [originalPolicy.id])
+assert.equal(policyConflict.records[0].coverageLevel, 'PARTIAL', 'A weaker conflicting policy must not replace reviewed admissions truth')
+
+const originalSession = ADMISSIONS_TEST_SESSIONS.find((session) => session.id === 'tmua-oxford-2027-entry')!
+const changedSession = { ...originalSession, registrationDeadline: '2026-09-29T18:00:00+01:00' }
+const sessionChange = service.applyReviewedTestSessionCandidates([originalSession], [changedSession], '2026-09-10T00:00:00Z')
+assert.equal(sessionChange.changes.length, 1)
+assert.equal(sessionChange.records[0].changeHistory?.length, 1)
+assert.equal(sessionChange.records[0].registrationDeadline, changedSession.registrationDeadline)
+
+const originalFee = ADMISSIONS_TEST_FEES.find((fee) => fee.id === 'sat-us-2026')!
+const feeChange = service.applyReviewedTestFeeCandidates([originalFee], [{ ...originalFee, amount: 70 }], '2026-09-10T00:00:00Z')
+assert.equal(feeChange.changes.length, 1)
+assert.equal(feeChange.records[0].changeHistory?.[0].sourceUrl, originalFee.source.url)
+assert.equal(feeChange.records[0].amount, 70)
 
 const failed = await service.refreshSource(source, async () => { throw new Error('network unavailable') }, '2026-09-11T00:00:00Z')
 assert.equal(failed.source.confidenceStatus, 'STALE')

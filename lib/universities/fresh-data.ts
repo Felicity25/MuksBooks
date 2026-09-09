@@ -1,4 +1,5 @@
 import { getCountryCatalogue } from './catalog.ts'
+import { ADMISSIONS_POLICIES, ADMISSIONS_TEST_FEES, ADMISSIONS_TEST_SESSIONS } from './admissions-data.ts'
 import type { AdmissionsDeadline, CurriculumResultsEvent, FreshUniversitySource } from './types'
 
 export const UNIVERSITY_DATA_CHECKED_AT = '2026-09-09T02:35:00Z'
@@ -6,6 +7,36 @@ const UCAS_SOURCE = 'https://www.ucas.com/applying/applying-to-university/dates-
 const IB_RESULTS_SOURCE = 'https://www.ibo.org/programmes/diploma-programme/assessment-and-exams/getting-results/'
 
 const ukInstitutions = getCountryCatalogue('GB')?.institutions ?? []
+
+const readinessSources: FreshUniversitySource[] = [
+  ...ADMISSIONS_POLICIES.map((policy) => ({
+    id: `${policy.id}-requirements`,
+    kind: policy.english ? 'ENGLISH_REQUIREMENTS' as const : 'TEST_REQUIREMENTS' as const,
+    institutionId: policy.institutionId,
+    url: policy.source.url,
+    sourceType: policy.source.sourceType,
+    admissionsCycle: policy.admissionsCycle,
+    refreshCadence: 'WEEKLY' as const,
+    lastCheckedAt: policy.source.lastVerifiedAt,
+    lastSuccessfulAt: policy.source.lastVerifiedAt,
+    confidenceStatus: policy.confidenceStatus
+  })),
+  ...ADMISSIONS_TEST_SESSIONS.map((session) => ({
+    id: `${session.id}-dates`, kind: 'TEST_DATES' as const, url: session.source.url, sourceType: 'official-test-provider' as const,
+    admissionsCycle: session.source.admissionsCycle, refreshCadence: 'DAILY' as const, lastCheckedAt: session.source.lastVerifiedAt,
+    lastSuccessfulAt: session.source.lastVerifiedAt, confidenceStatus: 'VERIFIED_OFFICIAL' as const
+  })),
+  ...ADMISSIONS_TEST_FEES.map((fee) => ({
+    id: `${fee.id}-fee`, kind: 'TEST_FEES' as const, url: fee.source.url, sourceType: 'official-test-provider' as const,
+    admissionsCycle: fee.source.admissionsCycle, refreshCadence: 'WEEKLY' as const, lastCheckedAt: fee.source.lastVerifiedAt,
+    lastSuccessfulAt: fee.source.lastVerifiedAt, confidenceStatus: 'VERIFIED_OFFICIAL' as const
+  })),
+  { id: 'gamsat-booking', kind: 'TEST_BOOKING', url: 'https://gamsat.acer.org/registration', sourceType: 'official-test-provider', admissionsCycle: '2027', refreshCadence: 'WEEKLY', lastCheckedAt: UNIVERSITY_DATA_CHECKED_AT, lastSuccessfulAt: UNIVERSITY_DATA_CHECKED_AT, confidenceStatus: 'VERIFIED_OFFICIAL' },
+  { id: 'mit-interview-2027', kind: 'INTERVIEW_REQUIREMENTS', institutionId: 'mit', countryCode: 'US', url: 'https://mitadmissions.org/apply/firstyear/interview/', sourceType: 'official-admissions', admissionsCycle: '2026-2027', refreshCadence: 'WEEKLY', lastCheckedAt: UNIVERSITY_DATA_CHECKED_AT, lastSuccessfulAt: UNIVERSITY_DATA_CHECKED_AT, confidenceStatus: 'VERIFIED_OFFICIAL' },
+  { id: 'mit-portfolio-2027', kind: 'PORTFOLIO_REQUIREMENTS', institutionId: 'mit', countryCode: 'US', url: 'https://mitadmissions.org/apply/firstyear/portfolios-additional-material/', sourceType: 'official-admissions', admissionsCycle: '2026-2027', refreshCadence: 'WEEKLY', lastCheckedAt: UNIVERSITY_DATA_CHECKED_AT, lastSuccessfulAt: UNIVERSITY_DATA_CHECKED_AT, confidenceStatus: 'VERIFIED_OFFICIAL' },
+  { id: 'toefl-booking', kind: 'TEST_BOOKING', url: 'https://www.ets.org/toefl/test-takers/ibt/schedule.html', sourceType: 'official-test-provider', refreshCadence: 'MONTHLY', lastCheckedAt: UNIVERSITY_DATA_CHECKED_AT, lastSuccessfulAt: UNIVERSITY_DATA_CHECKED_AT, confidenceStatus: 'VERIFIED_OFFICIAL' },
+  { id: 'pte-booking', kind: 'TEST_BOOKING', url: 'https://www.pearsonpte.com/book-now', sourceType: 'official-test-provider', refreshCadence: 'MONTHLY', lastCheckedAt: UNIVERSITY_DATA_CHECKED_AT, lastSuccessfulAt: UNIVERSITY_DATA_CHECKED_AT, confidenceStatus: 'VERIFIED_OFFICIAL' }
+]
 
 export const OFFICIAL_UNIVERSITY_SOURCES: FreshUniversitySource[] = [
   ...(['ZA', 'AU', 'GB', 'CA', 'US'] as const).flatMap((code) => (getCountryCatalogue(code)?.institutions ?? []).map((institution) => ({
@@ -17,7 +48,8 @@ export const OFFICIAL_UNIVERSITY_SOURCES: FreshUniversitySource[] = [
     confidenceStatus: institution.programmeFinderUrl ? 'AUTO_EXTRACTED_OFFICIAL' as const : 'NEEDS_REVIEW' as const
   }))),
   { id: 'ucas-2027-deadlines', kind: 'APPLICATION_DEADLINES', countryCode: 'GB', url: UCAS_SOURCE, sourceType: 'official-application-portal', admissionsCycle: '2027', refreshCadence: 'WEEKLY', lastCheckedAt: UNIVERSITY_DATA_CHECKED_AT, lastSuccessfulAt: UNIVERSITY_DATA_CHECKED_AT, confidenceStatus: 'VERIFIED_OFFICIAL' },
-  { id: 'ib-results', kind: 'RESULT_RELEASE_DATES', url: IB_RESULTS_SOURCE, sourceType: 'official-curriculum', refreshCadence: 'WEEKLY', lastCheckedAt: UNIVERSITY_DATA_CHECKED_AT, lastSuccessfulAt: UNIVERSITY_DATA_CHECKED_AT, confidenceStatus: 'NEEDS_REVIEW' }
+  { id: 'ib-results', kind: 'RESULT_RELEASE_DATES', url: IB_RESULTS_SOURCE, sourceType: 'official-curriculum', refreshCadence: 'WEEKLY', lastCheckedAt: UNIVERSITY_DATA_CHECKED_AT, lastSuccessfulAt: UNIVERSITY_DATA_CHECKED_AT, confidenceStatus: 'NEEDS_REVIEW' },
+  ...readinessSources.filter((source, index, sources) => sources.findIndex((candidate) => candidate.id === source.id) === index)
 ]
 
 export const ADMISSIONS_DEADLINES: AdmissionsDeadline[] = ukInstitutions.flatMap((institution) => {

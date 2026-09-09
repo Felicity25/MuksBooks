@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
       ...refreshed.candidate,
       text: refreshed.candidate?.text.slice(0, 500)
     },
-    registry: { sources: snapshot.sources.length, deadlines: snapshot.deadlines.length, resultsEvents: snapshot.resultsEvents.length },
+    registry: { sources: snapshot.sources.length, deadlines: snapshot.deadlines.length, resultsEvents: snapshot.resultsEvents.length, admissionsPolicies: snapshot.admissionsPolicies.length, testSessions: snapshot.testSessions.length, testFees: snapshot.testFees.length },
     message: 'Official source retrieved. Extracted data remains review-gated and has not replaced verified canonical values.'
   })
 }

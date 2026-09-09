@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { ArrowLeft, CalendarPlus, Check, ExternalLink, Plus, RefreshCw } from 'lucide-react'
 import { useAuth } from '@/components/auth-provider'
+import { AdmissionsReadinessPanel } from '@/components/universities/admissions-readiness-panel'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { getInstitution, getProgramme } from '@/lib/universities/catalog'
@@ -12,18 +13,24 @@ import {
   APPLICANT_ROUTES,
   APPLICATION_STATUSES,
   addOffer,
+  createAdmissionsTestTasks,
   deadlinesForApplication,
   describeResultsTiming,
   formatDeadlineDate,
   matchResultsEvent,
   plannerPayloadForTask,
-  syncDeadlineTasks
+  syncDeadlineTasks,
+  syncTestSessionTasks
 } from '@/lib/universities/application-domain'
+import { ADMISSIONS_TEST_SESSIONS } from '@/lib/universities/admissions-data'
 import { ADMISSIONS_DEADLINES, CURRICULUM_RESULTS_EVENTS } from '@/lib/universities/fresh-data'
 import { getLearnerProfile, type LearnerProfile } from '@/lib/learner/store'
 import { universityStorage } from '@/lib/universities/storage'
 import type {
+  AdmissionsTestId,
+  AdmissionsTestSession,
   ApplicantRoute,
+  ApplicantType,
   ApplicationDocument,
   ApplicationStatus,
   ApplicationTask,
@@ -37,6 +44,7 @@ import type {
 const DOCUMENT_STATUSES: ApplicationDocument['status'][] = ['NOT_STARTED', 'REQUESTED', 'READY', 'UPLOADED', 'SUBMITTED', 'NOT_REQUIRED']
 const OFFER_TYPES: OfferType[] = ['CONDITIONAL', 'UNCONDITIONAL', 'WAITLIST', 'PATHWAY', 'DEFERRED_ENTRY', 'OTHER']
 const CONDITION_TYPES: OfferConditionType[] = ['OVERALL_SCORE', 'SUBJECT_SCORE', 'FINAL_TRANSCRIPT', 'ENGLISH_TEST', 'ADMISSION_TEST', 'PORTFOLIO', 'QUALIFICATION_COMPLETION', 'DEPOSIT', 'OTHER']
+const APPLICANT_TYPES: ApplicantType[] = ['UNCERTAIN', 'DOMESTIC', 'INTERNATIONAL']
 const RESULT_CURRICULA = ['IB', 'A_LEVEL', 'VCE', 'HSC', 'QCE', 'NSC', 'IEB', 'AP'] as const
 interface OwnedUpload { id: string; filename: string }
 const label = (value: string) => value.toLowerCase().replace(/_/g, ' ').replace(/\b\w/g, (letter: string) => letter.toUpperCase())
@@ -105,6 +113,12 @@ export default function ApplicationDetailPage() {
     update({ tasks: application.tasks.map((task) => task.id === taskId ? { ...task, ...updates, updatedAt: new Date().toISOString() } : task) })
   }
 
+  const addTestPlan = (testId: AdmissionsTestId, testName: string, session: AdmissionsTestSession) => {
+    if (!application) return
+    const tasks = createAdmissionsTestTasks(testId, testName, session)
+    update({ tasks: [...application.tasks, ...tasks] }, `${testName} registration, test, and result tasks added.`)
+  }
+
   const addTaskToPlanner = async (task: ApplicationTask) => {
     if (!application) return
     if (isGuest) {
@@ -125,16 +139,14 @@ export default function ApplicationDetailPage() {
 
   const syncDeadlines = async () => {
     if (!application) return
-    const deadlineMap = new Map(ADMISSIONS_DEADLINES.map((deadline) => [deadline.id, deadline]))
-    const synced = syncDeadlineTasks(application, ADMISSIONS_DEADLINES)
-    const changed = application.tasks.filter((task) => synced.changedTaskIds.includes(task.id))
+    const deadlineSync = syncDeadlineTasks(application, ADMISSIONS_DEADLINES)
+    const testSync = syncTestSessionTasks(deadlineSync.application, ADMISSIONS_TEST_SESSIONS)
+    const changedTaskIds = [...deadlineSync.changedTaskIds, ...testSync.changedTaskIds]
+    const changed = testSync.application.tasks.filter((task) => changedTaskIds.includes(task.id))
     if (!isGuest) {
-      await Promise.all(changed.filter((task) => task.plannerTaskId).map((task) => {
-        const deadline = deadlineMap.get(task.sourceDeadlineId!)!
-        return fetch('/api/app-state/planner-tasks', { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ taskId: task.plannerTaskId, plannedDate: deadline.dueAt, dueDate: deadline.dueAt }) })
-      }))
+      await Promise.all(changed.filter((task) => task.plannerTaskId && task.dueAt).map((task) => fetch('/api/app-state/planner-tasks', { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ taskId: task.plannerTaskId, plannedDate: task.dueAt, dueDate: task.dueAt }) })))
     }
-    persist(synced.application)
+    persist(testSync.application)
     setPlannerMessage(changed.length ? `University deadline updated. ${changed.length} linked task${changed.length === 1 ? '' : 's'} and Planner date${changed.length === 1 ? '' : 's'} changed.` : 'Deadline-linked tasks are current.')
   }
 
@@ -161,10 +173,21 @@ export default function ApplicationDetailPage() {
     <Link href="/universities/applications" className="inline-flex items-center gap-2 text-sm font-medium text-sky-700"><ArrowLeft className="h-4 w-4" />Applications</Link>
     <header className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-sm font-semibold uppercase text-sky-700">{institution.name}</p><h1 className="mt-1 text-3xl font-semibold text-slate-950">{programme.name}</h1><p className="mt-2 text-slate-600">{institution.city}, {institution.country} • {application.intakeYear} intake</p></div><Link href={`/universities/${institution.id}/${programme.id}`} className="inline-flex items-center gap-2 text-sm font-medium text-sky-700">Programme details <ExternalLink className="h-4 w-4" /></Link></header>
 
-    <Card className="p-5"><div className="grid gap-4 md:grid-cols-4"><label className="text-sm font-medium text-slate-700">Status<select value={application.status} onChange={(event) => updateStatus(event.target.value as ApplicationStatus)} className="mt-1 block h-10 w-full rounded-md border border-slate-300 bg-white px-3">{APPLICATION_STATUSES.map((status) => <option key={status} value={status}>{label(status)}</option>)}</select></label><label className="text-sm font-medium text-slate-700">Applicant route<select value={application.applicantRoute} onChange={(event) => update({ applicantRoute: event.target.value as ApplicantRoute }, `Applicant route changed to ${label(event.target.value)}.`)} className="mt-1 block h-10 w-full rounded-md border border-slate-300 bg-white px-3">{APPLICANT_ROUTES.map((route) => <option key={route} value={route}>{label(route)}</option>)}</select></label><label className="text-sm font-medium text-slate-700">Intake year<input type="number" min="2026" max="2035" value={application.intakeYear} onChange={(event) => update({ intakeYear: Number(event.target.value) })} className="mt-1 block h-10 w-full rounded-md border border-slate-300 bg-white px-3" /></label><label className="text-sm font-medium text-slate-700">Application reference<input value={application.applicationReference ?? ''} onChange={(event) => update({ applicationReference: event.target.value })} className="mt-1 block h-10 w-full rounded-md border border-slate-300 bg-white px-3" placeholder="Optional" /></label></div></Card>
+    <Card className="p-5"><div className="grid gap-4 md:grid-cols-5"><label className="text-sm font-medium text-slate-700">Status<select value={application.status} onChange={(event) => updateStatus(event.target.value as ApplicationStatus)} className="mt-1 block h-10 w-full rounded-md border border-slate-300 bg-white px-3">{APPLICATION_STATUSES.map((status) => <option key={status} value={status}>{label(status)}</option>)}</select></label><label className="text-sm font-medium text-slate-700">Applicant route<select value={application.applicantRoute} onChange={(event) => update({ applicantRoute: event.target.value as ApplicantRoute }, `Applicant route changed to ${label(event.target.value)}.`)} className="mt-1 block h-10 w-full rounded-md border border-slate-300 bg-white px-3">{APPLICANT_ROUTES.map((route) => <option key={route} value={route}>{label(route)}</option>)}</select></label><label className="text-sm font-medium text-slate-700">Applicant type<select value={application.applicantContext?.likelyApplicantType ?? 'UNCERTAIN'} onChange={(event) => { const likelyApplicantType = event.target.value as ApplicantType; update({ applicantContext: { citizenships: application.applicantContext?.citizenships ?? [], ...application.applicantContext, likelyApplicantType, explanation: 'Applicant type selected by the learner for readiness matching.' } }, `Applicant type changed to ${label(likelyApplicantType)}.`) }} className="mt-1 block h-10 w-full rounded-md border border-slate-300 bg-white px-3">{APPLICANT_TYPES.map((type) => <option key={type} value={type}>{label(type)}</option>)}</select></label><label className="text-sm font-medium text-slate-700">Intake year<input type="number" min="2026" max="2035" value={application.intakeYear} onChange={(event) => update({ intakeYear: Number(event.target.value) })} className="mt-1 block h-10 w-full rounded-md border border-slate-300 bg-white px-3" /></label><label className="text-sm font-medium text-slate-700">Application reference<input value={application.applicationReference ?? ''} onChange={(event) => update({ applicationReference: event.target.value })} className="mt-1 block h-10 w-full rounded-md border border-slate-300 bg-white px-3" placeholder="Optional" /></label></div></Card>
 
     <div className="grid gap-6 lg:grid-cols-[1.15fr_.85fr]">
       <section className="space-y-6">
+        <AdmissionsReadinessPanel
+          institutionId={application.institutionId}
+          programmeId={application.programmeId}
+          intakeYear={application.intakeYear}
+          applicantRoute={application.applicantRoute}
+          applicantType={application.applicantContext?.likelyApplicantType}
+          profile={learnerProfile}
+          application={application}
+          forcePersonalized
+          onAddTestPlan={addTestPlan}
+        />
         <Card className="p-5"><h2 className="text-lg font-semibold text-slate-950">Admissions requirements</h2>{programme.requirements?.length ? <div className="mt-4 space-y-3">{programme.requirements.map((requirement) => <div key={`${requirement.curriculum}-${requirement.admissionsCycle ?? ''}`} className="border-l-2 border-sky-500 pl-3"><p className="text-sm font-semibold text-slate-900">{requirement.curriculum}{requirement.admissionsCycle ? ` • ${requirement.admissionsCycle}` : ''}</p><p className="mt-1 text-sm text-slate-600">{requirement.minimumOverall !== undefined ? `Published minimum overall: ${requirement.minimumOverall}.` : requirement.notes || 'Review the official requirement.'}</p><a href={requirement.officialRequirementsUrl} target="_blank" rel="noreferrer" className="text-xs font-medium text-sky-700">Official requirement</a></div>)}</div> : <p className="mt-3 text-sm text-slate-600">Current curriculum-specific requirements are not structured yet. Review the official programme page before applying.</p>}{programme.prerequisiteSubjects.length ? <p className="mt-4 text-sm text-slate-700"><strong>Subjects to check:</strong> {programme.prerequisiteSubjects.join(', ')}</p> : null}</Card>
 
         <Card className="p-5"><div className="flex items-center justify-between gap-3"><div><h2 className="text-lg font-semibold text-slate-950">Deadlines</h2><p className="text-sm text-slate-600">Only source-backed dates are shown in the source timezone.</p></div><Button type="button" variant="secondary" size="sm" onClick={() => void syncDeadlines()}><RefreshCw className="mr-2 h-4 w-4" />Sync tasks</Button></div><div className="mt-4 space-y-3">{deadlines.length ? deadlines.map((deadline) => { const linked = application.tasks.some((task) => task.sourceDeadlineId === deadline.id); return <div key={deadline.id} className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-3"><div><p className="text-sm font-semibold text-slate-900">{label(deadline.deadlineType)}</p><p className="text-sm text-slate-600">{formatDeadlineDate(deadline)} • {deadline.description}</p><a href={deadline.sourceUrl} target="_blank" rel="noreferrer" className="text-xs font-medium text-sky-700">Official source</a></div><Button type="button" size="sm" variant="secondary" disabled={linked} onClick={() => addTask(`Prepare for ${label(deadline.deadlineType)}`, deadline.dueAt, deadline.id)}><CalendarPlus className="mr-2 h-4 w-4" />{linked ? 'Linked' : 'Create task'}</Button></div> }) : <p className="mt-4 text-sm text-slate-600">No verified deadline is available for this institution, intake and route yet. Check the official application page before acting.</p>}</div></Card>
