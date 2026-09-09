@@ -1,10 +1,31 @@
-import type { FundingDeadline, FundingOpportunity, ProgrammeCost } from './types.ts'
+import type { FundingCycleStatus, FundingDeadline, FundingOpportunity, ProgrammeCost } from './types.ts'
 import { fundingDeadlineForOpportunity } from './funding-domain.ts'
 import { FUNDING_DEPTH_OPPORTUNITIES, PROGRAMME_COST_DEPTH } from './funding-depth-data.ts'
 
 export const FUNDING_DATA_CHECKED_AT = '2026-09-09T08:00:00Z'
 
-const official = (opportunity: FundingOpportunity): FundingOpportunity => opportunity
+const BASE_CYCLE_STATUS: Record<string, FundingCycleStatus> = {
+  'za-nsfas': 'CURRENT_CYCLE_UNKNOWN',
+  'au-csp': 'OPEN',
+  'au-hecs-help': 'OPEN',
+  'gb-student-finance-england': 'OPEN',
+  'ca-student-grants-loans': 'OPEN',
+  'us-federal-student-aid': 'OPEN',
+  'oxford-reach-2027': 'UPCOMING',
+  'harvard-need-based-aid': 'OPEN',
+  'mit-need-based-scholarship': 'OPEN',
+  'mcgill-entrance-scholarships': 'CURRENT_CYCLE_UNKNOWN',
+  'mcgill-entrance-bursary': 'CURRENT_CYCLE_UNKNOWN',
+  'unsw-scholarships-portfolio': 'CURRENT_CYCLE_UNKNOWN',
+  'wits-undergraduate-funding': 'CURRENT_CYCLE_UNKNOWN',
+  'utoronto-financial-aid': 'CURRENT_CYCLE_UNKNOWN'
+}
+
+const official = (opportunity: FundingOpportunity): FundingOpportunity => {
+  const cycleStatus = BASE_CYCLE_STATUS[opportunity.id]
+  if (!cycleStatus) throw new Error(`Missing lifecycle status for legacy funding opportunity ${opportunity.id}`)
+  return { ...opportunity, cycleStatus }
+}
 
 const BASE_FUNDING_OPPORTUNITIES: FundingOpportunity[] = [
   official({ id: 'za-nsfas', name: 'NSFAS DHET Bursary Scheme', provider: 'National Student Financial Aid Scheme', providerType: 'GOVERNMENT', fundingType: 'GOVERNMENT_GRANT', repaymentType: 'NON_REPAYABLE', providerCountry: 'South Africa', eligibleDestinationCountries: ['South Africa'], eligibleInstitutions: [], eligibleProgrammes: [], eligibleFaculties: [], eligibleStudyAreas: [], eligibleStudyLevels: ['DIPLOMA', 'BACHELOR', 'CURRENT_UNIVERSITY'], citizenshipRules: ['South Africa'], residenceRules: [], domesticInternationalRules: ['DOMESTIC'], applicantRouteRules: [], curriculumRules: [], academicRequirements: [], financialNeedRequirements: ['Combined household income generally not more than R350,000 per year; disability threshold differs.'], otherEligibility: ['Study at an eligible South African public university or TVET college.', 'Previous-qualification and academic progression rules apply.'], requiredContext: ['ELIGIBLE_COURSE_OR_PLACE'], amountType: 'VARIABLE', coverage: ['Tuition', 'Accommodation subject to rules', 'Living allowance', 'Transport subject to rules', 'Learning materials'], renewable: true, separateApplicationRequired: true, applicationMethod: 'Apply through myNSFAS and verify the current cycle rules.', officialUrl: 'https://www.nsfas.org.za/content/bursary-scheme.html', applicationUrl: 'https://my.nsfas.org.za/', sourceUrl: 'https://www.nsfas.org.za/content/bursary-scheme.html', sourceType: 'government-funding', sourceTitle: 'The DHET Bursary Scheme', sourceSection: 'Who qualifies for NSFAS funding?', fundingCycle: 'Current published scheme', lastCheckedAt: FUNDING_DATA_CHECKED_AT, lastVerifiedAt: FUNDING_DATA_CHECKED_AT, confidenceStatus: 'VERIFIED_OFFICIAL', active: true, recurring: true }),

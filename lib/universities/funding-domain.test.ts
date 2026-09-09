@@ -75,5 +75,8 @@ for (const [query, expectedId] of [
 
 assert.ok(FUNDING_OPPORTUNITIES.every((item) => item.officialUrl.startsWith('https://') && item.applicationUrl.startsWith('https://')), 'Every funding opportunity should retain exact HTTPS destinations')
 assert.ok(FUNDING_OPPORTUNITIES.filter((item) => item.applicationDeadline).every((item) => item.fundingCycle && item.lastVerifiedAt), 'Dated funding must retain its cycle and verification date')
+assert.ok(FUNDING_OPPORTUNITIES.every((item) => item.cycleStatus), 'Every funding opportunity should expose an explicit lifecycle status')
+assert.ok(FUNDING_OPPORTUNITIES.filter((item) => item.cycleStatus === 'CLOSED').every((item) => !item.active), 'Closed funding cycles must not be presented as active')
+assert.ok(FUNDING_OPPORTUNITIES.filter((item) => item.cycleStatus === 'OPEN' || item.cycleStatus === 'UPCOMING').every((item) => item.active), 'Open and upcoming funding cycles should remain discoverable')
 
 console.log('Funding domain tests passed')
