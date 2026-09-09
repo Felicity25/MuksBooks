@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import { createApplication, universityStorage } from './storage.ts'
 import { getModeAwareHomepageLayout, normalizeUserSettings } from '../user-settings.ts'
-import { APPLICATION_STATUSES, addOffer, createAdmissionsTestTasks, createUniversityApplication, deadlinesForApplication, describeOfferCondition, describeResultsTiming, formatDeadlineDate, matchResultsEvent, normalizeUniversityApplication, plannerPayloadForTask, reconcileDeadline, syncDeadlineTasks, syncTestSessionTasks } from './application-domain.ts'
+import { APPLICATION_STATUSES, addOffer, createAdmissionsTestTasks, createManualUniversityApplication, createUniversityApplication, deadlinesForApplication, describeOfferCondition, describeResultsTiming, formatDeadlineDate, matchResultsEvent, normalizeUniversityApplication, plannerPayloadForTask, reconcileDeadline, resolveApplicationRoute, syncDeadlineTasks, syncTestSessionTasks } from './application-domain.ts'
+import { getInstitution, getInstitutionProgrammes, getProgramme } from './catalog.ts'
 import type { AdmissionsDeadline, AdmissionsTestSession, CurriculumResultsEvent, UniversityOffer } from './types.ts'
 
 const values = new Map<string, string>()
@@ -88,5 +89,25 @@ assert.equal(testSync.application.tasks[0].dueAt, revisedTmua.registrationDeadli
 assert.equal(testSync.application.tasks[1].dueAt, revisedTmua.testStartsAt)
 assert.match(testSync.application.timeline.at(-1)?.description ?? '', /Admissions test date updated/)
 assert.match(plannerPayloadForTask(testTaskApplication, testTasks[0]).description, /Test: TMUA/, 'Planner payload must preserve test identity')
+
+const manual = createManualUniversityApplication({ university: 'University X', programme: 'Bachelor Y', country: 'Australia', intakeYear: 2028, applicantType: 'INTERNATIONAL', applicationMethod: 'Direct', applicationPortalUrl: 'https://example.edu/apply', userDeadline: '2027-10-15', notes: 'Portal-specific date' }, new Date('2026-09-09T12:00:00Z'))
+universityStorage.saveApplications([manual])
+const restoredManual = universityStorage.getApplications()[0]
+assert.equal(restoredManual.dataOrigin, 'USER_ENTERED')
+assert.equal(restoredManual.customInstitutionName, 'University X')
+assert.equal(restoredManual.userDeadline, '2027-10-15')
+assert.equal(restoredManual.applicationPortalUrl, 'https://example.edu/apply')
+
+const oxford = getInstitution('oxford')!
+const oxfordMaths = getProgramme('oxford-maths')!
+const applicantSpecificProgramme = { ...oxfordMaths, domesticApplicationUrl: 'https://www.ucas.com/applying', internationalApplicationUrl: 'https://example.edu/international-apply', applicationUrl: undefined, centralApplicationUrl: 'https://www.ucas.com/applying' }
+assert.equal(resolveApplicationRoute(applicantSpecificProgramme, oxford, 'DOMESTIC').method, 'UCAS')
+assert.equal(resolveApplicationRoute(applicantSpecificProgramme, oxford, 'DOMESTIC').url, applicantSpecificProgramme.domesticApplicationUrl)
+assert.equal(resolveApplicationRoute(applicantSpecificProgramme, oxford, 'INTERNATIONAL').url, applicantSpecificProgramme.internationalApplicationUrl)
+assert.equal(resolveApplicationRoute(oxfordMaths, oxford, 'UNCERTAIN').method, 'UCAS')
+const uq = getInstitution('uq')!
+const uqProgramme = getInstitutionProgrammes('uq')[0]
+assert.equal(resolveApplicationRoute(uqProgramme, uq, 'DOMESTIC').method, 'QTAC')
+assert.notEqual(resolveApplicationRoute(uqProgramme, uq, 'INTERNATIONAL').method, 'QTAC', 'Domestic central routes must not be shown as international routes')
 
 console.log('University workflow tests passed')

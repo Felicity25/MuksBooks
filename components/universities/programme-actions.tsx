@@ -5,6 +5,8 @@ import { useEffect, useState } from 'react'
 import { ArrowRight, Bookmark, ClipboardList, GitCompareArrows } from 'lucide-react'
 import { useAuth } from '@/components/auth-provider'
 import { Button } from '@/components/ui/button'
+import { getInstitution, getProgramme } from '@/lib/universities/catalog'
+import { resolveApplicationRoute } from '@/lib/universities/application-domain'
 import { createApplication, universityStorage } from '@/lib/universities/storage'
 
 export function ProgrammeActions({ programmeId, institutionId, compact = false }: { programmeId: string; institutionId: string; compact?: boolean }) {
@@ -38,7 +40,15 @@ export function ProgrammeActions({ programmeId, institutionId, compact = false }
   const addApplication = () => {
     const current = isGuest ? universityStorage.getApplications() : settings.universityApplications
     if (current.some((application) => application.programmeId === programmeId)) return
-    const next = [...current, createApplication(programmeId, institutionId)]
+    const application = createApplication(programmeId, institutionId)
+    const programme = getProgramme(programmeId)
+    const institution = getInstitution(institutionId)
+    if (programme && institution) {
+      const route = resolveApplicationRoute(programme, institution, 'UNCERTAIN')
+      application.applicationMethod = route.method
+      application.applicationPortalUrl = route.url
+    }
+    const next = [...current, application]
     if (isGuest) universityStorage.saveApplications(next)
     else void saveSettings({ universityApplications: next })
     setTracked(true)

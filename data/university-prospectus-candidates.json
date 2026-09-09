@@ -1,0 +1,2427 @@
+{
+  "generatedAt": "2026-09-09T06:45:39.992Z",
+  "confidenceStatus": "NEEDS_REVIEW",
+  "metrics": {
+    "currentProspectusesProcessed": 4,
+    "excludedDocuments": 3,
+    "failedDocuments": 0,
+    "facultySections": 11,
+    "programmeCandidates": 81,
+    "requirementsDeadlinesAndTestingCandidates": 83
+  },
+  "institutions": [
+    {
+      "institutionId": "uct",
+      "institutionName": "University of Cape Town",
+      "countryCode": "ZA",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "wits",
+      "institutionName": "University of the Witwatersrand",
+      "countryCode": "ZA",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "up",
+      "institutionName": "University of Pretoria",
+      "countryCode": "ZA",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "stellenbosch",
+      "institutionName": "Stellenbosch University",
+      "countryCode": "ZA",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "uj",
+      "institutionName": "University of Johannesburg",
+      "countryCode": "ZA",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "ukzn",
+      "institutionName": "University of KwaZulu-Natal",
+      "countryCode": "ZA",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "ufs",
+      "institutionName": "University of the Free State",
+      "countryCode": "ZA",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "nwu",
+      "institutionName": "North-West University",
+      "countryCode": "ZA",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "rhodes",
+      "institutionName": "Rhodes University",
+      "countryCode": "ZA",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "uwc",
+      "institutionName": "University of the Western Cape",
+      "countryCode": "ZA",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "unisa",
+      "institutionName": "University of South Africa",
+      "countryCode": "ZA",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "tut",
+      "institutionName": "Tshwane University of Technology",
+      "countryCode": "ZA",
+      "status": "EXCLUDED",
+      "sourceUrl": "https://www.tut.ac.za/media/tshwane-interim/site-content/images/prospectus/PART_9_-Student_Fees.pdf",
+      "reason": "Not a general undergraduate guide"
+    },
+    {
+      "institutionId": "cput",
+      "institutionName": "Cape Peninsula University of Technology",
+      "countryCode": "ZA",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "dut",
+      "institutionName": "Durban University of Technology",
+      "countryCode": "ZA",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "cut",
+      "institutionName": "Central University of Technology",
+      "countryCode": "ZA",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "vut",
+      "institutionName": "Vaal University of Technology",
+      "countryCode": "ZA",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "nmu",
+      "institutionName": "Nelson Mandela University",
+      "countryCode": "ZA",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "ul",
+      "institutionName": "University of Limpopo",
+      "countryCode": "ZA",
+      "status": "REVIEW_REQUIRED",
+      "sourceUrl": "https://www.ul.ac.za/wp-content/uploads/2025/03/Undergraduate-Prospectus-2027.pdf",
+      "academicYear": "2027",
+      "metrics": {
+        "pages": 2,
+        "faculties": 1,
+        "programmes": 32,
+        "requirementsDeadlinesAndTests": 25
+      },
+      "candidates": {
+        "institutionId": "ul",
+        "sourceUrl": "https://www.ul.ac.za/wp-content/uploads/2025/03/Undergraduate-Prospectus-2027.pdf",
+        "documentFingerprint": "f6d921626ddf596f0764d780a3361897ff02aea129ea2287fd05aeca93e78de4",
+        "extractedAt": "2026-09-09T06:45:26.463Z",
+        "pageCount": 2,
+        "faculties": [
+          {
+            "name": "Management & Law",
+            "startPage": 2,
+            "endPage": 2,
+            "programmes": [
+              {
+                "name": "Bachelor of Commerce in Accountancy",
+                "faculty": "Management & Law",
+                "evidence": {
+                  "pageNumber": 2,
+                  "text": "Bachelor of Commerce in Accountancy"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "Bachelor of Commerce in Economics",
+                "faculty": "Management & Law",
+                "evidence": {
+                  "pageNumber": 2,
+                  "text": "Bachelor of Commerce in Economics"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "Bachelor of Laws",
+                "faculty": "Management & Law",
+                "evidence": {
+                  "pageNumber": 2,
+                  "text": "Bachelor of Laws"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "Bachelor of Laws (Extended Curriculum Programme)",
+                "faculty": "Management & Law",
+                "evidence": {
+                  "pageNumber": 2,
+                  "text": "Bachelor of Laws (Extended Curriculum Programme)"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "Bachelor of Science in Agriculture in Agricultural Economics",
+                "faculty": "Management & Law",
+                "evidence": {
+                  "pageNumber": 2,
+                  "text": "Bachelor of Science in Agriculture in Agricultural Economics"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "Bachelor of Science in Agriculture in Plant Production",
+                "faculty": "Management & Law",
+                "evidence": {
+                  "pageNumber": 2,
+                  "text": "Bachelor of Science in Agriculture in Plant Production"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "Bachelor of Science in Agriculture in Animal Production",
+                "faculty": "Management & Law",
+                "evidence": {
+                  "pageNumber": 2,
+                  "text": "Bachelor of Science in Agriculture in Animal Production"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "Bachelor of Science in Agriculture in Soil Science",
+                "faculty": "Management & Law",
+                "evidence": {
+                  "pageNumber": 2,
+                  "text": "Bachelor of Science in Agriculture in Soil Science"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "Bachelor of Science in Environmental & Resource Studies",
+                "faculty": "Management & Law",
+                "evidence": {
+                  "pageNumber": 2,
+                  "text": "Bachelor of Science in Environmental & Resource Studies"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "Bachelor of Science in Water & Sanitation Sciences",
+                "faculty": "Management & Law",
+                "evidence": {
+                  "pageNumber": 2,
+                  "text": "Bachelor of Science in Water & Sanitation Sciences"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "Bachelor of Science (Mathematical Sciences stream)",
+                "faculty": "Management & Law",
+                "evidence": {
+                  "pageNumber": 2,
+                  "text": "Bachelor of Science (Mathematical Sciences stream)"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "Bachelor of Science (Life Sciences Stream)",
+                "faculty": "Management & Law",
+                "evidence": {
+                  "pageNumber": 2,
+                  "text": "Bachelor of Science (Life Sciences Stream)"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "Bachelor of Medicine",
+                "faculty": "Management & Law",
+                "evidence": {
+                  "pageNumber": 2,
+                  "text": "Bachelor of Medicine"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "Bachelor of Science in Dietetics",
+                "faculty": "Management & Law",
+                "evidence": {
+                  "pageNumber": 2,
+                  "text": "Bachelor of Science in Dietetics"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "Bachelor of Science in Medical Sciences",
+                "faculty": "Management & Law",
+                "evidence": {
+                  "pageNumber": 2,
+                  "text": "Bachelor of Science in Medical Sciences"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "Bachelor of Nursing",
+                "faculty": "Management & Law",
+                "evidence": {
+                  "pageNumber": 2,
+                  "text": "Bachelor of Nursing"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "Bachelor of Commerce in Human Resource Management",
+                "faculty": "Management & Law",
+                "evidence": {
+                  "pageNumber": 2,
+                  "text": "Bachelor of Commerce in Human Resource Management"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "Bachelor of Science (Physical Sciences stream)",
+                "faculty": "Management & Law",
+                "evidence": {
+                  "pageNumber": 2,
+                  "text": "Bachelor of Science (Physical Sciences stream)"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "Bachelor of Science in Geology",
+                "faculty": "Management & Law",
+                "evidence": {
+                  "pageNumber": 2,
+                  "text": "Bachelor of Science in Geology"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "Bachelor of Commerce in Business Management",
+                "faculty": "Management & Law",
+                "evidence": {
+                  "pageNumber": 2,
+                  "text": "Bachelor of Commerce in Business Management"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              }
+            ],
+            "claims": [
+              {
+                "kind": "CURRICULUM_REQUIREMENT",
+                "faculty": "Management & Law",
+                "evidence": {
+                  "pageNumber": 2,
+                  "text": "minimum APS total 26"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "CURRICULUM_REQUIREMENT",
+                "faculty": "Management & Law",
+                "evidence": {
+                  "pageNumber": 2,
+                  "text": "minimum APS total"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "CURRICULUM_REQUIREMENT",
+                "faculty": "Management & Law",
+                "evidence": {
+                  "pageNumber": 2,
+                  "text": "APS total 22"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "CURRICULUM_REQUIREMENT",
+                "faculty": "Management & Law",
+                "evidence": {
+                  "pageNumber": 2,
+                  "text": "APS total 24"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              }
+            ]
+          }
+        ],
+        "unassignedProgrammes": [
+          {
+            "name": "Bachelor of Education in Senior Phase & FET Teaching",
+            "faculty": "Unassigned",
+            "evidence": {
+              "pageNumber": 1,
+              "text": "Bachelor of Education in Senior Phase & FET Teaching"
+            },
+            "confidenceStatus": "NEEDS_REVIEW"
+          },
+          {
+            "name": "Bachelor of Arts (Languages stream)",
+            "faculty": "Unassigned",
+            "evidence": {
+              "pageNumber": 1,
+              "text": "Bachelor of Arts (Languages stream)"
+            },
+            "confidenceStatus": "NEEDS_REVIEW"
+          },
+          {
+            "name": "Bachelor of Arts (Criminology and Psychology stream)",
+            "faculty": "Unassigned",
+            "evidence": {
+              "pageNumber": 1,
+              "text": "Bachelor of Arts (Criminology and Psychology stream)"
+            },
+            "confidenceStatus": "NEEDS_REVIEW"
+          },
+          {
+            "name": "Bachelor of Arts (Political Studies stream)",
+            "faculty": "Unassigned",
+            "evidence": {
+              "pageNumber": 1,
+              "text": "Bachelor of Arts (Political Studies stream)"
+            },
+            "confidenceStatus": "NEEDS_REVIEW"
+          },
+          {
+            "name": "Bachelor of Arts (Sociology and Anthropology stream)",
+            "faculty": "Unassigned",
+            "evidence": {
+              "pageNumber": 1,
+              "text": "Bachelor of Arts (Sociology and Anthropology stream)"
+            },
+            "confidenceStatus": "NEEDS_REVIEW"
+          },
+          {
+            "name": "Bachelor of Arts (Cultural Studies stream)",
+            "faculty": "Unassigned",
+            "evidence": {
+              "pageNumber": 1,
+              "text": "Bachelor of Arts (Cultural Studies stream)"
+            },
+            "confidenceStatus": "NEEDS_REVIEW"
+          },
+          {
+            "name": "Bachelor of Arts (Translation and Linguistics stream)",
+            "faculty": "Unassigned",
+            "evidence": {
+              "pageNumber": 1,
+              "text": "Bachelor of Arts (Translation and Linguistics stream)"
+            },
+            "confidenceStatus": "NEEDS_REVIEW"
+          },
+          {
+            "name": "Bachelor of Arts (Performing Arts stream)",
+            "faculty": "Unassigned",
+            "evidence": {
+              "pageNumber": 1,
+              "text": "Bachelor of Arts (Performing Arts stream)"
+            },
+            "confidenceStatus": "NEEDS_REVIEW"
+          },
+          {
+            "name": "Bachelor of Arts in Communication Studies",
+            "faculty": "Unassigned",
+            "evidence": {
+              "pageNumber": 1,
+              "text": "Bachelor of Arts in Communication Studies"
+            },
+            "confidenceStatus": "NEEDS_REVIEW"
+          },
+          {
+            "name": "Bachelor of Arts in Media Studies",
+            "faculty": "Unassigned",
+            "evidence": {
+              "pageNumber": 1,
+              "text": "Bachelor of Arts in Media Studies"
+            },
+            "confidenceStatus": "NEEDS_REVIEW"
+          },
+          {
+            "name": "Bachelor of Arts in Contemporary English and Multilingual Studies",
+            "faculty": "Unassigned",
+            "evidence": {
+              "pageNumber": 1,
+              "text": "Bachelor of Arts in Contemporary English and Multilingual Studies"
+            },
+            "confidenceStatus": "NEEDS_REVIEW"
+          },
+          {
+            "name": "Bachelor of Education in Foundation Phase Teaching",
+            "faculty": "Unassigned",
+            "evidence": {
+              "pageNumber": 1,
+              "text": "Bachelor of Education in Foundation Phase Teaching"
+            },
+            "confidenceStatus": "NEEDS_REVIEW"
+          }
+        ],
+        "unassignedClaims": [
+          {
+            "kind": "CURRICULUM_REQUIREMENT",
+            "faculty": "Unassigned",
+            "evidence": {
+              "pageNumber": 1,
+              "text": "National Senior Certificate (NSC) with Bachelor exemption"
+            },
+            "confidenceStatus": "NEEDS_REVIEW"
+          },
+          {
+            "kind": "CURRICULUM_REQUIREMENT",
+            "faculty": "Unassigned",
+            "evidence": {
+              "pageNumber": 1,
+              "text": "Prospective students, with an NSC, who wish to gain entry to any"
+            },
+            "confidenceStatus": "NEEDS_REVIEW"
+          },
+          {
+            "kind": "CURRICULUM_REQUIREMENT",
+            "faculty": "Unassigned",
+            "evidence": {
+              "pageNumber": 1,
+              "text": "ü Four 20-credit subjects were achieved with a minimum NSC"
+            },
+            "confidenceStatus": "NEEDS_REVIEW"
+          },
+          {
+            "kind": "CURRICULUM_REQUIREMENT",
+            "faculty": "Unassigned",
+            "evidence": {
+              "pageNumber": 1,
+              "text": "ü Four 20-credit subjects were achieved with a minimum NSC"
+            },
+            "confidenceStatus": "NEEDS_REVIEW"
+          },
+          {
+            "kind": "CURRICULUM_REQUIREMENT",
+            "faculty": "Unassigned",
+            "evidence": {
+              "pageNumber": 1,
+              "text": "Ÿ The required Admission Point Score (APS) as stipulated in the Calendars"
+            },
+            "confidenceStatus": "NEEDS_REVIEW"
+          },
+          {
+            "kind": "CURRICULUM_REQUIREMENT",
+            "faculty": "Unassigned",
+            "evidence": {
+              "pageNumber": 1,
+              "text": "Meeting the minimum APS for a particular programme does not, however,"
+            },
+            "confidenceStatus": "NEEDS_REVIEW"
+          },
+          {
+            "kind": "CURRICULUM_REQUIREMENT",
+            "faculty": "Unassigned",
+            "evidence": {
+              "pageNumber": 1,
+              "text": "symbols to an APS."
+            },
+            "confidenceStatus": "NEEDS_REVIEW"
+          },
+          {
+            "kind": "CURRICULUM_REQUIREMENT",
+            "faculty": "Unassigned",
+            "evidence": {
+              "pageNumber": 1,
+              "text": "The Admission Point Score (APS) system"
+            },
+            "confidenceStatus": "NEEDS_REVIEW"
+          },
+          {
+            "kind": "CURRICULUM_REQUIREMENT",
+            "faculty": "Unassigned",
+            "evidence": {
+              "pageNumber": 1,
+              "text": "The system is a simple calculation, using your NSC or Grade 12"
+            },
+            "confidenceStatus": "NEEDS_REVIEW"
+          },
+          {
+            "kind": "CURRICULUM_REQUIREMENT",
+            "faculty": "Unassigned",
+            "evidence": {
+              "pageNumber": 1,
+              "text": "Meeting the minimum APS for a particular programme does not,"
+            },
+            "confidenceStatus": "NEEDS_REVIEW"
+          },
+          {
+            "kind": "CURRICULUM_REQUIREMENT",
+            "faculty": "Unassigned",
+            "evidence": {
+              "pageNumber": 1,
+              "text": "used in the APS calculation):"
+            },
+            "confidenceStatus": "NEEDS_REVIEW"
+          },
+          {
+            "kind": "CURRICULUM_REQUIREMENT",
+            "faculty": "Unassigned",
+            "evidence": {
+              "pageNumber": 1,
+              "text": "APS Conversion Table for Non- NSC examinations."
+            },
+            "confidenceStatus": "NEEDS_REVIEW"
+          },
+          {
+            "kind": "CURRICULUM_REQUIREMENT",
+            "faculty": "Unassigned",
+            "evidence": {
+              "pageNumber": 1,
+              "text": "NSC – National Senior Certificate (completed Grade 12 in"
+            },
+            "confidenceStatus": "NEEDS_REVIEW"
+          },
+          {
+            "kind": "CURRICULUM_REQUIREMENT",
+            "faculty": "Unassigned",
+            "evidence": {
+              "pageNumber": 1,
+              "text": "A Level Advanced level"
+            },
+            "confidenceStatus": "NEEDS_REVIEW"
+          },
+          {
+            "kind": "CURRICULUM_REQUIREMENT",
+            "faculty": "Unassigned",
+            "evidence": {
+              "pageNumber": 1,
+              "text": "IB-HL International Baccalaureate Higher Level"
+            },
+            "confidenceStatus": "NEEDS_REVIEW"
+          },
+          {
+            "kind": "CURRICULUM_REQUIREMENT",
+            "faculty": "Unassigned",
+            "evidence": {
+              "pageNumber": 1,
+              "text": "IB-SL International Baccalaureate Standard Level"
+            },
+            "confidenceStatus": "NEEDS_REVIEW"
+          },
+          {
+            "kind": "CURRICULUM_REQUIREMENT",
+            "faculty": "Unassigned",
+            "evidence": {
+              "pageNumber": 1,
+              "text": "Additional subjects to contribute to minimum APS total 23"
+            },
+            "confidenceStatus": "NEEDS_REVIEW"
+          },
+          {
+            "kind": "CURRICULUM_REQUIREMENT",
+            "faculty": "Unassigned",
+            "evidence": {
+              "pageNumber": 1,
+              "text": "completion of O and A level examinations."
+            },
+            "confidenceStatus": "NEEDS_REVIEW"
+          },
+          {
+            "kind": "APPLICATION_ROUTE",
+            "faculty": "Unassigned",
+            "evidence": {
+              "pageNumber": 1,
+              "text": "Ÿ Go to to apply online."
+            },
+            "confidenceStatus": "NEEDS_REVIEW"
+          },
+          {
+            "kind": "APPLICATION_ROUTE",
+            "faculty": "Unassigned",
+            "evidence": {
+              "pageNumber": 1,
+              "text": "Ÿ HOW TO APPLY ONLINE IF YOU ALREADY HAVE A STUDENT"
+            },
+            "confidenceStatus": "NEEDS_REVIEW"
+          },
+          {
+            "kind": "CURRICULUM_REQUIREMENT",
+            "faculty": "Unassigned",
+            "evidence": {
+              "pageNumber": 1,
+              "text": "Qualifications other than the NSC"
+            },
+            "confidenceStatus": "NEEDS_REVIEW"
+          }
+        ],
+        "confidenceStatus": "NEEDS_REVIEW"
+      }
+    },
+    {
+      "institutionId": "univen",
+      "institutionName": "University of Venda",
+      "countryCode": "ZA",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "unizulu",
+      "institutionName": "University of Zululand",
+      "countryCode": "ZA",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "wsu",
+      "institutionName": "Walter Sisulu University",
+      "countryCode": "ZA",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "ufh",
+      "institutionName": "University of Fort Hare",
+      "countryCode": "ZA",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "spu",
+      "institutionName": "Sol Plaatje University",
+      "countryCode": "ZA",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "ump",
+      "institutionName": "University of Mpumalanga",
+      "countryCode": "ZA",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "smu",
+      "institutionName": "Sefako Makgatho Health Sciences University",
+      "countryCode": "ZA",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "mut",
+      "institutionName": "Mangosuthu University of Technology",
+      "countryCode": "ZA",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "unimelb",
+      "institutionName": "The University of Melbourne",
+      "countryCode": "AU",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "monash",
+      "institutionName": "Monash University",
+      "countryCode": "AU",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "unsw",
+      "institutionName": "UNSW Sydney",
+      "countryCode": "AU",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "usyd",
+      "institutionName": "The University of Sydney",
+      "countryCode": "AU",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "anu",
+      "institutionName": "Australian National University",
+      "countryCode": "AU",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "uq",
+      "institutionName": "The University of Queensland",
+      "countryCode": "AU",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "uts",
+      "institutionName": "University of Technology Sydney",
+      "countryCode": "AU",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "rmit",
+      "institutionName": "RMIT University",
+      "countryCode": "AU",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "uwa",
+      "institutionName": "The University of Western Australia",
+      "countryCode": "AU",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "adelaide",
+      "institutionName": "The University of Adelaide",
+      "countryCode": "AU",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "utas",
+      "institutionName": "University of Tasmania",
+      "countryCode": "AU",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "deakin",
+      "institutionName": "Deakin University",
+      "countryCode": "AU",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "qut",
+      "institutionName": "Queensland University of Technology",
+      "countryCode": "AU",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "curtin",
+      "institutionName": "Curtin University",
+      "countryCode": "AU",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "charles-darwin",
+      "institutionName": "Charles Darwin University",
+      "countryCode": "AU",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "griffith",
+      "institutionName": "Griffith University",
+      "countryCode": "AU",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "macquarie",
+      "institutionName": "Macquarie University",
+      "countryCode": "AU",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "latrobe",
+      "institutionName": "La Trobe University",
+      "countryCode": "AU",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "swinburne",
+      "institutionName": "Swinburne University of Technology",
+      "countryCode": "AU",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "newcastle-au",
+      "institutionName": "University of Newcastle",
+      "countryCode": "AU",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "wollongong",
+      "institutionName": "University of Wollongong",
+      "countryCode": "AU",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "western-sydney",
+      "institutionName": "Western Sydney University",
+      "countryCode": "AU",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "flinders",
+      "institutionName": "Flinders University",
+      "countryCode": "AU",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "jcu",
+      "institutionName": "James Cook University",
+      "countryCode": "AU",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "bond",
+      "institutionName": "Bond University",
+      "countryCode": "AU",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "oxford",
+      "institutionName": "University of Oxford",
+      "countryCode": "GB",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "cambridge",
+      "institutionName": "University of Cambridge",
+      "countryCode": "GB",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "lse",
+      "institutionName": "London School of Economics and Political Science",
+      "countryCode": "GB",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "imperial",
+      "institutionName": "Imperial College London",
+      "countryCode": "GB",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "ucl",
+      "institutionName": "University College London",
+      "countryCode": "GB",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "edinburgh",
+      "institutionName": "University of Edinburgh",
+      "countryCode": "GB",
+      "status": "REVIEW_REQUIRED",
+      "sourceUrl": "https://study.ed.ac.uk/sites/default/files/2026-02/Undergraduate%20Guide%202027.pdf",
+      "academicYear": "2027",
+      "metrics": {
+        "pages": 27,
+        "faculties": 5,
+        "programmes": 6,
+        "requirementsDeadlinesAndTests": 9
+      },
+      "candidates": {
+        "institutionId": "edinburgh",
+        "sourceUrl": "https://study.ed.ac.uk/sites/default/files/2026-02/Undergraduate%20Guide%202027.pdf",
+        "documentFingerprint": "ef8d4be49d4c85bce39a0f0e217c3b5f90f17bb5ec47b9a19619fcf8220f125b",
+        "extractedAt": "2026-09-09T06:45:27.531Z",
+        "pageCount": 27,
+        "faculties": [
+          {
+            "name": "Social & Political Sciences",
+            "startPage": 4,
+            "endPage": 13,
+            "programmes": [
+              {
+                "name": "LLB Law, as well as a few degrees",
+                "faculty": "Social & Political Sciences",
+                "evidence": {
+                  "pageNumber": 7,
+                  "text": "LLB Law, as well as a few degrees"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "MBChB Medicine)",
+                "faculty": "Social & Political Sciences",
+                "evidence": {
+                  "pageNumber": 7,
+                  "text": "MBChB Medicine)"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "MBChB Medicine will not be considered for deferred entry",
+                "faculty": "Social & Political Sciences",
+                "evidence": {
+                  "pageNumber": 7,
+                  "text": "MBChB Medicine will not be considered for deferred entry"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "MBChB Medicine and PhD TRACC",
+                "faculty": "Social & Political Sciences",
+                "evidence": {
+                  "pageNumber": 7,
+                  "text": "MBChB Medicine and PhD TRACC"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "BSc Neuroscience",
+                "faculty": "Social & Political Sciences",
+                "evidence": {
+                  "pageNumber": 8,
+                  "text": "BSc Neuroscience"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "BSc Computer Science",
+                "faculty": "Social & Political Sciences",
+                "evidence": {
+                  "pageNumber": 9,
+                  "text": "BSc Computer Science"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              }
+            ],
+            "claims": [
+              {
+                "kind": "ADMISSIONS_TEST",
+                "faculty": "Social & Political Sciences",
+                "evidence": {
+                  "pageNumber": 8,
+                  "text": "a hard balancing act but with time,"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "APPLICATION_ROUTE",
+                "faculty": "Social & Political Sciences",
+                "evidence": {
+                  "pageNumber": 13,
+                  "text": "how to apply online: www.ed.ac.uk/"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "APPLICATION_ROUTE",
+                "faculty": "Social & Political Sciences",
+                "evidence": {
+                  "pageNumber": 13,
+                  "text": "applicants must apply before the UCAS"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "ADMISSIONS_TEST",
+                "faculty": "Social & Political Sciences",
+                "evidence": {
+                  "pageNumber": 13,
+                  "text": "University Clinical Aptitude Test (UCAT)"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "CURRICULUM_REQUIREMENT",
+                "faculty": "Social & Political Sciences",
+                "evidence": {
+                  "pageNumber": 13,
+                  "text": "including SQA National 5, GCSE, and IB"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "APPLICATION_ROUTE",
+                "faculty": "Social & Political Sciences",
+                "evidence": {
+                  "pageNumber": 13,
+                  "text": "You will apply online, via UCAS."
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "APPLICATION_ROUTE",
+                "faculty": "Social & Political Sciences",
+                "evidence": {
+                  "pageNumber": 13,
+                  "text": "www.ucas.com"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              }
+            ]
+          },
+          {
+            "name": "Mathematics provides",
+            "startPage": 14,
+            "endPage": 16,
+            "programmes": [],
+            "claims": [
+              {
+                "kind": "ADMISSIONS_TEST",
+                "faculty": "Mathematics provides",
+                "evidence": {
+                  "pageNumber": 14,
+                  "text": "cost £51,961 a year including the ACT levy."
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              }
+            ]
+          },
+          {
+            "name": "Veterinary Studies, founded in",
+            "startPage": 17,
+            "endPage": 24,
+            "programmes": [],
+            "claims": []
+          },
+          {
+            "name": "study",
+            "startPage": 25,
+            "endPage": 25,
+            "programmes": [],
+            "claims": []
+          },
+          {
+            "name": "Art (ECA",
+            "startPage": 26,
+            "endPage": 27,
+            "programmes": [],
+            "claims": []
+          }
+        ],
+        "unassignedProgrammes": [],
+        "unassignedClaims": [
+          {
+            "kind": "ADMISSIONS_TEST",
+            "faculty": "Unassigned",
+            "evidence": {
+              "pageNumber": 3,
+              "text": "Our Sustainability Rewards App encourages students and staff to act sustainably, offering you"
+            },
+            "confidenceStatus": "NEEDS_REVIEW"
+          }
+        ],
+        "confidenceStatus": "NEEDS_REVIEW"
+      }
+    },
+    {
+      "institutionId": "cardiff",
+      "institutionName": "Cardiff University",
+      "countryCode": "GB",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "queens-belfast",
+      "institutionName": "Queen’s University Belfast",
+      "countryCode": "GB",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "manchester",
+      "institutionName": "The University of Manchester",
+      "countryCode": "GB",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "warwick",
+      "institutionName": "University of Warwick",
+      "countryCode": "GB",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "bristol",
+      "institutionName": "University of Bristol",
+      "countryCode": "GB",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "glasgow",
+      "institutionName": "University of Glasgow",
+      "countryCode": "GB",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "st-andrews",
+      "institutionName": "University of St Andrews",
+      "countryCode": "GB",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "swansea",
+      "institutionName": "Swansea University",
+      "countryCode": "GB",
+      "status": "REVIEW_REQUIRED",
+      "sourceUrl": "https://www.swansea.ac.uk/media/Swansea-University-Undergraduate-Prospectus-2026.pdf",
+      "academicYear": "2026",
+      "metrics": {
+        "pages": 156,
+        "faculties": 3,
+        "programmes": 36,
+        "requirementsDeadlinesAndTests": 44
+      },
+      "candidates": {
+        "institutionId": "swansea",
+        "sourceUrl": "https://www.swansea.ac.uk/media/Swansea-University-Undergraduate-Prospectus-2026.pdf",
+        "documentFingerprint": "c46693de85652cc03eede599868be6a129ee5503df04f42086b07018760ea03e",
+        "extractedAt": "2026-09-09T06:45:38.761Z",
+        "pageCount": 156,
+        "faculties": [
+          {
+            "name": "HUMANITIES",
+            "startPage": 12,
+            "endPage": 13,
+            "programmes": [],
+            "claims": []
+          },
+          {
+            "name": "HUMANITIES",
+            "startPage": 14,
+            "endPage": 58,
+            "programmes": [
+              {
+                "name": "BSc Business Management",
+                "faculty": "HUMANITIES",
+                "evidence": {
+                  "pageNumber": 23,
+                  "text": "BSc Business Management"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "BSc Computer Science and Artificial Intelligence",
+                "faculty": "HUMANITIES",
+                "evidence": {
+                  "pageNumber": 26,
+                  "text": "BSc Computer Science and Artificial Intelligence"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "BSc Psychology",
+                "faculty": "HUMANITIES",
+                "evidence": {
+                  "pageNumber": 26,
+                  "text": "BSc Psychology"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "BA Public Relations and Media",
+                "faculty": "HUMANITIES",
+                "evidence": {
+                  "pageNumber": 30,
+                  "text": "BA Public Relations and Media"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "BSc Business",
+                "faculty": "HUMANITIES",
+                "evidence": {
+                  "pageNumber": 33,
+                  "text": "BSc Business"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "BEng Aerospace",
+                "faculty": "HUMANITIES",
+                "evidence": {
+                  "pageNumber": 33,
+                  "text": "BEng Aerospace"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "LLB Law) spent",
+                "faculty": "HUMANITIES",
+                "evidence": {
+                  "pageNumber": 33,
+                  "text": "LLB Law) spent"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "Bachelor of Arts",
+                "faculty": "HUMANITIES",
+                "evidence": {
+                  "pageNumber": 52,
+                  "text": "Bachelor of Arts"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "Bachelor of Engineering",
+                "faculty": "HUMANITIES",
+                "evidence": {
+                  "pageNumber": 52,
+                  "text": "Bachelor of Engineering"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "Bachelor of Science",
+                "faculty": "HUMANITIES",
+                "evidence": {
+                  "pageNumber": 52,
+                  "text": "Bachelor of Science"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "Bachelor of Laws",
+                "faculty": "HUMANITIES",
+                "evidence": {
+                  "pageNumber": 52,
+                  "text": "Bachelor of Laws"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "Bachelor of Medicine",
+                "faculty": "HUMANITIES",
+                "evidence": {
+                  "pageNumber": 52,
+                  "text": "Bachelor of Medicine"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "BSc Honours",
+                "faculty": "HUMANITIES",
+                "evidence": {
+                  "pageNumber": 57,
+                  "text": "BSc Honours"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "BSc Finance",
+                "faculty": "HUMANITIES",
+                "evidence": {
+                  "pageNumber": 58,
+                  "text": "BSc Finance"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              }
+            ],
+            "claims": [
+              {
+                "kind": "CURRICULUM_REQUIREMENT",
+                "faculty": "HUMANITIES",
+                "evidence": {
+                  "pageNumber": 43,
+                  "text": "than taking A Levels."
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "CURRICULUM_REQUIREMENT",
+                "faculty": "HUMANITIES",
+                "evidence": {
+                  "pageNumber": 46,
+                  "text": "for AAA at A Level or equivalent*"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "CURRICULUM_REQUIREMENT",
+                "faculty": "HUMANITIES",
+                "evidence": {
+                  "pageNumber": 46,
+                  "text": "for AAB at A Level or equivalent*"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "APPLICATION_ROUTE",
+                "faculty": "HUMANITIES",
+                "evidence": {
+                  "pageNumber": 49,
+                  "text": "UCAS APPLICATION"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "CURRICULUM_REQUIREMENT",
+                "faculty": "HUMANITIES",
+                "evidence": {
+                  "pageNumber": 50,
+                  "text": "three A-Levels, or two A-Levels and the Advanced"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "APPLICATION_ROUTE",
+                "faculty": "HUMANITIES",
+                "evidence": {
+                  "pageNumber": 50,
+                  "text": "before making your UCAS application,"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "CURRICULUM_REQUIREMENT",
+                "faculty": "HUMANITIES",
+                "evidence": {
+                  "pageNumber": 50,
+                  "text": "Most of our courses have a typical A-Level,"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "CURRICULUM_REQUIREMENT",
+                "faculty": "HUMANITIES",
+                "evidence": {
+                  "pageNumber": 50,
+                  "text": "BTEC or International Baccalaureate offer,"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "APPLICATION_ROUTE",
+                "faculty": "HUMANITIES",
+                "evidence": {
+                  "pageNumber": 50,
+                  "text": "As part of your UCAS application, you will"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "APPLICATION_ROUTE",
+                "faculty": "HUMANITIES",
+                "evidence": {
+                  "pageNumber": 50,
+                  "text": "All UCAS applications will ask for a reference."
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "APPLICATION_ROUTE",
+                "faculty": "HUMANITIES",
+                "evidence": {
+                  "pageNumber": 50,
+                  "text": "availability and UCAS course codes:"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "APPLICATION_ROUTE",
+                "faculty": "HUMANITIES",
+                "evidence": {
+                  "pageNumber": 51,
+                  "text": "student you can apply to Swansea via UCAS,"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "APPLICATION_ROUTE",
+                "faculty": "HUMANITIES",
+                "evidence": {
+                  "pageNumber": 51,
+                  "text": "Once you have submitted your application to UCAS,"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "APPLICATION_ROUTE",
+                "faculty": "HUMANITIES",
+                "evidence": {
+                  "pageNumber": 51,
+                  "text": "be notified by UCAS."
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "CURRICULUM_REQUIREMENT",
+                "faculty": "HUMANITIES",
+                "evidence": {
+                  "pageNumber": 56,
+                  "text": "A Level let you down, an Integrated"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "APPLICATION_ROUTE",
+                "faculty": "HUMANITIES",
+                "evidence": {
+                  "pageNumber": 56,
+                  "text": "For full course details and individual UCAS course codes please search the A-Z"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "APPLICATION_ROUTE",
+                "faculty": "HUMANITIES",
+                "evidence": {
+                  "pageNumber": 57,
+                  "text": "For individual UCAS course codes"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              }
+            ]
+          },
+          {
+            "name": "Actuaries",
+            "startPage": 59,
+            "endPage": 156,
+            "programmes": [
+              {
+                "name": "BSc Actuarial Science programme brings together mathematical",
+                "faculty": "Actuaries",
+                "evidence": {
+                  "pageNumber": 59,
+                  "text": "BSc Actuarial Science programme brings together mathematical"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "BSc Honours",
+                "faculty": "Actuaries",
+                "evidence": {
+                  "pageNumber": 59,
+                  "text": "BSc Honours"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "BA Honours",
+                "faculty": "Actuaries",
+                "evidence": {
+                  "pageNumber": 60,
+                  "text": "BA Honours"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "BSc Business Management",
+                "faculty": "Actuaries",
+                "evidence": {
+                  "pageNumber": 67,
+                  "text": "BSc Business Management"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "BSc Computer Science",
+                "faculty": "Actuaries",
+                "evidence": {
+                  "pageNumber": 71,
+                  "text": "BSc Computer Science"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "BSc Digital Technology",
+                "faculty": "Actuaries",
+                "evidence": {
+                  "pageNumber": 71,
+                  "text": "BSc Digital Technology"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "BSc Computer Science and",
+                "faculty": "Actuaries",
+                "evidence": {
+                  "pageNumber": 71,
+                  "text": "BSc Computer Science and"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "BSc CRIMINOLOGY AND SOCIOLOGY",
+                "faculty": "Actuaries",
+                "evidence": {
+                  "pageNumber": 72,
+                  "text": "BSc CRIMINOLOGY AND SOCIOLOGY"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "LLB Honours",
+                "faculty": "Actuaries",
+                "evidence": {
+                  "pageNumber": 72,
+                  "text": "LLB Honours"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "BEng Honours",
+                "faculty": "Actuaries",
+                "evidence": {
+                  "pageNumber": 79,
+                  "text": "BEng Honours"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "BSc Environmental",
+                "faculty": "Actuaries",
+                "evidence": {
+                  "pageNumber": 90,
+                  "text": "BSc Environmental"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "BSc in Radiation Physics and the only one in Wales, your studies at Swansea",
+                "faculty": "Actuaries",
+                "evidence": {
+                  "pageNumber": 101,
+                  "text": "BSc in Radiation Physics and the only one in Wales, your studies at Swansea"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "BSc Marine Biology",
+                "faculty": "Actuaries",
+                "evidence": {
+                  "pageNumber": 109,
+                  "text": "BSc Marine Biology"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "BSc Marketing",
+                "faculty": "Actuaries",
+                "evidence": {
+                  "pageNumber": 110,
+                  "text": "BSc Marketing"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "BSc Business",
+                "faculty": "Actuaries",
+                "evidence": {
+                  "pageNumber": 110,
+                  "text": "BSc Business"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "BA Philosophy and Politics programme comprises an equal focus on each subj",
+                "faculty": "Actuaries",
+                "evidence": {
+                  "pageNumber": 131,
+                  "text": "BA Philosophy and Politics programme comprises an equal focus on each subj"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "BA PHILOSOPHY AND POLITICS",
+                "faculty": "Actuaries",
+                "evidence": {
+                  "pageNumber": 131,
+                  "text": "BA PHILOSOPHY AND POLITICS"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "BSc Psychology",
+                "faculty": "Actuaries",
+                "evidence": {
+                  "pageNumber": 135,
+                  "text": "BSc Psychology"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "BSc Zoology",
+                "faculty": "Actuaries",
+                "evidence": {
+                  "pageNumber": 143,
+                  "text": "BSc Zoology"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "BSc Biomedical Sciences",
+                "faculty": "Actuaries",
+                "evidence": {
+                  "pageNumber": 151,
+                  "text": "BSc Biomedical Sciences"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              }
+            ],
+            "claims": [
+              {
+                "kind": "APPLICATION_ROUTE",
+                "faculty": "Actuaries",
+                "evidence": {
+                  "pageNumber": 59,
+                  "text": "For individual UCAS course codes"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "CURRICULUM_REQUIREMENT",
+                "faculty": "Actuaries",
+                "evidence": {
+                  "pageNumber": 68,
+                  "text": "A Level Maths, GCSE Maths"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "CURRICULUM_REQUIREMENT",
+                "faculty": "Actuaries",
+                "evidence": {
+                  "pageNumber": 71,
+                  "text": "(to include A-Level Maths)"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "ADMISSIONS_TEST",
+                "faculty": "Actuaries",
+                "evidence": {
+                  "pageNumber": 91,
+                  "text": "Now is the time to act boldly to forge effective local and global responses"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "APPLICATION_ROUTE",
+                "faculty": "Actuaries",
+                "evidence": {
+                  "pageNumber": 107,
+                  "text": "For individual UCAS course codes please"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "ADMISSIONS_TEST",
+                "faculty": "Actuaries",
+                "evidence": {
+                  "pageNumber": 117,
+                  "text": "either the GAMSAT or UCAT selection"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "CURRICULUM_REQUIREMENT",
+                "faculty": "Actuaries",
+                "evidence": {
+                  "pageNumber": 120,
+                  "text": "both post-A level and from beginner’s"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "CURRICULUM_REQUIREMENT",
+                "faculty": "Actuaries",
+                "evidence": {
+                  "pageNumber": 121,
+                  "text": "at post-A level standard (or equivalent)"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "CURRICULUM_REQUIREMENT",
+                "faculty": "Actuaries",
+                "evidence": {
+                  "pageNumber": 121,
+                  "text": "can do so either post-A level or"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "CURRICULUM_REQUIREMENT",
+                "faculty": "Actuaries",
+                "evidence": {
+                  "pageNumber": 142,
+                  "text": "(A level in Welsh required for"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "CURRICULUM_REQUIREMENT",
+                "faculty": "Actuaries",
+                "evidence": {
+                  "pageNumber": 144,
+                  "text": "A Level Maths (B)"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "CURRICULUM_REQUIREMENT",
+                "faculty": "Actuaries",
+                "evidence": {
+                  "pageNumber": 144,
+                  "text": "A Level Chemistry"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "CURRICULUM_REQUIREMENT",
+                "faculty": "Actuaries",
+                "evidence": {
+                  "pageNumber": 144,
+                  "text": "(B) plus A Level"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "CURRICULUM_REQUIREMENT",
+                "faculty": "Actuaries",
+                "evidence": {
+                  "pageNumber": 145,
+                  "text": "studying A Level"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "CURRICULUM_REQUIREMENT",
+                "faculty": "Actuaries",
+                "evidence": {
+                  "pageNumber": 146,
+                  "text": "plus A Level"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "CURRICULUM_REQUIREMENT",
+                "faculty": "Actuaries",
+                "evidence": {
+                  "pageNumber": 146,
+                  "text": "DDM plus A Level"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "ADMISSIONS_TEST",
+                "faculty": "Actuaries",
+                "evidence": {
+                  "pageNumber": 148,
+                  "text": "GAMSAT or UCAT"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "CURRICULUM_REQUIREMENT",
+                "faculty": "Actuaries",
+                "evidence": {
+                  "pageNumber": 151,
+                  "text": "as for A Levels where you can substitute the same non-subject specific"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "ENGLISH_REQUIREMENT",
+                "faculty": "Actuaries",
+                "evidence": {
+                  "pageNumber": 151,
+                  "text": "English language requirement."
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "APPLICATION_ROUTE",
+                "faculty": "Actuaries",
+                "evidence": {
+                  "pageNumber": 152,
+                  "text": "through UCAS using the code S93."
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "APPLICATION_ROUTE",
+                "faculty": "Actuaries",
+                "evidence": {
+                  "pageNumber": 152,
+                  "text": "UCAS deadline for 2026 applications."
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "APPLICATION_DEADLINE",
+                "faculty": "Actuaries",
+                "evidence": {
+                  "pageNumber": 152,
+                  "text": "UCAS Application Deadline – check the dates"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "APPLICATION_ROUTE",
+                "faculty": "Actuaries",
+                "evidence": {
+                  "pageNumber": 152,
+                  "text": "UCAS Application Deadline – check the dates"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "APPLICATION_ROUTE",
+                "faculty": "Actuaries",
+                "evidence": {
+                  "pageNumber": 152,
+                  "text": "on the UCAS website: www.ucas.com"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "APPLICATION_ROUTE",
+                "faculty": "Actuaries",
+                "evidence": {
+                  "pageNumber": 153,
+                  "text": "UCAS choices."
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "APPLICATION_ROUTE",
+                "faculty": "Actuaries",
+                "evidence": {
+                  "pageNumber": 153,
+                  "text": "UCAS will confirm"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "APPLICATION_ROUTE",
+                "faculty": "Actuaries",
+                "evidence": {
+                  "pageNumber": 153,
+                  "text": "by logging into the UCAS Hub."
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              }
+            ]
+          }
+        ],
+        "unassignedProgrammes": [
+          {
+            "name": "BSc LLB",
+            "faculty": "Unassigned",
+            "evidence": {
+              "pageNumber": 5,
+              "text": "BSc LLB"
+            },
+            "confidenceStatus": "NEEDS_REVIEW"
+          },
+          {
+            "name": "BEng MPharm",
+            "faculty": "Unassigned",
+            "evidence": {
+              "pageNumber": 5,
+              "text": "BEng MPharm"
+            },
+            "confidenceStatus": "NEEDS_REVIEW"
+          }
+        ],
+        "unassignedClaims": [],
+        "confidenceStatus": "NEEDS_REVIEW"
+      }
+    },
+    {
+      "institutionId": "ulster",
+      "institutionName": "Ulster University",
+      "countryCode": "GB",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "birmingham",
+      "institutionName": "University of Birmingham",
+      "countryCode": "GB",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "leeds",
+      "institutionName": "University of Leeds",
+      "countryCode": "GB",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "sheffield",
+      "institutionName": "University of Sheffield",
+      "countryCode": "GB",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "nottingham",
+      "institutionName": "University of Nottingham",
+      "countryCode": "GB",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "southampton",
+      "institutionName": "University of Southampton",
+      "countryCode": "GB",
+      "status": "EXCLUDED",
+      "sourceUrl": "https://www.southampton.ac.uk/~assets/doc/Delhi/university-of-southampton-delhi-prospectus.pdf",
+      "reason": "Regional campus guide, not the institution-wide prospectus"
+    },
+    {
+      "institutionId": "exeter",
+      "institutionName": "University of Exeter",
+      "countryCode": "GB",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "york-uk",
+      "institutionName": "University of York",
+      "countryCode": "GB",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "liverpool",
+      "institutionName": "University of Liverpool",
+      "countryCode": "GB",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "newcastle-uk",
+      "institutionName": "Newcastle University",
+      "countryCode": "GB",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "durham",
+      "institutionName": "Durham University",
+      "countryCode": "GB",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "bath",
+      "institutionName": "University of Bath",
+      "countryCode": "GB",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "lancaster",
+      "institutionName": "Lancaster University",
+      "countryCode": "GB",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "aberdeen",
+      "institutionName": "University of Aberdeen",
+      "countryCode": "GB",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "dundee",
+      "institutionName": "University of Dundee",
+      "countryCode": "GB",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "strathclyde",
+      "institutionName": "University of Strathclyde",
+      "countryCode": "GB",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "utoronto",
+      "institutionName": "University of Toronto",
+      "countryCode": "CA",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "ubc",
+      "institutionName": "University of British Columbia",
+      "countryCode": "CA",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "mcgill",
+      "institutionName": "McGill University",
+      "countryCode": "CA",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "waterloo",
+      "institutionName": "University of Waterloo",
+      "countryCode": "CA",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "ualberta",
+      "institutionName": "University of Alberta",
+      "countryCode": "CA",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "mcmaster",
+      "institutionName": "McMaster University",
+      "countryCode": "CA",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "queens-ca",
+      "institutionName": "Queen's University",
+      "countryCode": "CA",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "western-ca",
+      "institutionName": "Western University",
+      "countryCode": "CA",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "uottawa",
+      "institutionName": "University of Ottawa",
+      "countryCode": "CA",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "ucalgary",
+      "institutionName": "University of Calgary",
+      "countryCode": "CA",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "sfu",
+      "institutionName": "Simon Fraser University",
+      "countryCode": "CA",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "uvic",
+      "institutionName": "University of Victoria",
+      "countryCode": "CA",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "umanitoba",
+      "institutionName": "University of Manitoba",
+      "countryCode": "CA",
+      "status": "EXCLUDED",
+      "sourceUrl": "https://umanitoba.ca/sites/default/files/2021-08/umviewbook2022-admissionrequirements-web.pdf",
+      "academicYear": "2022",
+      "reason": "Historical 2022 document"
+    },
+    {
+      "institutionId": "usask",
+      "institutionName": "University of Saskatchewan",
+      "countryCode": "CA",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "dalhousie",
+      "institutionName": "Dalhousie University",
+      "countryCode": "CA",
+      "status": "REVIEW_REQUIRED",
+      "sourceUrl": "https://www.dal.ca/content/dam/www/study/viewbooks/domestic-viewbook.pdf",
+      "metrics": {
+        "pages": 11,
+        "faculties": 2,
+        "programmes": 7,
+        "requirementsDeadlinesAndTests": 5
+      },
+      "candidates": {
+        "institutionId": "dalhousie",
+        "sourceUrl": "https://www.dal.ca/content/dam/www/study/viewbooks/domestic-viewbook.pdf",
+        "documentFingerprint": "662742814d9add93b4b2ecf057fe3e5a2b4cb1050a95c30a87dcf632d6e0d7e7",
+        "extractedAt": "2026-09-09T06:45:39.992Z",
+        "pageCount": 11,
+        "faculties": [
+          {
+            "name": "Open Learning & Career",
+            "startPage": 5,
+            "endPage": 5,
+            "programmes": [
+              {
+                "name": "Bachelor of Science",
+                "faculty": "Open Learning & Career",
+                "evidence": {
+                  "pageNumber": 5,
+                  "text": "Bachelor of Science"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "Bachelor of Arts",
+                "faculty": "Open Learning & Career",
+                "evidence": {
+                  "pageNumber": 5,
+                  "text": "Bachelor of Arts"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "Bachelor of Engineering",
+                "faculty": "Open Learning & Career",
+                "evidence": {
+                  "pageNumber": 5,
+                  "text": "Bachelor of Engineering"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "name": "Bachelor of Science (Medical Sciences)",
+                "faculty": "Open Learning & Career",
+                "evidence": {
+                  "pageNumber": 5,
+                  "text": "Bachelor of Science (Medical Sciences)"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              }
+            ],
+            "claims": []
+          },
+          {
+            "name": "Agriculture admission and supplemental requirements",
+            "startPage": 6,
+            "endPage": 11,
+            "programmes": [
+              {
+                "name": "Bachelor of Science",
+                "faculty": "Agriculture admission and supplemental requirements",
+                "evidence": {
+                  "pageNumber": 6,
+                  "text": "Bachelor of Science"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              }
+            ],
+            "claims": [
+              {
+                "kind": "CURRICULUM_REQUIREMENT",
+                "faculty": "Agriculture admission and supplemental requirements",
+                "evidence": {
+                  "pageNumber": 6,
+                  "text": "IB Curriculum Mathematics: Analysis and Approaches (SL or HL) OR"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "CURRICULUM_REQUIREMENT",
+                "faculty": "Agriculture admission and supplemental requirements",
+                "evidence": {
+                  "pageNumber": 6,
+                  "text": "A levels or 4 AS"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "APPLICATION_DEADLINE",
+                "faculty": "Agriculture admission and supplemental requirements",
+                "evidence": {
+                  "pageNumber": 10,
+                  "text": "Application deadline"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "APPLICATION_DEADLINE",
+                "faculty": "Agriculture admission and supplemental requirements",
+                "evidence": {
+                  "pageNumber": 10,
+                  "text": "application deadline"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              }
+            ]
+          }
+        ],
+        "unassignedProgrammes": [
+          {
+            "name": "Bachelor of Science",
+            "faculty": "Unassigned",
+            "evidence": {
+              "pageNumber": 4,
+              "text": "Bachelor of Science"
+            },
+            "confidenceStatus": "NEEDS_REVIEW"
+          },
+          {
+            "name": "Bachelor of Arts",
+            "faculty": "Unassigned",
+            "evidence": {
+              "pageNumber": 4,
+              "text": "Bachelor of Arts"
+            },
+            "confidenceStatus": "NEEDS_REVIEW"
+          }
+        ],
+        "unassignedClaims": [
+          {
+            "kind": "ADMISSIONS_TEST",
+            "faculty": "Unassigned",
+            "evidence": {
+              "pageNumber": 2,
+              "text": "Section 35 of the Constitution Act, 1982 recognizes"
+            },
+            "confidenceStatus": "NEEDS_REVIEW"
+          }
+        ],
+        "confidenceStatus": "NEEDS_REVIEW"
+      }
+    },
+    {
+      "institutionId": "unb",
+      "institutionName": "University of New Brunswick",
+      "countryCode": "CA",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "mun",
+      "institutionName": "Memorial University of Newfoundland",
+      "countryCode": "CA",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "upei",
+      "institutionName": "University of Prince Edward Island",
+      "countryCode": "CA",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "concordia-ca",
+      "institutionName": "Concordia University",
+      "countryCode": "CA",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "york-ca",
+      "institutionName": "York University",
+      "countryCode": "CA",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "mit",
+      "institutionName": "Massachusetts Institute of Technology",
+      "countryCode": "US",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "stanford",
+      "institutionName": "Stanford University",
+      "countryCode": "US",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "harvard",
+      "institutionName": "Harvard University",
+      "countryCode": "US",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "berkeley",
+      "institutionName": "University of California, Berkeley",
+      "countryCode": "US",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "umich",
+      "institutionName": "University of Michigan",
+      "countryCode": "US",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "ucla",
+      "institutionName": "University of California, Los Angeles",
+      "countryCode": "US",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "ucsd",
+      "institutionName": "University of California San Diego",
+      "countryCode": "US",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "usc",
+      "institutionName": "University of Southern California",
+      "countryCode": "US",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "columbia",
+      "institutionName": "Columbia University",
+      "countryCode": "US",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "nyu",
+      "institutionName": "New York University",
+      "countryCode": "US",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "cornell",
+      "institutionName": "Cornell University",
+      "countryCode": "US",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "upenn",
+      "institutionName": "University of Pennsylvania",
+      "countryCode": "US",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "princeton",
+      "institutionName": "Princeton University",
+      "countryCode": "US",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "yale",
+      "institutionName": "Yale University",
+      "countryCode": "US",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "duke",
+      "institutionName": "Duke University",
+      "countryCode": "US",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "unc",
+      "institutionName": "University of North Carolina at Chapel Hill",
+      "countryCode": "US",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "uiuc",
+      "institutionName": "University of Illinois Urbana-Champaign",
+      "countryCode": "US",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "utexas",
+      "institutionName": "The University of Texas at Austin",
+      "countryCode": "US",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "gatech",
+      "institutionName": "Georgia Institute of Technology",
+      "countryCode": "US",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "uwashington",
+      "institutionName": "University of Washington",
+      "countryCode": "US",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "wisconsin",
+      "institutionName": "University of Wisconsin-Madison",
+      "countryCode": "US",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "purdue",
+      "institutionName": "Purdue University",
+      "countryCode": "US",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "ohio-state",
+      "institutionName": "The Ohio State University",
+      "countryCode": "US",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "penn-state",
+      "institutionName": "Pennsylvania State University",
+      "countryCode": "US",
+      "status": "NO_DIRECT_PDF"
+    },
+    {
+      "institutionId": "uva",
+      "institutionName": "University of Virginia",
+      "countryCode": "US",
+      "status": "NO_DIRECT_PDF"
+    }
+  ]
+}

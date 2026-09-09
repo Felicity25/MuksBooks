@@ -1,4 +1,5 @@
 import { parse } from 'parse5'
+import { createHash } from 'node:crypto'
 import { reconcileDeadline } from './application-domain.ts'
 import { ADMISSIONS_POLICIES, ADMISSIONS_TEST_FEES, ADMISSIONS_TEST_SESSIONS } from './admissions-data.ts'
 import { ADMISSIONS_DEADLINES, CURRICULUM_RESULTS_EVENTS, OFFICIAL_UNIVERSITY_SOURCES, UNIVERSITY_DATA_CHECKED_AT } from './fresh-data.ts'
@@ -58,9 +59,23 @@ interface FetchResponse {
   url: string
   headers: { get(name: string): string | null }
   text(): Promise<string>
+  arrayBuffer?(): Promise<ArrayBuffer>
 }
 
 type SourceFetcher = (url: string, init?: { headers?: Record<string, string>; signal?: AbortSignal }) => Promise<FetchResponse>
+
+const CADENCE_DAYS: Record<FreshUniversitySource['refreshCadence'], number> = { DAILY: 1, WEEKLY: 7, MONTHLY: 30, QUARTERLY: 90 }
+
+export function sourceRefreshDue(source: FreshUniversitySource, now = new Date()) {
+  if (!source.lastCheckedAt) return true
+  const elapsed = now.getTime() - new Date(source.lastCheckedAt).getTime()
+  return elapsed >= CADENCE_DAYS[source.refreshCadence] * 24 * 60 * 60 * 1000
+}
+
+function fingerprint(content: string | ArrayBuffer) {
+  const value = typeof content === 'string' ? Buffer.from(content) : Buffer.from(content)
+  return createHash('sha256').update(value).digest('hex')
+}
 
 function parsedPageMetadata(html: string) {
   const document = parse(html) as unknown as { childNodes?: unknown[] }
@@ -191,8 +206,14 @@ export class FreshUniversityDataService {
       const response = await fetcher(source.url, { headers: { 'user-agent': 'MuksBooks University Source Monitor/1.0' }, signal: controller.signal })
       if (!response.ok) throw new Error(`Official source returned HTTP ${response.status}.`)
       const contentType = response.headers.get('content-type') || ''
+      if (contentType.includes('application/pdf')) {
+        if (!response.arrayBuffer) throw new Error('PDF response body is unavailable.')
+        const body = await response.arrayBuffer()
+        return { body, finalUrl: response.url || source.url, contentType, contentFingerprint: fingerprint(body) }
+      }
       if (!contentType.includes('text/html')) throw new Error(`Unsupported source content type: ${contentType || 'unknown'}.`)
-      return { body: await response.text(), finalUrl: response.url || source.url, contentType }
+      const body = await response.text()
+      return { body, finalUrl: response.url || source.url, contentType, contentFingerprint: fingerprint(body) }
     } finally {
       clearTimeout(timeout)
     }
@@ -217,16 +238,35 @@ export class FreshUniversityDataService {
   async refreshSource(source: FreshUniversitySource, fetcher?: SourceFetcher, checkedAt = new Date().toISOString()) {
     try {
       const retrieval = await this.retrieveSource(source, fetcher)
+      const unchanged = Boolean(source.contentFingerprint && source.contentFingerprint === retrieval.contentFingerprint)
+      if (unchanged) return {
+        source: { ...source, lastCheckedAt: checkedAt, lastSuccessfulAt: checkedAt },
+        candidate: undefined,
+        unchanged: true,
+        error: undefined
+      }
+      if (retrieval.contentType.includes('application/pdf')) return {
+        source: { ...source, contentFingerprint: retrieval.contentFingerprint, lastCheckedAt: checkedAt, lastSuccessfulAt: checkedAt },
+        candidate: {
+          sourceId: source.id, kind: source.kind, sourceUrl: source.url, sourceType: source.sourceType, checkedAt,
+          confidenceStatus: 'NEEDS_REVIEW' as const, text: '', signals: { dates: [], fees: [], requirementTerms: [], bookingUrls: [], claims: [] }
+        },
+        unchanged: false,
+        error: undefined
+      }
+      if (typeof retrieval.body !== 'string') throw new Error('HTML source body is unavailable.')
       const candidate = this.extractCandidate(source, retrieval.body, checkedAt)
       return {
-        source: { ...source, lastCheckedAt: checkedAt, lastSuccessfulAt: checkedAt },
+        source: { ...source, contentFingerprint: retrieval.contentFingerprint, lastCheckedAt: checkedAt, lastSuccessfulAt: checkedAt },
         candidate,
+        unchanged: false,
         error: undefined
       }
     } catch (error) {
       return {
         source: { ...source, lastCheckedAt: checkedAt, confidenceStatus: 'STALE' as const },
         candidate: undefined,
+        unchanged: false,
         error: error instanceof Error ? error.message : 'Official source refresh failed.'
       }
     }

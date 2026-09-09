@@ -2,6 +2,7 @@ import type {
   AdmissionsDeadline,
   AdmissionsTestId,
   AdmissionsTestSession,
+  ApplicantType,
   ApplicantRoute,
   ApplicationDocument,
   ApplicationStatus,
@@ -10,8 +11,12 @@ import type {
   GradeKind,
   OfferCondition,
   UniversityApplication,
-  UniversityOffer
+  UniversityOffer,
+  Institution,
+  Programme,
+  ResolvedApplicationRoute
 } from './types'
+import { getReviewedApplicationRoute } from './application-routes.ts'
 
 const LEGACY_STATUS: Record<string, ApplicationStatus> = {
   Interested: 'INTERESTED',
@@ -71,6 +76,7 @@ export function createUniversityApplication(programmeId: string, institutionId: 
     id: `${programmeId}-${now.getTime()}`,
     programmeId,
     institutionId,
+    dataOrigin: 'OFFICIAL_VERIFIED',
     intakeYear: now.getUTCFullYear() + 1,
     applicantRoute: route,
     status: 'INTERESTED',
@@ -85,6 +91,49 @@ export function createUniversityApplication(programmeId: string, institutionId: 
   }
 }
 
+export interface ManualApplicationInput {
+  university: string
+  programme: string
+  country: string
+  intakeYear: number
+  intakeTerm?: string
+  applicantType: ApplicantType
+  applicationMethod?: string
+  applicationPortalUrl?: string
+  userDeadline?: string
+  status?: ApplicationStatus
+  applicationReference?: string
+  notes?: string
+}
+
+export function createManualUniversityApplication(input: ManualApplicationInput, now = new Date()): UniversityApplication {
+  const timestamp = now.toISOString()
+  const token = `${now.getTime()}-${Math.random().toString(36).slice(2, 8)}`
+  return {
+    ...createUniversityApplication(`custom-programme-${token}`, `custom-institution-${token}`, now),
+    id: `custom-application-${token}`,
+    customInstitutionName: input.university.trim(),
+    customProgrammeName: input.programme.trim(),
+    customCountry: input.country.trim(),
+    dataOrigin: 'USER_ENTERED',
+    intakeYear: input.intakeYear,
+    intakeTerm: input.intakeTerm?.trim() || undefined,
+    applicantContext: {
+      citizenships: [],
+      targetCountry: input.country.trim(),
+      likelyApplicantType: input.applicantType,
+      explanation: 'Applicant type selected by the learner for this manually entered application.'
+    },
+    status: input.status ?? 'INTERESTED',
+    applicationMethod: input.applicationMethod?.trim() || undefined,
+    applicationPortalUrl: input.applicationPortalUrl?.trim() || undefined,
+    applicationReference: input.applicationReference?.trim() || undefined,
+    userDeadline: input.userDeadline || undefined,
+    notes: input.notes?.trim() || '',
+    timeline: [{ id: `started-${token}`, type: 'APPLICATION_CREATED', occurredAt: timestamp, description: 'User-entered application tracking started.' }]
+  }
+}
+
 export function normalizeUniversityApplication(value: Partial<UniversityApplication> & Record<string, unknown>): UniversityApplication {
   const createdAt = typeof value.createdAt === 'string' ? value.createdAt : new Date().toISOString()
   const route = APPLICANT_ROUTES.includes(value.applicantRoute as ApplicantRoute) ? value.applicantRoute as ApplicantRoute : 'SCHOOL_LEAVER'
@@ -93,6 +142,10 @@ export function normalizeUniversityApplication(value: Partial<UniversityApplicat
     userId: typeof value.userId === 'string' ? value.userId : undefined,
     programmeId: String(value.programmeId || ''),
     institutionId: String(value.institutionId || ''),
+    customInstitutionName: typeof value.customInstitutionName === 'string' ? value.customInstitutionName : undefined,
+    customProgrammeName: typeof value.customProgrammeName === 'string' ? value.customProgrammeName : undefined,
+    customCountry: typeof value.customCountry === 'string' ? value.customCountry : undefined,
+    dataOrigin: ['OFFICIAL_VERIFIED', 'OFFICIAL_AUTO_EXTRACTED', 'USER_ENTERED'].includes(String(value.dataOrigin)) ? value.dataOrigin as UniversityApplication['dataOrigin'] : undefined,
     intakeYear: Number(value.intakeYear) || new Date().getUTCFullYear() + 1,
     intakeTerm: typeof value.intakeTerm === 'string' ? value.intakeTerm : undefined,
     applicantRoute: route,
@@ -106,6 +159,8 @@ export function normalizeUniversityApplication(value: Partial<UniversityApplicat
     submittedAt: typeof value.submittedAt === 'string' ? value.submittedAt : undefined,
     notes: String(value.notes || ''),
     deadline: typeof value.deadline === 'string' ? value.deadline : undefined,
+    userDeadline: typeof value.userDeadline === 'string' ? value.userDeadline : undefined,
+    userDeadlineNote: typeof value.userDeadlineNote === 'string' ? value.userDeadlineNote : undefined,
     deadlineIds: Array.isArray(value.deadlineIds) ? value.deadlineIds.map(String) : [],
     documents: Array.isArray(value.documents) ? value.documents : defaultApplicationDocuments(route),
     tasks: Array.isArray(value.tasks) ? value.tasks : [],
@@ -114,6 +169,47 @@ export function normalizeUniversityApplication(value: Partial<UniversityApplicat
     createdAt,
     updatedAt: typeof value.updatedAt === 'string' ? value.updatedAt : createdAt
   }
+}
+
+function routeMethod(url: string) {
+  const normalized = url.toLowerCase()
+  if (normalized.includes('ucas.com')) return ['UCAS', 'Apply via UCAS'] as const
+  if (normalized.includes('vtac.edu.au')) return ['VTAC', 'Apply via VTAC'] as const
+  if (normalized.includes('uac.edu.au')) return ['UAC', 'Apply via UAC'] as const
+  if (normalized.includes('qtac.edu.au')) return ['QTAC', 'Apply via QTAC'] as const
+  if (normalized.includes('satac.edu.au')) return ['SATAC', 'Apply via SATAC'] as const
+  if (normalized.includes('tisc.edu.au')) return ['TISC', 'Apply via TISC'] as const
+  if (normalized.includes('ouac.on.ca')) return ['OUAC', 'Apply via OUAC'] as const
+  if (normalized.includes('commonapp.org')) return ['Common App', 'Open Common App'] as const
+  if (normalized.includes('universityofcalifornia.edu')) return ['UC application', 'Open UC application'] as const
+  return ['Direct to university', 'Apply directly'] as const
+}
+
+export function resolveApplicationRoute(programme: Programme, institution: Institution, applicantType: ApplicantType): ResolvedApplicationRoute {
+  const applicantUrl = applicantType === 'DOMESTIC'
+    ? programme.domesticApplicationUrl
+    : applicantType === 'INTERNATIONAL'
+      ? programme.internationalApplicationUrl
+      : undefined
+  const institutionUrl = applicantType === 'INTERNATIONAL' ? institution.internationalAdmissionsUrl : undefined
+  const reviewedRoute = getReviewedApplicationRoute(institution.id, applicantType)
+  const candidates = [
+    applicantUrl,
+    programme.applicationUrl,
+    reviewedRoute?.url,
+    programme.centralApplicationUrl,
+    programme.programmeAdmissionsUrl,
+    institution.applicationUrl,
+    institutionUrl,
+    institution.undergraduateAdmissionsUrl,
+    programme.admissionsUrl,
+    institution.admissionsUrl
+  ]
+  const url = candidates.find(Boolean)
+  if (!url) return { method: 'Not indexed', ctaLabel: 'Open university website', url: institution.officialWebsite, source: 'OFFICIAL_VERIFIED', explanation: 'No more specific official application destination is indexed yet.' }
+  if (reviewedRoute?.url === url) return { method: reviewedRoute.method, ctaLabel: reviewedRoute.ctaLabel, url, source: 'OFFICIAL_VERIFIED', explanation: reviewedRoute.explanation }
+  const [method, ctaLabel] = routeMethod(url)
+  return { method, ctaLabel, url, source: 'OFFICIAL_VERIFIED', explanation: applicantType === 'UNCERTAIN' ? 'Confirm your applicant type before applying; this is the best currently indexed official route.' : `Selected for the ${applicantType.toLowerCase()} applicant context.` }
 }
 
 export function reconcileDeadline(previous: AdmissionsDeadline | undefined, incoming: AdmissionsDeadline) {
@@ -139,10 +235,12 @@ export function deadlinesForApplication(application: UniversityApplication, dead
     .filter((deadline) => !deadline.programmeId || deadline.programmeId === application.programmeId)
     .filter((deadline) => deadline.intakeYear === application.intakeYear)
     .filter((deadline) => !deadline.applicantRoute || deadline.applicantRoute === application.applicantRoute)
+    .filter((deadline) => !deadline.applicantType || deadline.applicantType === application.applicantContext?.likelyApplicantType)
     .sort((left, right) => left.dueAt.localeCompare(right.dueAt))
 }
 
 export function formatDateInTimezone(value: string, timezone?: string) {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return new Date(`${value}T12:00:00Z`).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
   return new Date(value).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', timeZone: timezone || 'UTC' })
 }
 

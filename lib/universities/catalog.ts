@@ -110,6 +110,15 @@ const SEARCH_SYNONYMS: Record<string, string> = {
   med: 'medicine'
 }
 
+const INSTITUTION_ID_ALIASES: Record<string, string> = {
+  melbourne: 'unimelb',
+  toronto: 'utoronto'
+}
+
+function canonicalInstitutionId(institutionId: string) {
+  return INSTITUTION_ID_ALIASES[institutionId] ?? institutionId
+}
+
 function expandSearchQuery(value: string) {
   const normalized = normalizeUniversityQuery(value)
   return SEARCH_SYNONYMS[normalized] ?? normalized
@@ -132,6 +141,9 @@ function scoreMatch(query: string, institution: Institution, programme: Programm
     programme.name,
     programme.normalizedName,
     ...(programme.aliases ?? []),
+    ...(programme.majors ?? []),
+    ...(programme.specialisations ?? []),
+    ...(programme.streams ?? []),
   ].join(' '))
   const programmeContext = normalizeUniversityQuery([
     programme.studyAreas.join(' '),
@@ -207,8 +219,9 @@ export function getCountryCoverage(country: CountryCatalogue) {
 }
 
 export function getInstitution(institutionId: string) {
+  const canonicalId = canonicalInstitutionId(institutionId)
   for (const country of COUNTRY_CATALOGUE_DATA) {
-    const institution = country.institutions.find((entry) => entry.id === institutionId)
+    const institution = country.institutions.find((entry) => entry.id === canonicalId)
     if (institution) return institution
   }
   return undefined
@@ -223,5 +236,6 @@ export function getProgramme(programmeId: string) {
 }
 
 export function getInstitutionProgrammes(institutionId: string) {
-  return COUNTRY_CATALOGUE_DATA.flatMap((country) => country.programmes).filter((programme) => programme.institutionId === institutionId)
+  const canonicalId = canonicalInstitutionId(institutionId)
+  return COUNTRY_CATALOGUE_DATA.flatMap((country) => country.programmes).filter((programme) => programme.institutionId === canonicalId)
 }

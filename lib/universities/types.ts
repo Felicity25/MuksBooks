@@ -7,6 +7,7 @@ export type SourceType = 'official-programme' | 'official-course-finder' | 'offi
 export type ConfidenceStatus = 'VERIFIED_OFFICIAL' | 'AUTO_EXTRACTED_OFFICIAL' | 'NEEDS_REVIEW' | 'STALE' | 'CONFLICTING' | 'UNKNOWN'
 export type CoverageLevel = 'none' | 'building' | 'partial' | 'substantial' | 'near-complete'
 export type ApplicantType = 'DOMESTIC' | 'INTERNATIONAL' | 'UNCERTAIN'
+export type DataOrigin = 'OFFICIAL_VERIFIED' | 'OFFICIAL_AUTO_EXTRACTED' | 'USER_ENTERED'
 export type MatchState = 'STRONG_MATCH' | 'POTENTIAL_MATCH' | 'REACH' | 'PREREQUISITE_GAP' | 'ENGLISH_CHECK' | 'MISSING_INFORMATION' | 'REQUIREMENTS_NOT_STRUCTURED'
 export type EnglishTest = 'IELTS' | 'TOEFL' | 'PTE' | 'CAMBRIDGE'
 export type AdmissionsTestId = 'SAT' | 'ACT' | 'NBT_AQL' | 'NBT_MAT' | 'UCAT' | 'UCAT_ANZ' | 'GAMSAT' | 'LNAT' | 'TMUA' | 'ESAT' | 'ISAT'
@@ -207,6 +208,16 @@ export interface EnglishRequirement {
   lastVerifiedAt: string
 }
 
+export interface Faculty {
+  id: string
+  institutionId: string
+  name: string
+  aliases?: string[]
+  officialUrl: string
+  sourceUrl: string
+  lastVerifiedAt: string
+}
+
 export interface Institution {
   id: string
   name: string
@@ -222,6 +233,12 @@ export interface Institution {
   internationalAdmissionsUrl?: string
   programmeFinderUrl?: string
   prospectusUrl?: string
+  prospectusAcademicYear?: string
+  facultyUrls?: Array<{ id: string; name: string; url: string }>
+  applicationPortalUrl?: string
+  lastProspectusCheckAt?: string
+  lastWebsiteRefreshAt?: string
+  prospectusFingerprint?: string
   applicationUrl?: string
   publicPrivate?: 'public' | 'private' | 'mixed'
   campusLocations?: string[]
@@ -233,6 +250,7 @@ export interface Institution {
   admissionsCycle?: string
   lastCheckedAt?: string
   lastVerifiedAt: string
+  faculties?: Faculty[]
   programmeCoverageStatus?: CoverageLevel
   admissionsCoverageStatus?: CoverageLevel
   lastIndexedAt?: string
@@ -248,7 +266,11 @@ export interface Programme {
   degreeType: string
   qualificationLevel: string
   faculty: string
+  facultyId?: string
   department?: string
+  majors?: string[]
+  specialisations?: string[]
+  streams?: string[]
   studyAreas: string[]
   industryAreas?: string[]
   tags: string[]
@@ -260,6 +282,12 @@ export interface Programme {
   intakeYears?: number[]
   intakeTerms?: string[]
   officialProgrammeUrl: string
+  programmeAdmissionsUrl?: string
+  domesticApplicationUrl?: string
+  internationalApplicationUrl?: string
+  centralApplicationUrl?: string
+  facultyUrl?: string
+  requirementsUrl?: string
   admissionsUrl?: string
   applicationUrl?: string
   curriculumRequirements: string[]
@@ -433,6 +461,10 @@ export interface UniversityApplication {
   userId?: string
   programmeId: string
   institutionId: string
+  customInstitutionName?: string
+  customProgrammeName?: string
+  customCountry?: string
+  dataOrigin?: DataOrigin
   intakeYear: number
   intakeTerm?: string
   applicantRoute: ApplicantRoute
@@ -450,6 +482,8 @@ export interface UniversityApplication {
   submittedAt?: string
   notes: string
   deadline?: string
+  userDeadline?: string
+  userDeadlineNote?: string
   deadlineIds: string[]
   documents: ApplicationDocument[]
   tasks: ApplicationTask[]
@@ -459,7 +493,15 @@ export interface UniversityApplication {
   updatedAt: string
 }
 
-export type FreshUniversityDataKind = 'PROGRAMMES' | 'APPLICATION_DEADLINES' | 'RESULT_RELEASE_DATES' | 'ADMISSIONS_REQUIREMENTS' | 'ENGLISH_REQUIREMENTS' | 'TEST_REQUIREMENTS' | 'TEST_DATES' | 'TEST_FEES' | 'TEST_BOOKING' | 'INTERVIEW_REQUIREMENTS' | 'PORTFOLIO_REQUIREMENTS' | 'ENGLISH_REQUIREMENT' | 'ENGLISH_EXEMPTION' | 'ADMISSIONS_TEST_REQUIREMENT' | 'TEST_MINIMUM_SCORE' | 'TEST_REGISTRATION_DATE' | 'TEST_DATE' | 'TEST_WINDOW' | 'TEST_FEE' | 'TEST_BOOKING_URL' | 'TEST_SCORE_SUBMISSION_DEADLINE' | 'INTERVIEW_REQUIREMENT' | 'PORTFOLIO_REQUIREMENT' | 'SCHOLARSHIPS' | 'SCHOLARSHIP_DEADLINES' | 'FEES'
+export interface ResolvedApplicationRoute {
+  method: string
+  url?: string
+  ctaLabel: string
+  source: DataOrigin
+  explanation: string
+}
+
+export type FreshUniversityDataKind = 'PROSPECTUS' | 'PROGRAMMES' | 'APPLICATION_ROUTES' | 'APPLICATION_DEADLINES' | 'RESULT_RELEASE_DATES' | 'ADMISSIONS_REQUIREMENTS' | 'ENGLISH_REQUIREMENTS' | 'TEST_REQUIREMENTS' | 'TEST_DATES' | 'TEST_FEES' | 'TEST_BOOKING' | 'INTERVIEW_REQUIREMENTS' | 'PORTFOLIO_REQUIREMENTS' | 'ENGLISH_REQUIREMENT' | 'ENGLISH_EXEMPTION' | 'ADMISSIONS_TEST_REQUIREMENT' | 'TEST_MINIMUM_SCORE' | 'TEST_REGISTRATION_DATE' | 'TEST_DATE' | 'TEST_WINDOW' | 'TEST_FEE' | 'TEST_BOOKING_URL' | 'TEST_SCORE_SUBMISSION_DEADLINE' | 'INTERVIEW_REQUIREMENT' | 'PORTFOLIO_REQUIREMENT' | 'SCHOLARSHIPS' | 'SCHOLARSHIP_DEADLINES' | 'FEES'
 
 export interface FreshUniversitySource {
   id: string
@@ -473,5 +515,6 @@ export interface FreshUniversitySource {
   refreshCadence: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'QUARTERLY'
   lastCheckedAt?: string
   lastSuccessfulAt?: string
+  contentFingerprint?: string
   confidenceStatus: ConfidenceStatus
 }

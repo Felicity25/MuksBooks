@@ -1,5 +1,15 @@
 import assert from 'node:assert/strict'
-import { getCountryCatalogue, searchUniversityCatalogue } from './catalog.ts'
+import { getCountryCatalogue, getInstitution, getInstitutionProgrammes, getProgramme, searchUniversityCatalogue } from './catalog.ts'
+
+assert.equal(getInstitution('melbourne')?.id, 'unimelb', 'Common Melbourne ID should resolve to the canonical institution')
+assert.equal(getInstitution('toronto')?.id, 'utoronto', 'Common Toronto ID should resolve to the canonical institution')
+assert.ok(getInstitutionProgrammes('melbourne').length > 0, 'Melbourne alias should resolve canonical programmes')
+assert.ok(getInstitutionProgrammes('toronto').length > 0, 'Toronto alias should resolve canonical programmes')
+assert.ok(getInstitutionProgrammes('ul').filter((programme) => programme.confidenceStatus === 'VERIFIED_OFFICIAL').length >= 17, 'University of Limpopo should expose reviewed programme depth')
+assert.equal(getInstitution('ul')?.faculties?.length, 4, 'University of Limpopo should expose its reviewed faculty structure')
+assert.deepEqual(getProgramme('ul-llb')?.streams, ['Standard curriculum', 'Extended Curriculum Programme'], 'The LLB extended curriculum should remain a stream')
+assert.deepEqual(getProgramme('ul-bsc')?.streams, ['Mathematical Sciences', 'Life Sciences', 'Physical Sciences'], 'BSc variants should remain streams')
+assert.equal(getProgramme('ul-mbchb')?.officialProgrammeUrl, 'https://www.ul.ac.za/faculty-of-health-sciences/school-of-medicine/', 'Reviewed medicine should use its exact official destination')
 
 const za = getCountryCatalogue('ZA')
 assert.ok(za, 'South Africa catalogue should exist')
@@ -60,5 +70,6 @@ assert.equal(searchUniversityCatalogue('medicine').some((entry) => entry.program
 assert.equal(searchUniversityCatalogue('engineering', { country: 'South Africa' }).some((entry) => entry.programme.normalizedName === 'medicine'), false, 'Engineering must not return Medicine programmes')
 assert.ok(searchUniversityCatalogue('comp sci').some((entry) => entry.programme.normalizedName === 'computer science'), 'Comp sci synonym should resolve')
 assert.ok(searchUniversityCatalogue('econ').some((entry) => entry.programme.normalizedName === 'economics'), 'Econ synonym should resolve')
+assert.ok(searchUniversityCatalogue('Finance', { country: 'Canada' }).some((entry) => entry.programme.majors?.includes('Finance')), 'Official majors should participate in search without becoming artificial standalone degrees')
 
 console.log('University catalogue tests passed')

@@ -1,5 +1,5 @@
 import path from 'path'
-import { appendLog } from '@/lib/logging'
+import { appendLog } from '../logging.ts'
 
 export interface ExtractedPageText {
   pageNumber: number
@@ -60,6 +60,19 @@ export function cleanExtractedText(raw: string) {
 
 async function extractFromPdf(content: Buffer): Promise<ExtractedUploadText> {
   const pdfModule = await import('pdf-parse')
+  const PDFParse = (pdfModule as any).PDFParse
+  if (PDFParse) {
+    const parser = new PDFParse({ data: content })
+    try {
+      const parsed = await parser.getText()
+      const pages = (parsed?.pages || [])
+        .map((page: { num: number; text: string }) => ({ pageNumber: page.num, text: cleanExtractedText(page.text || '') }))
+        .filter((page: ExtractedPageText) => page.text)
+      return { text: pages.length ? pages.map((page: ExtractedPageText) => page.text).join('\n\n') : cleanExtractedText(parsed?.text || ''), pages }
+    } finally {
+      await parser.destroy()
+    }
+  }
   const pdfParse = (pdfModule as any).default || (pdfModule as any)
   let pageCounter = 0
   const pages: ExtractedPageText[] = []

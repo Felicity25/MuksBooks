@@ -1,14 +1,20 @@
 import assert from 'node:assert/strict'
 import { ADMISSIONS_POLICIES, ADMISSIONS_TEST_FEES, ADMISSIONS_TEST_SESSIONS } from './admissions-data.ts'
 import { ADMISSIONS_DEADLINES, CURRICULUM_RESULTS_EVENTS, OFFICIAL_UNIVERSITY_SOURCES } from './fresh-data.ts'
-import { FRESH_SOURCE_PRIORITY, FreshUniversityDataService } from './fresh-data-service.ts'
+import { FRESH_SOURCE_PRIORITY, FreshUniversityDataService, sourceRefreshDue } from './fresh-data-service.ts'
 
 assert.ok(OFFICIAL_UNIVERSITY_SOURCES.length >= 100, 'Priority institutions should have refreshable official source records')
 assert.ok(OFFICIAL_UNIVERSITY_SOURCES.some((item) => item.kind === 'ENGLISH_REQUIREMENTS' && item.institutionId === 'ubc'), 'Verified English policies should participate in refresh monitoring')
 assert.ok(OFFICIAL_UNIVERSITY_SOURCES.some((item) => item.kind === 'TEST_DATES'), 'Official test dates should participate in refresh monitoring')
 assert.ok(OFFICIAL_UNIVERSITY_SOURCES.some((item) => item.kind === 'TEST_FEES'), 'Official test fees should participate in refresh monitoring')
+assert.ok(OFFICIAL_UNIVERSITY_SOURCES.some((item) => item.kind === 'PROSPECTUS' && item.contentFingerprint), 'Current prospectuses should be fingerprinted and monitored quarterly')
+assert.ok(OFFICIAL_UNIVERSITY_SOURCES.some((item) => item.kind === 'APPLICATION_ROUTES' && item.refreshCadence === 'DAILY'), 'Application destinations should refresh more frequently than prospectuses')
 assert.ok(ADMISSIONS_DEADLINES.some((item) => item.institutionId === 'oxford' && item.dueAt.startsWith('2026-10-15')), 'Oxford 2027 UCAS deadline should be structured')
 assert.ok(ADMISSIONS_DEADLINES.some((item) => item.institutionId === 'manchester' && item.dueAt.startsWith('2027-01-13')), 'Most-course 2027 UCAS deadline should be structured')
+assert.ok(ADMISSIONS_DEADLINES.some((item) => item.institutionId === 'unimelb' && item.applicantType === 'DOMESTIC' && item.dueAt.startsWith('2026-09-28')), 'VTAC timely deadline should be domestic and structured')
+assert.ok(ADMISSIONS_DEADLINES.some((item) => item.id === 'unimelb-vtac-opens-2027' && item.dueAt === '2026-08-03T09:00:00+10:00' && item.sourceUrl === 'https://vtac.edu.au/dates'), 'VTAC opening should retain its published time and exact source')
+assert.ok(ADMISSIONS_DEADLINES.some((item) => item.institutionId === 'mit' && item.id === 'mit-ra-2027' && item.dueAt.startsWith('2027-01-04')), 'MIT Regular Action deadline should be structured')
+assert.ok(ADMISSIONS_DEADLINES.some((item) => item.institutionId === 'berkeley' && item.dueAt.startsWith('2026-11-30')), 'UC Berkeley deadline should be structured')
 assert.equal(CURRICULUM_RESULTS_EVENTS.length, 0, 'Future result dates must not be guessed when the official source does not publish an exact date')
 
 const service = new FreshUniversityDataService()
@@ -47,6 +53,17 @@ assert.ok(structuredCandidate.signals.claims.some((claim) => claim.requirementTy
 assert.ok(structuredCandidate.signals.claims.some((claim) => claim.requirementType === 'TEST_REGISTRATION_DATE' && claim.value === '15 September 2026'))
 assert.ok(structuredCandidate.signals.claims.some((claim) => claim.requirementType === 'TEST_BOOKING_URL'))
 assert.ok(FRESH_SOURCE_PRIORITY['official-test-provider'] < FRESH_SOURCE_PRIORITY['official-admissions'])
+assert.equal(sourceRefreshDue({ ...source, refreshCadence: 'QUARTERLY', lastCheckedAt: '2026-06-12T00:00:00Z' }, new Date('2026-09-10T00:00:00Z')), true)
+assert.equal(sourceRefreshDue({ ...source, refreshCadence: 'QUARTERLY', lastCheckedAt: '2026-08-01T00:00:00Z' }, new Date('2026-09-10T00:00:00Z')), false)
+
+const pdfBytes = new TextEncoder().encode('%PDF-1.7 official undergraduate guide').buffer
+const pdfSource = { ...source, id: 'example-prospectus', kind: 'PROSPECTUS' as const, sourceType: 'official-prospectus' as const, url: 'https://example.edu/prospectus.pdf', refreshCadence: 'QUARTERLY' as const, contentFingerprint: undefined }
+const firstPdf = await service.refreshSource(pdfSource, async () => ({ ok: true, status: 200, url: pdfSource.url, headers: { get: () => 'application/pdf' }, text: async () => '', arrayBuffer: async () => pdfBytes }), '2026-09-10T00:00:00Z')
+assert.equal(firstPdf.candidate?.confidenceStatus, 'NEEDS_REVIEW')
+assert.ok(firstPdf.source.contentFingerprint)
+const unchangedPdf = await service.refreshSource({ ...pdfSource, contentFingerprint: firstPdf.source.contentFingerprint }, async () => ({ ok: true, status: 200, url: pdfSource.url, headers: { get: () => 'application/pdf' }, text: async () => '', arrayBuffer: async () => pdfBytes }), '2026-12-10T00:00:00Z')
+assert.equal(unchangedPdf.unchanged, true, 'An unchanged prospectus must not produce a second review candidate')
+assert.equal(unchangedPdf.candidate, undefined)
 
 const originalPolicy = ADMISSIONS_POLICIES.find((policy) => policy.id === 'ubc-undergraduate-2027')!
 const weakerPolicy = { ...originalPolicy, coverageLevel: 'COMPLETE' as const, source: { ...originalPolicy.source, sourceType: 'government-register' as const } }

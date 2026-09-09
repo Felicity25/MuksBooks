@@ -93,7 +93,52 @@ const areaProgrammes: Record<string, string[]> = {
   'Actuarial Science': ['Actuarial Science'], 'International Relations': ['International Relations'], Politics: ['Politics']
 }
 
+const UL_PROSPECTUS = 'https://www.ul.ac.za/wp-content/uploads/2025/03/Undergraduate-Prospectus-2027.pdf'
+const UL_APPLICATION = 'https://ulc-prod-webserver.ul.ac.za/pls/prodi41/gen.gw1pkg.gw1view'
+const UL_FACULTIES = {
+  health: { id: 'ul-health-sciences', name: 'Faculty of Health Sciences', url: 'https://www.ul.ac.za/faculty-of-health-sciences/' },
+  humanities: { id: 'ul-humanities', name: 'Faculty of Humanities', url: 'https://www.ul.ac.za/faculty-of-humanities/' },
+  management: { id: 'ul-management-law', name: 'Faculty of Management and Law', url: 'https://www.ul.ac.za/faculty-of-management-and-law/' },
+  science: { id: 'ul-science-agriculture', name: 'Faculty of Science and Agriculture', url: 'https://www.ul.ac.za/faculty-of-science-and-agriculture/' }
+} as const
+
+function reviewedUlProgramme(id: string, name: string, normalizedName: string, faculty: typeof UL_FACULTIES[keyof typeof UL_FACULTIES], studyAreas: string[], options: Partial<Pick<Programme, 'department' | 'streams' | 'prerequisiteSubjects' | 'duration' | 'officialProgrammeUrl'>> = {}): Programme {
+  return {
+    id, institutionId: 'ul', name, normalizedName, aliases: studyAreas,
+    qualification: name, degreeType: name.startsWith('Bachelor of Commerce') ? 'BCom' : name.startsWith('Bachelor of Laws') ? 'LLB' : name.startsWith('Bachelor of Medicine') ? 'MBChB' : 'BSc',
+    qualificationLevel: 'Undergraduate', faculty: faculty.name, facultyId: faculty.id, facultyUrl: faculty.url,
+    department: options.department, streams: options.streams, studyAreas, industryAreas: studyAreas,
+    tags: Array.from(new Set(studyAreas.flatMap((area) => [area.toLowerCase(), ...area.toLowerCase().split(' ')]))),
+    country: 'South Africa', region: 'Limpopo', campus: 'Turfloop', deliveryMode: 'Check official prospectus', duration: options.duration,
+    intakeYears: [2027], officialProgrammeUrl: options.officialProgrammeUrl || UL_PROSPECTUS,
+    domesticApplicationUrl: UL_APPLICATION, internationalApplicationUrl: UL_APPLICATION,
+    programmeAdmissionsUrl: 'https://www.ul.ac.za/admissions/undergraduate-studies/', requirementsUrl: UL_PROSPECTUS,
+    curriculumRequirements: ['Curriculum-specific thresholds are not yet structured. Check the official 2027 prospectus.'],
+    prerequisiteSubjects: options.prerequisiteSubjects ?? [], entryRequirements: ['Check the official 2027 prospectus for the programme-specific APS and subject requirements.'],
+    applicationInformation: 'Programme identity was manually reviewed against the official 2027 undergraduate prospectus and current faculty structure. Meeting minimum requirements does not guarantee admission.',
+    active: true, sourceUrl: UL_PROSPECTUS, sourceType: 'official-prospectus', sourceAcademicYear: '2027', admissionsCycle: '2027',
+    confidenceStatus: 'VERIFIED_OFFICIAL', lastCheckedAt: CHECKED_AT, lastVerifiedAt: CHECKED_AT
+  }
+}
+
 const VERIFIED_BREADTH_PROGRAMMES: Programme[] = [
+  reviewedUlProgramme('ul-bcom-accountancy', 'Bachelor of Commerce in Accountancy', 'accountancy', UL_FACULTIES.management, ['Accountancy', 'Accounting'], { department: 'School of Accountancy' }),
+  reviewedUlProgramme('ul-bcom-economics', 'Bachelor of Commerce in Economics', 'economics', UL_FACULTIES.management, ['Economics', 'Commerce'], { department: 'School of Economics and Management' }),
+  reviewedUlProgramme('ul-bcom-human-resources', 'Bachelor of Commerce in Human Resource Management', 'human resource management', UL_FACULTIES.management, ['Human Resource Management', 'Commerce'], { department: 'School of Economics and Management' }),
+  reviewedUlProgramme('ul-bcom-business-management', 'Bachelor of Commerce in Business Management', 'business management', UL_FACULTIES.management, ['Business Management', 'Commerce'], { department: 'School of Economics and Management' }),
+  reviewedUlProgramme('ul-llb', 'Bachelor of Laws', 'law', UL_FACULTIES.management, ['Law'], { department: 'School of Law', streams: ['Standard curriculum', 'Extended Curriculum Programme'] }),
+  reviewedUlProgramme('ul-bsc-agricultural-economics', 'Bachelor of Science in Agriculture in Agricultural Economics', 'agricultural economics', UL_FACULTIES.science, ['Agricultural Economics', 'Agriculture'], { department: 'School of Agricultural and Environmental Sciences' }),
+  reviewedUlProgramme('ul-bsc-plant-production', 'Bachelor of Science in Agriculture in Plant Production', 'plant production', UL_FACULTIES.science, ['Plant Production', 'Agriculture'], { department: 'School of Agricultural and Environmental Sciences' }),
+  reviewedUlProgramme('ul-bsc-animal-production', 'Bachelor of Science in Agriculture in Animal Production', 'animal production', UL_FACULTIES.science, ['Animal Production', 'Agriculture'], { department: 'School of Agricultural and Environmental Sciences' }),
+  reviewedUlProgramme('ul-bsc-soil-science', 'Bachelor of Science in Agriculture in Soil Science', 'soil science', UL_FACULTIES.science, ['Soil Science', 'Agriculture'], { department: 'School of Agricultural and Environmental Sciences' }),
+  reviewedUlProgramme('ul-bsc-environmental-resource-studies', 'Bachelor of Science in Environmental and Resource Studies', 'environmental and resource studies', UL_FACULTIES.science, ['Environmental Science', 'Natural Resources'], { department: 'School of Agricultural and Environmental Sciences' }),
+  reviewedUlProgramme('ul-bsc-water-sanitation', 'Bachelor of Science in Water and Sanitation Sciences', 'water and sanitation sciences', UL_FACULTIES.science, ['Water Science', 'Environmental Science'], { department: 'School of Agricultural and Environmental Sciences' }),
+  reviewedUlProgramme('ul-bsc', 'Bachelor of Science', 'science', UL_FACULTIES.science, ['Science', 'Mathematics', 'Life Sciences', 'Physical Sciences'], { streams: ['Mathematical Sciences', 'Life Sciences', 'Physical Sciences'] }),
+  reviewedUlProgramme('ul-bsc-geology', 'Bachelor of Science in Geology', 'geology', UL_FACULTIES.science, ['Geology', 'Earth Science'], { department: 'School of Physical and Mineral Sciences' }),
+  reviewedUlProgramme('ul-mbchb', 'Bachelor of Medicine and Bachelor of Surgery', 'medicine', UL_FACULTIES.health, ['Medicine', 'Health Sciences'], { department: 'School of Medicine', duration: '6 years', prerequisiteSubjects: ['English', 'Mathematics', 'Physical Sciences', 'Life Sciences'], officialProgrammeUrl: 'https://www.ul.ac.za/faculty-of-health-sciences/school-of-medicine/' }),
+  reviewedUlProgramme('ul-bsc-dietetics', 'Bachelor of Science in Dietetics', 'dietetics', UL_FACULTIES.health, ['Dietetics', 'Nutrition', 'Health Sciences'], { department: 'School of Health Care Sciences' }),
+  reviewedUlProgramme('ul-bsc-medical-sciences', 'Bachelor of Science in Medical Sciences', 'medical sciences', UL_FACULTIES.health, ['Medical Sciences', 'Health Sciences'], { department: 'Faculty of Health Sciences' }),
+  reviewedUlProgramme('ul-bnursing', 'Bachelor of Nursing', 'nursing', UL_FACULTIES.health, ['Nursing', 'Health Sciences'], { department: 'School of Health Care Sciences' }),
   {
     id: 'unsw-medicine', institutionId: 'unsw', name: 'Bachelor of Medical Studies / Doctor of Medicine', normalizedName: 'medicine', aliases: ['Medicine', 'BMed MD'],
     qualification: 'Bachelor of Medical Studies / Doctor of Medicine', degreeType: 'Combined undergraduate/postgraduate', qualificationLevel: 'Undergraduate entry', faculty: 'Medicine & Health', studyAreas: ['Medicine', 'Health Sciences'], industryAreas: ['Medicine'], tags: ['medicine', 'health', 'ucat anz'],
@@ -113,6 +158,7 @@ const VERIFIED_BREADTH_PROGRAMMES: Programme[] = [
   {
     id: 'mcgill-bcom-finance', institutionId: 'mcgill', name: 'Bachelor of Commerce - Major Finance', normalizedName: 'finance', aliases: ['BCom Finance', 'Finance Major'],
     qualification: 'Bachelor of Commerce', degreeType: 'Bachelor', qualificationLevel: 'Undergraduate', faculty: 'Desautels Faculty of Management', studyAreas: ['Finance'], industryAreas: ['Finance'], tags: ['finance', 'commerce', 'investment'],
+    majors: ['Finance'],
     country: 'Canada', region: 'Quebec', campus: 'Montreal', deliveryMode: 'Check official programme page', intakeYears: [2027],
     officialProgrammeUrl: 'https://www.mcgill.ca/desautels/programs/bcom/academics/areas-study/finance', curriculumRequirements: ['Requirements not yet structured. Confirm for your curriculum on the official site.'], prerequisiteSubjects: [], entryRequirements: ['Check the official programme and admissions pages for current requirements.'],
     applicationInformation: 'Programme identity verified from the official McGill Desautels Finance area and programme list.', active: true,
@@ -223,23 +269,32 @@ export const PRIORITY_DEPTH_CATALOGUES: CountryCatalogue[] = (['ZA', 'AU', 'GB',
 export function deepenExistingInstitutions(catalogues: CountryCatalogue[]) {
   return catalogues.map((catalogue) => {
     if (!['ZA', 'AU', 'GB', 'CA', 'US'].includes(catalogue.code)) return catalogue
-    const institutions = catalogue.institutions.map((entry) => ({
-      ...entry,
-      undergraduateAdmissionsUrl: entry.undergraduateAdmissionsUrl || entry.admissionsUrl,
-      programmeFinderUrl: entry.programmeFinderUrl || entry.admissionsUrl || entry.officialWebsite,
-      lastCheckedAt: entry.lastCheckedAt || CHECKED_AT,
-      lastIndexedAt: CHECKED_AT,
-      programmeCoverageStatus: entry.programmeCoverageStatus || 'partial' as const,
-      admissionsCoverageStatus: entry.admissionsCoverageStatus || 'building' as const
-    }))
+    const institutions = catalogue.institutions.map((entry) => {
+      const ulFaculties = entry.id === 'ul' ? Object.values(UL_FACULTIES).map((faculty) => ({ id: faculty.id, institutionId: 'ul', name: faculty.name, officialUrl: faculty.url, sourceUrl: faculty.url, lastVerifiedAt: CHECKED_AT })) : undefined
+      return {
+        ...entry,
+        undergraduateAdmissionsUrl: entry.undergraduateAdmissionsUrl || entry.admissionsUrl,
+        programmeFinderUrl: entry.programmeFinderUrl || entry.admissionsUrl || entry.officialWebsite,
+        faculties: ulFaculties || entry.faculties,
+        facultyUrls: ulFaculties?.map((faculty) => ({ id: faculty.id, name: faculty.name, url: faculty.officialUrl })) || entry.facultyUrls,
+        prospectusUrl: entry.id === 'ul' ? UL_PROSPECTUS : entry.prospectusUrl,
+        prospectusAcademicYear: entry.id === 'ul' ? '2027' : entry.prospectusAcademicYear,
+        applicationUrl: entry.id === 'ul' ? UL_APPLICATION : entry.applicationUrl,
+        lastCheckedAt: entry.lastCheckedAt || CHECKED_AT,
+        lastIndexedAt: CHECKED_AT,
+        programmeCoverageStatus: entry.programmeCoverageStatus || 'partial' as const,
+        admissionsCoverageStatus: entry.admissionsCoverageStatus || 'building' as const
+      }
+    })
     const programmes = [...catalogue.programmes]
     for (const candidate of buildDepthProgrammes(institutions)) {
       const duplicate = programmes.some((entry) => entry.id === candidate.id || (entry.institutionId === candidate.institutionId && entry.normalizedName === candidate.normalizedName))
       if (!duplicate) programmes.push(candidate)
     }
     for (const candidate of VERIFIED_BREADTH_PROGRAMMES.filter((entry) => entry.country === catalogue.name)) {
-      const duplicate = programmes.some((entry) => entry.id === candidate.id)
-      if (!duplicate) programmes.push(candidate)
+      const duplicateIndex = programmes.findIndex((entry) => entry.id === candidate.id)
+      if (duplicateIndex >= 0) programmes[duplicateIndex] = { ...programmes[duplicateIndex], ...candidate }
+      else programmes.push(candidate)
     }
     return { ...catalogue, status: 'partial' as const, institutions, programmes }
   })
