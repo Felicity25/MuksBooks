@@ -1,4 +1,5 @@
 import type { UniversityApplication } from './types'
+import { createUniversityApplication, normalizeUniversityApplication } from './application-domain.ts'
 
 const SHORTLIST_KEY = 'muksbooks:universities:shortlist:v2'
 const COMPARE_KEY = 'muksbooks:universities:compare:v1'
@@ -23,11 +24,10 @@ export const universityStorage = {
   saveShortlist: (ids: string[]) => writeJson(SHORTLIST_KEY, Array.from(new Set(ids))),
   getCompare: () => readJson<string[]>(COMPARE_KEY, []),
   saveCompare: (ids: string[]) => writeJson(COMPARE_KEY, Array.from(new Set(ids)).slice(0, 4)),
-  getApplications: () => readJson<UniversityApplication[]>(APPLICATIONS_KEY, []),
+  getApplications: () => readJson<Array<Partial<UniversityApplication> & Record<string, unknown>>>(APPLICATIONS_KEY, []).map(normalizeUniversityApplication),
   saveApplications: (applications: UniversityApplication[]) => writeJson(APPLICATIONS_KEY, applications)
 }
 
 export function createApplication(programmeId: string, institutionId: string): UniversityApplication {
-  const now = new Date().toISOString()
-  return { id: `${programmeId}-${Date.now()}`, programmeId, institutionId, status: 'Interested', notes: '', tasks: [], createdAt: now, updatedAt: now }
+  return createUniversityApplication(programmeId, institutionId)
 }

@@ -16,7 +16,7 @@
     "collect-news": "ts-node-esm scripts/collect-news.ts",
     "test:distributions": "ts-node --transpile-only scripts/test-distributions.ts",
     "test:planner": "ts-node --transpile-only lib/planning/day.test.ts && ts-node --transpile-only lib/planning/recommendations.test.ts",
-    "test:universities": "ts-node --transpile-only lib/universities/catalog.test.ts && ts-node --transpile-only lib/universities/matching.test.ts && ts-node --transpile-only lib/universities/workflow.test.ts"
+    "test:universities": "ts-node --transpile-only lib/universities/catalog.test.ts && ts-node --transpile-only lib/universities/matching.test.ts && ts-node --transpile-only lib/universities/workflow.test.ts && ts-node --transpile-only lib/universities/fresh-data.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.95.1",

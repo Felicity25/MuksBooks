@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
-import { Bookmark, ClipboardList, GitCompareArrows } from 'lucide-react'
+import { ArrowRight, Bookmark, ClipboardList, GitCompareArrows } from 'lucide-react'
 import { useAuth } from '@/components/auth-provider'
 import { Button } from '@/components/ui/button'
 import { createApplication, universityStorage } from '@/lib/universities/storage'
@@ -53,8 +53,9 @@ export function ProgrammeActions({ programmeId, institutionId, compact = false }
         <GitCompareArrows className="h-4 w-4" /> {compared ? 'Comparing' : 'Compare'}
       </Button>
       <Button type="button" variant="outline" size="sm" onClick={addApplication} disabled={tracked} className="gap-2">
-        <ClipboardList className="h-4 w-4" /> {tracked ? 'Tracked' : 'Track application'}
+        <ClipboardList className="h-4 w-4" /> {tracked ? 'Application started' : 'Start application'}
       </Button>
+      {tracked ? <Link href="/universities/applications"><Button type="button" variant="ghost" size="sm" className="gap-2">Open applications <ArrowRight className="h-4 w-4" /></Button></Link> : null}
       {!compact ? <Link href={`/universities/${institutionId}/${programmeId}`}><Button type="button" size="sm">View course</Button></Link> : null}
     </div>
   )

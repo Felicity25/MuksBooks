@@ -162,7 +162,7 @@ export function mergeCountryCatalogues(base: CountryCatalogue[], additions: Coun
       ...existing,
       status: catalogue.status,
       institutions: [...existing.institutions, ...catalogue.institutions.filter((entry) => !existing.institutions.some((item) => item.id === entry.id))],
-      programmes: [...existing.programmes, ...catalogue.programmes.filter((entry) => !existing.programmes.some((item) => item.id === entry.id))]
+      programmes: [...existing.programmes, ...catalogue.programmes.filter((entry) => !existing.programmes.some((item) => item.id === entry.id || (item.institutionId === entry.institutionId && item.normalizedName === entry.normalizedName)))]
     })
   }
   return Array.from(byCode.values())

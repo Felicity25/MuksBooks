@@ -11,6 +11,10 @@
     {
       "path": "/api/careers/refresh",
       "schedule": "30 2 * * *"
+    },
+    {
+      "path": "/api/universities/refresh",
+      "schedule": "15 3 * * *"
     }
   ]
 }

@@ -11,19 +11,24 @@ import type { CountryCatalogue } from '@/lib/universities/types'
 export function CountryBrowser({ catalogue }: { catalogue: CountryCatalogue }) {
   const [query, setQuery] = useState('')
   const [region, setRegion] = useState('All')
+  const [institutionId, setInstitutionId] = useState('All')
   const [studyArea, setStudyArea] = useState('All')
+  const [qualification, setQualification] = useState('All')
   const regions = ['All', ...Array.from(new Set(catalogue.institutions.map((institution) => institution.region))).sort()]
   const studyAreas = ['All', ...Array.from(new Set(catalogue.programmes.flatMap((programme) => programme.studyAreas))).sort()]
-  const results = useMemo(() => searchUniversityCatalogue(query, { country: catalogue.name, region, studyArea }), [catalogue.name, query, region, studyArea])
+  const qualifications = ['All', ...Array.from(new Set(catalogue.programmes.map((programme) => programme.degreeType))).sort()]
+  const results = useMemo(() => searchUniversityCatalogue(query, { country: catalogue.name, region, studyArea, qualification }).filter((result) => institutionId === 'All' || result.institution.id === institutionId), [catalogue.name, institutionId, qualification, query, region, studyArea])
 
   return (
     <div className="space-y-6">
       <Card className="p-5">
         <label htmlFor="country-programme-search" className="text-sm font-semibold text-slate-900">Search within {catalogue.name}</label>
         <div className="mt-2 flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 focus-within:ring-2 focus-within:ring-sky-600"><Search className="h-4 w-4 text-sky-700" /><input id="country-programme-search" value={query} onChange={(event) => setQuery(event.target.value)} className="w-full bg-transparent focus:outline-none" placeholder="Course, university, subject or city" /></div>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <label className="text-sm font-medium text-slate-700">Province, state or nation<select value={region} onChange={(event) => setRegion(event.target.value)} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3">{regions.map((item) => <option key={item}>{item}</option>)}</select></label>
+          <label className="text-sm font-medium text-slate-700">Institution<select value={institutionId} onChange={(event) => setInstitutionId(event.target.value)} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3"><option value="All">All institutions</option>{catalogue.institutions.map((institution) => <option key={institution.id} value={institution.id}>{institution.name}</option>)}</select></label>
           <label className="text-sm font-medium text-slate-700">Study area<select value={studyArea} onChange={(event) => setStudyArea(event.target.value)} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3">{studyAreas.map((item) => <option key={item}>{item}</option>)}</select></label>
+          <label className="text-sm font-medium text-slate-700">Qualification<select value={qualification} onChange={(event) => setQualification(event.target.value)} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3">{qualifications.map((item) => <option key={item}>{item}</option>)}</select></label>
         </div>
       </Card>
       <section><h2 className="text-xl font-semibold text-slate-950">Institutions</h2><div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{catalogue.institutions.map((institution) => <Link key={institution.id} href={`/universities/${institution.id}`} className="rounded-lg border border-slate-200 bg-white p-4 hover:border-sky-300"><span className="font-semibold text-slate-950">{institution.name}</span><span className="mt-1 block text-sm text-slate-600">{institution.city} • {institution.region}</span></Link>)}</div></section>

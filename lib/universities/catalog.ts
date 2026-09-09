@@ -1,5 +1,6 @@
 import type { CountryCatalogue, Institution, Programme, SearchFilters, SearchResult } from './types'
 import { COUNTRY_CATALOGUE_ADDITIONS, mergeCountryCatalogues } from './countries/expansion.ts'
+import { deepenExistingInstitutions, PRIORITY_DEPTH_CATALOGUES } from './countries/priority-depth.ts'
 
 export type { CountryCatalogue, Institution, Programme, SearchFilters, SearchResult } from './types'
 
@@ -85,7 +86,7 @@ const BASE_COUNTRY_CATALOGUE_DATA: CountryCatalogue[] = [
   ] }
 ]
 
-const COUNTRY_CATALOGUE_DATA = mergeCountryCatalogues(BASE_COUNTRY_CATALOGUE_DATA, COUNTRY_CATALOGUE_ADDITIONS)
+const COUNTRY_CATALOGUE_DATA = deepenExistingInstitutions(mergeCountryCatalogues(BASE_COUNTRY_CATALOGUE_DATA, [...COUNTRY_CATALOGUE_ADDITIONS, ...PRIORITY_DEPTH_CATALOGUES]))
 
 export const COUNTRY_OPTIONS = ['All', ...COUNTRY_CATALOGUE_DATA.map((country) => country.name)]
 export const REGION_OPTIONS = ['All', ...Array.from(new Set(COUNTRY_CATALOGUE_DATA.flatMap((country) => country.institutions.map((institution) => institution.region)))).sort()]
@@ -184,8 +185,25 @@ export function getCountryFilters() {
     name: country.name,
     institutionCount: country.institutions.length,
     programmeCount: country.programmes.length,
-    status: country.status
+    status: country.status,
+    coverage: getCountryCoverage(country)
   }))
+}
+
+export function getCountryCoverage(country: CountryCatalogue) {
+  const programmesPerInstitution = country.institutions.length ? country.programmes.length / country.institutions.length : 0
+  const sourcedProgrammes = country.programmes.filter((programme) => programme.sourceType && programme.lastCheckedAt).length
+  const structuredAdmissions = country.programmes.filter((programme) => programme.requirements?.length).length
+  const programmeCoverage = programmesPerInstitution >= 10 ? 'substantial' : programmesPerInstitution >= 4 ? 'partial' : 'building'
+  const admissionsCoverage = structuredAdmissions / Math.max(country.programmes.length, 1) >= 0.5 ? 'substantial' : structuredAdmissions ? 'partial' : 'building'
+  const sourceFreshness = sourcedProgrammes / Math.max(country.programmes.length, 1) >= 0.8 ? 'substantial' : 'partial'
+  return {
+    institutionCoverage: country.institutions.length >= 20 ? 'substantial' : country.institutions.length >= 10 ? 'partial' : 'building',
+    programmeCoverage,
+    admissionsCoverage,
+    sourceFreshness,
+    overall: programmeCoverage === 'substantial' && admissionsCoverage === 'substantial' ? 'substantial' : 'partial'
+  } as const
 }
 
 export function getInstitution(institutionId: string) {

@@ -1,5 +1,6 @@
 import type { ThemeId } from '@/lib/design/themes'
 import type { UniversityApplication } from '@/lib/universities/types'
+import { normalizeUniversityApplication } from './universities/application-domain.ts'
 
 export type ThemePreference = ThemeId | 'light' | 'dark' | 'system'
 export type TextSizePreference = 'small' | 'default' | 'large' | 'extra-large'
@@ -461,7 +462,7 @@ export function normalizeUserSettings(value?: Partial<UserSettings> | null): Use
       ? Array.from(new Set(clean.universityCompare.map((item) => `${item}`.trim()).filter(Boolean))).slice(0, 4)
       : DEFAULT_USER_SETTINGS.universityCompare,
     universityApplications: Array.isArray(clean.universityApplications)
-      ? clean.universityApplications
+      ? clean.universityApplications.map((application) => normalizeUniversityApplication(application as UniversityApplication & Record<string, unknown>))
       : DEFAULT_USER_SETTINGS.universityApplications,
     proactivityControls
   }

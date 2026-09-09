@@ -31,15 +31,24 @@ for (const country of ['South Africa', 'Australia', 'United Kingdom', 'Canada', 
 	assert.ok(catalogue.programmes.length > 0, `${country} should include programmes`)
 }
 
+for (const country of ['South Africa', 'Australia', 'United Kingdom', 'Canada', 'United States']) {
+	const catalogue = getCountryCatalogue(country)!
+	assert.ok(catalogue.institutions.length >= 20, `${country} should have at least 20 priority institutions`)
+	assert.ok(catalogue.programmes.length >= 250, `${country} should have at least 250 searchable programme records`)
+	assert.equal(new Set(catalogue.programmes.map((programme) => programme.id)).size, catalogue.programmes.length, `${country} programme IDs must be unique`)
+}
+
 assert.ok(searchUniversityCatalogue('NUS').some((entry) => entry.institution.id === 'nus'), 'NUS alias should resolve')
 assert.ok(searchUniversityCatalogue('law').slice(0, 2).every((entry) => entry.programme.studyAreas.includes('Law') || entry.programme.normalizedName.includes('law')), 'Law search should prioritise programme-relevant results')
 assert.ok(searchUniversityCatalogue('economics', { region: 'England' }).every((entry) => entry.region === 'England'), 'Region filters should constrain results')
 
-for (const query of ['medicine', 'engineering', 'economics', 'computer science', 'psychology']) {
+for (const query of ['actuarial science', 'medicine', 'law', 'economics', 'computer science', 'engineering', 'psychology', 'finance']) {
 	const results = searchUniversityCatalogue(query)
 	assert.ok(results.length > 0, `${query} should return programme results`)
 	assert.ok(results.slice(0, 3).every((entry) => [entry.programme.name, entry.programme.normalizedName, ...entry.programme.studyAreas, ...entry.programme.tags].join(' ').toLowerCase().includes(query)), `${query} top results should be programme-relevant`)
 }
+
+assert.equal(searchUniversityCatalogue('definitely-not-a-real-course-xyz').length, 0, 'Irrelevant searches should return no results')
 
 assert.equal(searchUniversityCatalogue('medicine').some((entry) => entry.programme.normalizedName === 'computer science'), false, 'Medicine must not return Computer Science programmes')
 assert.equal(searchUniversityCatalogue('engineering', { country: 'South Africa' }).some((entry) => entry.programme.normalizedName === 'medicine'), false, 'Engineering must not return Medicine programmes')
