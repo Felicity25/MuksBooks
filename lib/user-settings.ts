@@ -1,4 +1,5 @@
 import type { ThemeId } from '@/lib/design/themes'
+import type { UniversityApplication } from '@/lib/universities/types'
 
 export type ThemePreference = ThemeId | 'light' | 'dark' | 'system'
 export type TextSizePreference = 'small' | 'default' | 'large' | 'extra-large'
@@ -79,6 +80,9 @@ export interface UserSettings {
   yearLevel: YearLevel
   careerInterests: string[]
   academicInterests: string[]
+  universityShortlist: string[]
+  universityCompare: string[]
+  universityApplications: UniversityApplication[]
   targetMarks: string
   feedbackStrictness: 'lenient' | 'normal' | 'strict'
   pomodoroLength: number
@@ -142,6 +146,15 @@ export const HOMEPAGE_PRESETS: Record<HomepagePreset, WidgetLayoutItem[]> = {
     ['planner', 'medium']
   ]),
   'build-my-own': []
+}
+
+const UNIVERSITY_ONLY_WIDGETS = new Set<WidgetId>(['careers', 'applications', 'actuarial-news', 'mass-pulse', 'exemption-progress'])
+
+export function getModeAwareHomepageLayout(academicMode: AcademicMode, layoutOverride?: WidgetLayoutItem[] | null): WidgetLayoutItem[] {
+  const baseLayout = Array.isArray(layoutOverride) && layoutOverride.length ? layoutOverride : HOMEPAGE_PRESETS['academic-weapon']
+  return academicMode === 'LEARNER'
+    ? baseLayout.filter((item) => !UNIVERSITY_ONLY_WIDGETS.has(item.id))
+    : baseLayout
 }
 
 export const PROACTIVITY_DEFAULTS: Record<ProactivityLevel, ProactivityControls> = {
@@ -220,6 +233,9 @@ export const DEFAULT_USER_SETTINGS: UserSettings = {
   yearLevel: 'other',
   careerInterests: [],
   academicInterests: [],
+  universityShortlist: [],
+  universityCompare: [],
+  universityApplications: [],
   targetMarks: '',
   feedbackStrictness: 'normal',
   pomodoroLength: 25,
@@ -242,7 +258,7 @@ export const DEFAULT_USER_SETTINGS: UserSettings = {
   textSize: 'default',
   density: 'comfortable',
   motion: 'normal',
-  font: 'modern',
+  font: 'academic',
   homepagePreset: 'academic-weapon',
   homepageLayout: HOMEPAGE_PRESETS['academic-weapon'],
   quickActions: ['upload', 'ask-tutor', 'add-task'],
@@ -304,6 +320,15 @@ export function parseUserSettingsUpdate(value: unknown): SettingsParseResult {
       if (!Array.isArray(update.academicInterests) || update.academicInterests.some((item) => typeof item !== 'string')) {
         return { valid: false, error: 'academicInterests must be a string array.' }
       }
+    }
+    if ('universityShortlist' in update && (!Array.isArray(update.universityShortlist) || update.universityShortlist.some((item) => typeof item !== 'string'))) {
+      return { valid: false, error: 'universityShortlist must be a string array.' }
+    }
+    if ('universityCompare' in update && (!Array.isArray(update.universityCompare) || update.universityCompare.some((item) => typeof item !== 'string'))) {
+      return { valid: false, error: 'universityCompare must be a string array.' }
+    }
+    if ('universityApplications' in update && !Array.isArray(update.universityApplications)) {
+      return { valid: false, error: 'universityApplications must be an array.' }
     }
 
   for (const field of ['speechVoiceURI']) {
@@ -391,21 +416,53 @@ export function normalizeUserSettings(value?: Partial<UserSettings> | null): Use
       ? 'LEARNER'
       : DEFAULT_USER_SETTINGS.academicMode
 
+  const safeLayout = getModeAwareHomepageLayout(academicMode, Array.isArray(clean.homepageLayout) ? clean.homepageLayout : fallbackLayout)
+  const safeQuickActions = Array.isArray(clean.quickActions)
+    ? clean.quickActions.filter((action) => action !== 'careers')
+    : DEFAULT_USER_SETTINGS.quickActions
+
+  const normalizedControls = {
+    ...PROACTIVITY_DEFAULTS[level],
+    ...(clean.proactivityControls || {})
+  }
+
+  const proactivityControls = academicMode === 'LEARNER'
+    ? {
+      ...normalizedControls,
+      internshipsJobs: false,
+      applicationActions: false,
+      careerEvents: false,
+      massEvents: false,
+      massProjects: false,
+      massCareers: false,
+      massAcademic: false
+    }
+    : normalizedControls
+
   return {
     ...DEFAULT_USER_SETTINGS,
     ...clean,
     academicMode,
-    homepageLayout: Array.isArray(clean.homepageLayout) ? clean.homepageLayout : fallbackLayout,
-    quickActions: Array.isArray(clean.quickActions) ? clean.quickActions : DEFAULT_USER_SETTINGS.quickActions,
+    homepagePreset: academicMode === 'LEARNER' && clean.homepagePreset === 'career-focus' ? 'academic-weapon' : (clean.homepagePreset || DEFAULT_USER_SETTINGS.homepagePreset),
+    homepageLayout: safeLayout.length ? safeLayout : getModeAwareHomepageLayout(academicMode, HOMEPAGE_PRESETS['academic-weapon']),
+    quickActions: academicMode === 'LEARNER'
+      ? safeQuickActions.filter((action) => ['upload', 'ask-tutor', 'add-task', 'todays-classes'].includes(action))
+      : safeQuickActions,
     careerInterests: Array.isArray(clean.careerInterests)
       ? Array.from(new Set(clean.careerInterests.map((item) => `${item}`.trim()).filter(Boolean)))
       : DEFAULT_USER_SETTINGS.careerInterests,
     academicInterests: Array.isArray(clean.academicInterests)
       ? Array.from(new Set(clean.academicInterests.map((item) => `${item}`.trim()).filter(Boolean)))
       : DEFAULT_USER_SETTINGS.academicInterests,
-    proactivityControls: {
-      ...PROACTIVITY_DEFAULTS[level],
-      ...(clean.proactivityControls || {})
-    }
+    universityShortlist: Array.isArray(clean.universityShortlist)
+      ? Array.from(new Set(clean.universityShortlist.map((item) => `${item}`.trim()).filter(Boolean)))
+      : DEFAULT_USER_SETTINGS.universityShortlist,
+    universityCompare: Array.isArray(clean.universityCompare)
+      ? Array.from(new Set(clean.universityCompare.map((item) => `${item}`.trim()).filter(Boolean))).slice(0, 4)
+      : DEFAULT_USER_SETTINGS.universityCompare,
+    universityApplications: Array.isArray(clean.universityApplications)
+      ? clean.universityApplications
+      : DEFAULT_USER_SETTINGS.universityApplications,
+    proactivityControls
   }
 }

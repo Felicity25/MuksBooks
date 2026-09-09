@@ -7,6 +7,7 @@ import { BookOpen, BriefcaseBusiness, CalendarClock, FileText, GraduationCap, Ho
 import { useAuth } from '@/components/auth-provider'
 import { BrandMark } from '@/components/brand/brand-mark'
 import { Button } from '@/components/ui/button'
+import { getLearnerProfile } from '@/lib/learner/store'
 import { cn } from '@/lib/utils'
 
 interface AppShellProps {
@@ -66,6 +67,7 @@ export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname()
   const [mobileOpen, setMobileOpen] = useState(false)
   const { user, isGuest, isLoading, requireAuth, signOut, settings } = useAuth()
+  const learnerProfile = getLearnerProfile()
   const isFocusedRoute = pathname?.startsWith('/auth') || pathname?.startsWith('/onboarding')
   const isLearnerMode = settings.academicMode === 'LEARNER'
   const mainNav = isLearnerMode ? learnerNav : universityNav
@@ -77,8 +79,8 @@ export function AppShell({ children }: AppShellProps) {
       <div className="min-h-screen bg-[var(--app-background)] text-[var(--text-primary)]">
         <header className="border-b border-[var(--border)] bg-[var(--surface)]">
           <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-3 lg:px-8">
-            <BrandMark variant="lockup" showTagline />
-            <p className="text-xs text-[var(--text-muted)]">Your MuksFocus space. Your way.</p>
+            <BrandMark variant="lockup" showTagline tone="sidebar" />
+            <p className="text-xs text-[var(--text-muted)]">Your study space. Your way.</p>
           </div>
         </header>
         <main className="px-4 py-8 lg:px-8">
@@ -114,7 +116,11 @@ export function AppShell({ children }: AppShellProps) {
 
           <div className="mt-auto rounded-md border border-[var(--sidebar-border)] bg-white/5 p-3 text-xs text-[var(--sidebar-text)]">
             <p className="font-semibold">{settings.name || 'Student workspace'}</p>
-            <p className="mt-1 text-[var(--sidebar-muted)]">{settings.degree || 'Configure your academic profile in Personalisation.'}</p>
+            <p className="mt-1 text-[var(--sidebar-muted)]">
+              {isLearnerMode
+                ? (learnerProfile.curriculumLabel || learnerProfile.school?.name || 'School profile in progress')
+                : (settings.degree || 'Configure your academic profile in Personalisation.')}
+            </p>
             {!isLoading ? (
               isGuest ? (
                 <Button className="mt-3 w-full" size="sm" onClick={handleSignIn}>Sign in</Button>
@@ -125,7 +131,7 @@ export function AppShell({ children }: AppShellProps) {
           </div>
         </aside>
 
-        <div className="flex min-h-screen flex-1 flex-col">
+        <div className="flex min-h-screen min-w-0 flex-1 flex-col">
           <header className="sticky top-0 z-40 border-b border-[var(--border)] bg-[var(--surface)]/95 backdrop-blur">
             <div className="flex items-center justify-between px-4 py-3 lg:px-8">
               <div className="flex items-center gap-3 lg:hidden">

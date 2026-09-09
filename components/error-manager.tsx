@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { MessageSquareWarning } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 const ERROR_SESSION_KEY = 'muksbooksSession'
@@ -198,14 +199,22 @@ export function ErrorManager() {
 
   return (
     <>
-      <div className="fixed bottom-4 right-4 z-30 flex flex-col items-end gap-2">
+      <div className="fixed bottom-3 right-1 z-30 flex flex-col items-end gap-2 sm:bottom-4 sm:right-4">
         {reportStatus && (
           <div className="rounded-3xl border border-slate-200 bg-white/95 p-3 text-sm text-slate-700 shadow-lg">
             {reportStatus}
           </div>
         )}
-        <Button variant="secondary" size="sm" onClick={() => setIsOpen(true)}>
-          Report Issue
+        <Button
+          variant="secondary"
+          size="sm"
+          className="h-9 w-9 px-0 shadow-sm sm:w-auto sm:px-3"
+          onClick={() => setIsOpen(true)}
+          aria-label="Report issue"
+          title="Report issue"
+        >
+          <MessageSquareWarning className="h-4 w-4 sm:hidden" aria-hidden="true" />
+          <span className="hidden sm:inline">Report Issue</span>
         </Button>
       </div>
 
