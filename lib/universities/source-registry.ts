@@ -16,6 +16,9 @@ export interface InstitutionSourceProfile {
   undergraduateAdmissionsUrl?: string
   internationalAdmissionsUrl?: string
   applicationPortalUrl?: string
+  fundingUrl?: string
+  scholarshipUrl?: string
+  feesUrl?: string
   facultyUrls: Array<{ name: string; url: string }>
   lastProspectusCheckAt: string
   lastWebsiteRefreshAt: string
@@ -60,6 +63,9 @@ export const PRIORITY_INSTITUTION_SOURCE_PROFILES: InstitutionSourceProfile[] = 
     undergraduateAdmissionsUrl: record.undergraduateAdmissionsUrl,
     internationalAdmissionsUrl: record.internationalAdmissionsUrl,
     applicationPortalUrl: record.applicationPortalUrl,
+    fundingUrl: record.fundingUrl,
+    scholarshipUrl: record.scholarshipUrl,
+    feesUrl: record.feesUrl,
     facultyUrls: record.facultyUrls,
     lastProspectusCheckAt: record.lastProspectusCheckAt,
     lastWebsiteRefreshAt: record.lastWebsiteRefreshAt,
@@ -82,5 +88,8 @@ export function getInstitutionSourceMetrics() {
     weak: PRIORITY_INSTITUTION_SOURCE_PROFILES.filter((profile) => profile.coverage === 'WEAK').length,
     programmeFinders: PRIORITY_INSTITUTION_SOURCE_PROFILES.filter((profile) => profile.programmeFinderUrl).length,
     exactApplicationLinks: PRIORITY_INSTITUTION_SOURCE_PROFILES.filter((profile) => profile.applicationPortalUrl).length
+    , fundingPages: PRIORITY_INSTITUTION_SOURCE_PROFILES.filter((profile) => profile.fundingUrl).length
+    , scholarshipPages: PRIORITY_INSTITUTION_SOURCE_PROFILES.filter((profile) => profile.scholarshipUrl).length
+    , feePages: PRIORITY_INSTITUTION_SOURCE_PROFILES.filter((profile) => profile.feesUrl).length
   }
 }

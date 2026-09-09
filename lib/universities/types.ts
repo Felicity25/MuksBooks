@@ -3,7 +3,7 @@ import type { LearnerCurriculumId } from '@/lib/learner/store'
 export type CountryCode = 'ZA' | 'AU' | 'GB' | 'US' | 'CA' | 'SG' | 'MY' | 'ID' | 'TH' | 'VN' | 'PH'
 export type InstitutionType = 'University' | 'University of Technology' | 'College' | 'Institute' | 'Polytechnic' | 'Conservatory' | 'Other Higher Education Institution'
 export type CatalogueStatus = 'building' | 'partial' | 'substantial' | 'verified'
-export type SourceType = 'official-programme' | 'official-course-finder' | 'official-prospectus' | 'official-admissions' | 'official-institution' | 'official-application-portal' | 'official-curriculum' | 'official-test-provider' | 'government-register'
+export type SourceType = 'official-programme' | 'official-course-finder' | 'official-prospectus' | 'official-admissions' | 'official-institution' | 'official-application-portal' | 'official-curriculum' | 'official-test-provider' | 'official-scholarship' | 'official-fees' | 'government-register' | 'government-funding'
 export type ConfidenceStatus = 'VERIFIED_OFFICIAL' | 'AUTO_EXTRACTED_OFFICIAL' | 'NEEDS_REVIEW' | 'STALE' | 'CONFLICTING' | 'UNKNOWN'
 export type CoverageLevel = 'none' | 'building' | 'partial' | 'substantial' | 'near-complete'
 export type ApplicantType = 'DOMESTIC' | 'INTERNATIONAL' | 'UNCERTAIN'
@@ -362,11 +362,147 @@ export interface MatchExplanation {
 export type ApplicantRoute = 'SCHOOL_LEAVER' | 'GAP_YEAR' | 'COLLEGE_TO_UNIVERSITY' | 'DIPLOMA_TO_DEGREE' | 'UNIVERSITY_TRANSFER' | 'CURRENT_UNIVERSITY_NEW_UNDERGRAD' | 'FOUNDATION_PATHWAY' | 'OTHER'
 export type ApplicationStatus = 'INTERESTED' | 'RESEARCHING' | 'PREPARING' | 'READY_TO_APPLY' | 'APPLICATION_OPEN' | 'APPLIED' | 'DOCUMENTS_PENDING' | 'AWAITING_DECISION' | 'INTERVIEW_OR_ASSESSMENT' | 'CONDITIONAL_OFFER' | 'UNCONDITIONAL_OFFER' | 'WAITLISTED' | 'REJECTED' | 'ACCEPTED' | 'DECLINED' | 'WITHDRAWN'
 export type DeadlineType = 'APPLICATION_OPENS' | 'APPLICATION_DEADLINE' | 'EARLY_APPLICATION' | 'PRIORITY_DEADLINE' | 'DOCUMENT_DEADLINE' | 'TRANSCRIPT_DEADLINE' | 'PREDICTED_GRADES_DEADLINE' | 'TEST_SCORE_DEADLINE' | 'PORTFOLIO_DEADLINE' | 'INTERVIEW_DATE' | 'RESULTS_SUBMISSION_DEADLINE' | 'OFFER_RESPONSE_DEADLINE' | 'DEPOSIT_DEADLINE' | 'ENROLMENT_DEADLINE' | 'SCHOLARSHIP_APPLICATION_DEADLINE' | 'SCHOLARSHIP_DOCUMENT_DEADLINE' | 'SCHOLARSHIP_RESULT_DATE' | 'TEST_REGISTRATION_DEADLINE' | 'TEST_DATE'
-export type ApplicationDocumentType = 'TRANSCRIPT' | 'SCHOOL_REPORT' | 'PREDICTED_GRADES' | 'FINAL_RESULTS' | 'PERSONAL_STATEMENT' | 'MOTIVATION_LETTER' | 'CV' | 'REFERENCE' | 'RECOMMENDATION' | 'PASSPORT' | 'ID' | 'ENGLISH_TEST' | 'ADMISSION_TEST' | 'PORTFOLIO' | 'INTERVIEW' | 'QUALIFICATION_CERTIFICATE' | 'TERTIARY_TRANSCRIPT' | 'COURSE_OUTLINES' | 'TRANSFER_DOCUMENTATION' | 'OTHER'
+export type ApplicationDocumentType = 'TRANSCRIPT' | 'SCHOOL_REPORT' | 'PREDICTED_GRADES' | 'FINAL_RESULTS' | 'PERSONAL_STATEMENT' | 'MOTIVATION_LETTER' | 'CV' | 'REFERENCE' | 'RECOMMENDATION' | 'PASSPORT' | 'ID' | 'PROOF_CITIZENSHIP' | 'PROOF_RESIDENCE' | 'INCOME_DOCUMENTATION' | 'OFFER_LETTER' | 'PROOF_OF_ENROLMENT' | 'BANK_DETAILS' | 'ENGLISH_TEST' | 'ADMISSION_TEST' | 'PORTFOLIO' | 'INTERVIEW' | 'QUALIFICATION_CERTIFICATE' | 'TERTIARY_TRANSCRIPT' | 'COURSE_OUTLINES' | 'TRANSFER_DOCUMENTATION' | 'OTHER'
 export type OfferType = 'CONDITIONAL' | 'UNCONDITIONAL' | 'WAITLIST' | 'PATHWAY' | 'DEFERRED_ENTRY' | 'OTHER'
 export type OfferStatus = 'RECEIVED' | 'REVIEWING' | 'AWAITING_RESULTS' | 'RESPONDED' | 'ACCEPTED' | 'DECLINED' | 'EXPIRED' | 'WITHDRAWN'
 export type OfferConditionType = 'OVERALL_SCORE' | 'SUBJECT_SCORE' | 'FINAL_TRANSCRIPT' | 'ENGLISH_TEST' | 'ADMISSION_TEST' | 'PORTFOLIO' | 'QUALIFICATION_COMPLETION' | 'DEPOSIT' | 'OTHER'
 export type GradeKind = 'CURRENT' | 'PREDICTED' | 'FINAL' | 'TARGET'
+
+export type FundingProviderType = 'UNIVERSITY' | 'FACULTY' | 'GOVERNMENT' | 'FOUNDATION' | 'CORPORATE' | 'INDUSTRY' | 'PROFESSIONAL_BODY' | 'OTHER'
+export type FundingType = 'UNIVERSITY_SCHOLARSHIP' | 'FACULTY_SCHOLARSHIP' | 'PROGRAMME_SCHOLARSHIP' | 'MERIT_SCHOLARSHIP' | 'NEED_BASED_AID' | 'BURSARY' | 'GOVERNMENT_GRANT' | 'GOVERNMENT_STUDENT_FINANCE' | 'TUITION_SUBSIDY' | 'LOAN' | 'EXTERNAL_SCHOLARSHIP' | 'FOUNDATION_FUNDING' | 'CORPORATE_BURSARY' | 'INDUSTRY_BURSARY' | 'PROFESSIONAL_BODY_FUNDING' | 'SPORTS_SCHOLARSHIP' | 'RESEARCH_FUNDING' | 'OTHER'
+export type FundingRepaymentType = 'NON_REPAYABLE' | 'REPAYABLE' | 'FEE_SUBSIDY' | 'MIXED' | 'UNKNOWN'
+export type FundingStudyLevel = 'SCHOOL_LEAVER' | 'FOUNDATION' | 'DIPLOMA' | 'BACHELOR' | 'TRANSFER' | 'CURRENT_UNIVERSITY' | 'HONOURS' | 'POSTGRADUATE'
+export type FundingAmountType = 'FIXED' | 'UP_TO' | 'RANGE' | 'FULL_TUITION' | 'PARTIAL_TUITION' | 'FULL_COST' | 'VARIABLE' | 'NOT_PUBLISHED'
+export type FundingEligibilityState = 'STRONG_POTENTIAL_MATCH' | 'POTENTIAL_MATCH' | 'POSSIBLE_MATCH' | 'MISSING_INFORMATION' | 'LIKELY_INELIGIBLE' | 'NOT_APPLICABLE' | 'REQUIREMENTS_NOT_STRUCTURED' | 'DEADLINE_PASSED' | 'NEEDS_VERIFICATION'
+export type FundingApplicationStatus = 'INTERESTED' | 'SAVED' | 'PREPARING' | 'READY' | 'SUBMITTED' | 'AWAITING_DECISION' | 'INTERVIEW' | 'AWARDED' | 'PARTIALLY_AWARDED' | 'UNSUCCESSFUL' | 'ACCEPTED' | 'DECLINED' | 'WITHDRAWN'
+export type FundingDeadlineType = 'APPLICATION_OPENS' | 'APPLICATION_DEADLINE' | 'DOCUMENT_DEADLINE' | 'REFERENCE_DEADLINE' | 'INTERVIEW_DATE' | 'RESULT_DATE' | 'ACCEPTANCE_DEADLINE' | 'RENEWAL_DEADLINE'
+export type ProgrammeFeeType = 'TUITION_ANNUAL' | 'TUITION_TOTAL' | 'PER_CREDIT' | 'PER_UNIT' | 'APPLICATION_FEE' | 'STUDENT_SERVICES_FEE' | 'INTERNATIONAL_SURCHARGE' | 'LAB_PROGRAMME_FEE'
+
+export interface FundingAcademicRequirement {
+  curriculum?: LearnerCurriculumId
+  gradeKind?: Exclude<GradeKind, 'TARGET'>
+  minimumOverall?: number
+  notes?: string
+}
+
+export interface FundingOpportunity {
+  id: string
+  name: string
+  provider: string
+  providerType: FundingProviderType
+  fundingType: FundingType
+  repaymentType: FundingRepaymentType
+  providerCountry: string
+  eligibleDestinationCountries: string[]
+  eligibleInstitutions: string[]
+  eligibleProgrammes: string[]
+  eligibleFaculties: string[]
+  eligibleStudyAreas: string[]
+  eligibleStudyLevels: FundingStudyLevel[]
+  citizenshipRules: string[]
+  residenceRules: string[]
+  domesticInternationalRules: ApplicantType[]
+  applicantRouteRules: ApplicantRoute[]
+  curriculumRules: LearnerCurriculumId[]
+  academicRequirements: FundingAcademicRequirement[]
+  financialNeedRequirements?: string[]
+  demographicOrCommunityCriteria?: string[]
+  otherEligibility: string[]
+  requiredContext?: Array<'ELIGIBLE_COURSE_OR_PLACE' | 'GOVERNMENT_ELIGIBILITY'>
+  fundingAmount?: number
+  fundingAmountMax?: number
+  currency?: string
+  amountType: FundingAmountType
+  coverage: string[]
+  duration?: string
+  renewable?: boolean
+  applicationOpensAt?: string
+  applicationDeadline?: string
+  documentDeadline?: string
+  decisionDate?: string
+  separateApplicationRequired: boolean
+  applicationMethod: string
+  officialUrl: string
+  applicationUrl: string
+  sourceUrl: string
+  sourceType: SourceType
+  sourceTitle: string
+  sourceSection?: string
+  fundingCycle: string
+  lastCheckedAt: string
+  lastVerifiedAt?: string
+  confidenceStatus: ConfidenceStatus
+  active: boolean
+  recurring?: boolean
+}
+
+export interface FundingDeadline {
+  id: string
+  fundingOpportunityId: string
+  institutionId?: string
+  deadlineType: FundingDeadlineType
+  dueAt: string
+  timezone?: string
+  description: string
+  sourceUrl: string
+  fundingCycle: string
+  lastCheckedAt: string
+  lastVerifiedAt?: string
+  confidenceStatus: ConfidenceStatus
+  previousValues?: Array<{ dueAt: string; detectedAt: string; sourceUrl: string }>
+}
+
+export interface FundingApplication {
+  id: string
+  userId?: string
+  fundingOpportunityId?: string
+  customOpportunityName?: string
+  customProvider?: string
+  dataOrigin: DataOrigin
+  linkedUniversityApplicationId?: string
+  linkedProgrammeId?: string
+  status: FundingApplicationStatus
+  applicationReference?: string
+  applicationUrlOverride?: string
+  deadlineOverride?: string
+  submittedAt?: string
+  decisionAt?: string
+  expectedAmount?: number
+  awardAmount?: number
+  awardCurrency?: string
+  notes: string
+  documents: ApplicationDocument[]
+  tasks: ApplicationTask[]
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ProgrammeCost {
+  id: string
+  institutionId: string
+  programmeId?: string
+  academicYear: number
+  applicantType: ApplicantType
+  placeType?: 'CSP' | 'FULL_FEE' | 'OTHER'
+  feeType: ProgrammeFeeType
+  amount?: number
+  currency: string
+  amountBasis: string
+  rangeMin?: number
+  rangeMax?: number
+  additionalCosts?: string
+  sourceUrl: string
+  lastCheckedAt: string
+  lastVerifiedAt?: string
+  confidenceStatus: ConfidenceStatus
+}
+
+export interface FundingEligibilityResult {
+  state: FundingEligibilityState
+  reasons: string[]
+  checks: string[]
+  missing: string[]
+}
 
 export interface AdmissionsDeadline {
   id: string
@@ -501,7 +637,7 @@ export interface ResolvedApplicationRoute {
   explanation: string
 }
 
-export type FreshUniversityDataKind = 'PROSPECTUS' | 'PROGRAMMES' | 'APPLICATION_ROUTES' | 'APPLICATION_DEADLINES' | 'RESULT_RELEASE_DATES' | 'ADMISSIONS_REQUIREMENTS' | 'ENGLISH_REQUIREMENTS' | 'TEST_REQUIREMENTS' | 'TEST_DATES' | 'TEST_FEES' | 'TEST_BOOKING' | 'INTERVIEW_REQUIREMENTS' | 'PORTFOLIO_REQUIREMENTS' | 'ENGLISH_REQUIREMENT' | 'ENGLISH_EXEMPTION' | 'ADMISSIONS_TEST_REQUIREMENT' | 'TEST_MINIMUM_SCORE' | 'TEST_REGISTRATION_DATE' | 'TEST_DATE' | 'TEST_WINDOW' | 'TEST_FEE' | 'TEST_BOOKING_URL' | 'TEST_SCORE_SUBMISSION_DEADLINE' | 'INTERVIEW_REQUIREMENT' | 'PORTFOLIO_REQUIREMENT' | 'SCHOLARSHIPS' | 'SCHOLARSHIP_DEADLINES' | 'FEES'
+export type FreshUniversityDataKind = 'PROSPECTUS' | 'PROGRAMMES' | 'APPLICATION_ROUTES' | 'APPLICATION_DEADLINES' | 'RESULT_RELEASE_DATES' | 'ADMISSIONS_REQUIREMENTS' | 'ENGLISH_REQUIREMENTS' | 'TEST_REQUIREMENTS' | 'TEST_DATES' | 'TEST_FEES' | 'TEST_BOOKING' | 'INTERVIEW_REQUIREMENTS' | 'PORTFOLIO_REQUIREMENTS' | 'ENGLISH_REQUIREMENT' | 'ENGLISH_EXEMPTION' | 'ADMISSIONS_TEST_REQUIREMENT' | 'TEST_MINIMUM_SCORE' | 'TEST_REGISTRATION_DATE' | 'TEST_DATE' | 'TEST_WINDOW' | 'TEST_FEE' | 'TEST_BOOKING_URL' | 'TEST_SCORE_SUBMISSION_DEADLINE' | 'INTERVIEW_REQUIREMENT' | 'PORTFOLIO_REQUIREMENT' | 'SCHOLARSHIPS' | 'SCHOLARSHIP_DEADLINES' | 'FEES' | 'FUNDING_ELIGIBILITY' | 'FUNDING_AMOUNT' | 'TUITION_FEE' | 'APPLICATION_FEE' | 'FUNDING_APPLICATION_URL'
 
 export interface FreshUniversitySource {
   id: string

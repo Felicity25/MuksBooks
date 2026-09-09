@@ -3,7 +3,7 @@ import { mkdir } from 'node:fs/promises'
 import { chromium } from 'playwright'
 
 const baseUrl = process.env.BASE_URL || 'http://localhost:3010'
-const outputDirectory = '/tmp/muksbooks-build-3-5'
+const outputDirectory = '/tmp/muksbooks-build-4'
 await mkdir(outputDirectory, { recursive: true })
 
 const browser = await chromium.launch({ headless: true })
@@ -12,11 +12,14 @@ const page = await context.newPage()
 const errors = []
 page.on('pageerror', (error) => errors.push(error.message))
 
-await page.goto(`${baseUrl}/universities/ul`, { waitUntil: 'load' })
-await page.getByRole('heading', { name: 'University of Limpopo', exact: true }).waitFor()
+const unauthorizedReview = await page.request.get(`${baseUrl}/api/universities/review`)
+assert.equal(unauthorizedReview.status(), 401, 'University review API must reject requests without the developer secret')
+
+await page.goto(`${baseUrl}/universities/up`, { waitUntil: 'load' })
+await page.getByRole('heading', { name: 'University of Pretoria', exact: true }).waitFor()
 await page.getByRole('heading', { name: 'Official sources' }).waitFor()
-await page.getByRole('link', { name: 'Undergraduate guide 2027' }).waitFor()
-await page.screenshot({ path: `${outputDirectory}/limpopo-sources-desktop.png`, fullPage: true })
+await page.getByText('Automated access was blocked; another review pass is required.', { exact: false }).waitFor()
+await page.screenshot({ path: `${outputDirectory}/pretoria-sources-desktop.png`, fullPage: true })
 
 await page.goto(`${baseUrl}/universities/ul/ul-mbchb`, { waitUntil: 'load' })
 await page.getByRole('heading', { name: 'Bachelor of Medicine and Bachelor of Surgery' }).waitFor()
@@ -55,9 +58,59 @@ await page.getByLabel('Institution').selectOption('mit')
 await page.getByText('MIT Regular Action application deadline.').waitFor()
 assert.equal(await page.getByText('VTAC timely course applications close.').count(), 0, 'Calendar institution filter should exclude unrelated dates')
 
+await page.goto(`${baseUrl}/universities/funding`, { waitUntil: 'load' })
+await page.getByRole('heading', { name: 'Scholarships & Funding' }).waitFor()
+await page.getByPlaceholder('Engineering bursary, NSFAS, Monash...').fill('NSFAS')
+await page.getByRole('heading', { name: 'NSFAS DHET Bursary Scheme' }).waitFor()
+await page.getByRole('link', { name: 'View details' }).click()
+await page.getByRole('heading', { name: 'Published eligibility' }).waitFor()
+await page.getByText('A match indicates published criteria may fit. It is not an award or eligibility guarantee.').waitFor()
+await page.getByRole('button', { name: 'Start funding application' }).click()
+
+await page.goto(`${baseUrl}/universities/funding/applications`, { waitUntil: 'load' })
+await page.getByText('NSFAS DHET Bursary Scheme').waitFor()
+await page.getByRole('button', { name: 'Add funding' }).click()
+await page.getByLabel('Opportunity name').fill('Community education bursary')
+await page.getByLabel('Provider').fill('Example Education Trust')
+await page.getByLabel('Personal deadline').fill('2027-02-15')
+await page.getByLabel('Official application URL').fill('https://example.edu/funding/apply')
+await page.getByLabel('Expected amount').fill('10000')
+await page.getByLabel('Currency').fill('ZAR')
+await page.getByRole('button', { name: 'Add to tracker' }).click()
+await page.getByText('Community education bursary').waitFor()
+await page.reload({ waitUntil: 'load' })
+await page.getByText('Community education bursary').waitFor()
+await page.getByRole('link', { name: 'Open application' }).last().click()
+await page.getByRole('heading', { name: 'Application destination' }).first().waitFor()
+await page.getByText('Learner entered · not verified').waitFor()
+await page.getByRole('link', { name: 'Open learner-entered link' }).waitFor()
+await page.screenshot({ path: `${outputDirectory}/funding-application-desktop.png`, fullPage: true })
+
+await page.goto(`${baseUrl}/universities/funding/plan`, { waitUntil: 'load' })
+await page.getByRole('heading', { name: 'My Funding Plan' }).waitFor()
+await page.getByText('Awarded or accepted only').waitFor()
+await page.getByText('Not guaranteed or secured').waitFor()
+
+await page.goto(`${baseUrl}/universities/mit/mit-course-6`, { waitUntil: 'load' })
+await page.getByRole('heading', { name: 'Tuition & funding' }).waitFor()
+
 await page.setViewportSize({ width: 390, height: 844 })
+await page.goto(`${baseUrl}/universities/funding/applications`, { waitUntil: 'load' })
+await page.getByRole('link', { name: 'Open application' }).last().click()
+let overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
+assert.ok(overflow <= 1, `Mobile funding application overflowed horizontally by ${overflow}px`)
+
+await page.goto(`${baseUrl}/universities/funding/plan`, { waitUntil: 'load' })
+overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
+assert.ok(overflow <= 1, `Mobile funding plan overflowed horizontally by ${overflow}px`)
+
+await page.goto(`${baseUrl}/universities/funding`, { waitUntil: 'load' })
+overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
+assert.ok(overflow <= 1, `Mobile funding discovery overflowed horizontally by ${overflow}px`)
+await page.screenshot({ path: `${outputDirectory}/funding-mobile.png`, fullPage: true })
+
 await page.goto(`${baseUrl}/universities/calendar`, { waitUntil: 'load' })
-const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
+overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
 assert.ok(overflow <= 1, `Mobile calendar overflowed horizontally by ${overflow}px`)
 await page.screenshot({ path: `${outputDirectory}/calendar-mobile.png`, fullPage: true })
 

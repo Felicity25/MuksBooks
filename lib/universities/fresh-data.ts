@@ -2,6 +2,7 @@ import { getCountryCatalogue } from './catalog.ts'
 import { ADMISSIONS_POLICIES, ADMISSIONS_TEST_FEES, ADMISSIONS_TEST_SESSIONS } from './admissions-data.ts'
 import { PRIORITY_INSTITUTION_SOURCE_PROFILES } from './source-registry.ts'
 import { REVIEWED_APPLICATION_ROUTES } from './application-routes.ts'
+import { FUNDING_OPPORTUNITIES, PROGRAMME_COSTS } from './funding-data.ts'
 import type { AdmissionsDeadline, CurriculumResultsEvent, FreshUniversitySource } from './types'
 
 export const UNIVERSITY_DATA_CHECKED_AT = '2026-09-09T02:35:00Z'
@@ -66,6 +67,21 @@ const institutionSources: FreshUniversitySource[] = PRIORITY_INSTITUTION_SOURCE_
     id: `${profile.institutionId}-application-route`, kind: 'APPLICATION_ROUTES' as const, institutionId: profile.institutionId, countryCode: profile.countryCode,
     url: profile.applicationPortalUrl, sourceType: 'official-application-portal' as const, refreshCadence: 'DAILY' as const,
     lastCheckedAt: profile.lastWebsiteRefreshAt, lastSuccessfulAt: profile.lastWebsiteRefreshAt, confidenceStatus: 'NEEDS_REVIEW' as const
+  } : undefined,
+  profile.scholarshipUrl ? {
+    id: `${profile.institutionId}-scholarships`, kind: 'SCHOLARSHIPS' as const, institutionId: profile.institutionId, countryCode: profile.countryCode,
+    url: profile.scholarshipUrl, sourceType: 'official-scholarship' as const, refreshCadence: 'WEEKLY' as const,
+    lastCheckedAt: profile.lastWebsiteRefreshAt, lastSuccessfulAt: profile.lastWebsiteRefreshAt, confidenceStatus: 'NEEDS_REVIEW' as const
+  } : undefined,
+  profile.fundingUrl ? {
+    id: `${profile.institutionId}-funding`, kind: 'SCHOLARSHIPS' as const, institutionId: profile.institutionId, countryCode: profile.countryCode,
+    url: profile.fundingUrl, sourceType: 'official-scholarship' as const, refreshCadence: 'WEEKLY' as const,
+    lastCheckedAt: profile.lastWebsiteRefreshAt, lastSuccessfulAt: profile.lastWebsiteRefreshAt, confidenceStatus: 'NEEDS_REVIEW' as const
+  } : undefined,
+  profile.feesUrl ? {
+    id: `${profile.institutionId}-fees`, kind: 'FEES' as const, institutionId: profile.institutionId, countryCode: profile.countryCode,
+    url: profile.feesUrl, sourceType: 'official-fees' as const, refreshCadence: 'MONTHLY' as const,
+    lastCheckedAt: profile.lastWebsiteRefreshAt, lastSuccessfulAt: profile.lastWebsiteRefreshAt, confidenceStatus: 'NEEDS_REVIEW' as const
   } : undefined
 ].filter(Boolean) as FreshUniversitySource[])
 
@@ -78,6 +94,8 @@ const reviewedRouteSources: FreshUniversitySource[] = REVIEWED_APPLICATION_ROUTE
 export const OFFICIAL_UNIVERSITY_SOURCES: FreshUniversitySource[] = [
   ...institutionSources,
   ...reviewedRouteSources,
+  ...FUNDING_OPPORTUNITIES.map((opportunity) => ({ id: `${opportunity.id}-funding`, kind: opportunity.applicationDeadline ? 'SCHOLARSHIP_DEADLINES' as const : 'SCHOLARSHIPS' as const, url: opportunity.sourceUrl, sourceType: opportunity.sourceType, admissionsCycle: opportunity.fundingCycle, refreshCadence: opportunity.applicationDeadline ? 'DAILY' as const : opportunity.providerType === 'GOVERNMENT' ? 'WEEKLY' as const : 'MONTHLY' as const, lastCheckedAt: opportunity.lastCheckedAt, lastSuccessfulAt: opportunity.lastVerifiedAt, confidenceStatus: opportunity.confidenceStatus })),
+  ...PROGRAMME_COSTS.map((cost) => ({ id: `${cost.id}-fees`, kind: 'FEES' as const, institutionId: cost.institutionId, url: cost.sourceUrl, sourceType: 'official-fees' as const, sourceAcademicYear: String(cost.academicYear), refreshCadence: 'MONTHLY' as const, lastCheckedAt: cost.lastCheckedAt, lastSuccessfulAt: cost.lastVerifiedAt, confidenceStatus: cost.confidenceStatus })),
   { id: 'ucas-2027-deadlines', kind: 'APPLICATION_DEADLINES', countryCode: 'GB', url: UCAS_SOURCE, sourceType: 'official-application-portal', admissionsCycle: '2027', refreshCadence: 'WEEKLY', lastCheckedAt: UNIVERSITY_DATA_CHECKED_AT, lastSuccessfulAt: UNIVERSITY_DATA_CHECKED_AT, confidenceStatus: 'VERIFIED_OFFICIAL' },
   { id: 'ib-results', kind: 'RESULT_RELEASE_DATES', url: IB_RESULTS_SOURCE, sourceType: 'official-curriculum', refreshCadence: 'WEEKLY', lastCheckedAt: UNIVERSITY_DATA_CHECKED_AT, lastSuccessfulAt: UNIVERSITY_DATA_CHECKED_AT, confidenceStatus: 'NEEDS_REVIEW' },
   ...readinessSources.filter((source, index, sources) => sources.findIndex((candidate) => candidate.id === source.id) === index)

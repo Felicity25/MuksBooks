@@ -1,6 +1,7 @@
 import type { ThemeId } from '@/lib/design/themes'
-import type { UniversityApplication } from '@/lib/universities/types'
+import type { FundingApplication, UniversityApplication } from '@/lib/universities/types'
 import { normalizeUniversityApplication } from './universities/application-domain.ts'
+import { normalizeFundingApplication } from './universities/funding-domain.ts'
 
 export type ThemePreference = ThemeId | 'light' | 'dark' | 'system'
 export type TextSizePreference = 'small' | 'default' | 'large' | 'extra-large'
@@ -84,6 +85,9 @@ export interface UserSettings {
   universityShortlist: string[]
   universityCompare: string[]
   universityApplications: UniversityApplication[]
+  fundingSaved: string[]
+  fundingApplications: FundingApplication[]
+  fundingPlanContributions: Record<string, number>
   targetMarks: string
   feedbackStrictness: 'lenient' | 'normal' | 'strict'
   pomodoroLength: number
@@ -237,6 +241,9 @@ export const DEFAULT_USER_SETTINGS: UserSettings = {
   universityShortlist: [],
   universityCompare: [],
   universityApplications: [],
+  fundingSaved: [],
+  fundingApplications: [],
+  fundingPlanContributions: {},
   targetMarks: '',
   feedbackStrictness: 'normal',
   pomodoroLength: 25,
@@ -330,6 +337,15 @@ export function parseUserSettingsUpdate(value: unknown): SettingsParseResult {
     }
     if ('universityApplications' in update && !Array.isArray(update.universityApplications)) {
       return { valid: false, error: 'universityApplications must be an array.' }
+    }
+    if ('fundingSaved' in update && (!Array.isArray(update.fundingSaved) || update.fundingSaved.some((item) => typeof item !== 'string'))) {
+      return { valid: false, error: 'fundingSaved must be a string array.' }
+    }
+    if ('fundingApplications' in update && !Array.isArray(update.fundingApplications)) {
+      return { valid: false, error: 'fundingApplications must be an array.' }
+    }
+    if ('fundingPlanContributions' in update && (!update.fundingPlanContributions || typeof update.fundingPlanContributions !== 'object' || Array.isArray(update.fundingPlanContributions))) {
+      return { valid: false, error: 'fundingPlanContributions must be an object.' }
     }
 
   for (const field of ['speechVoiceURI']) {
@@ -464,6 +480,15 @@ export function normalizeUserSettings(value?: Partial<UserSettings> | null): Use
     universityApplications: Array.isArray(clean.universityApplications)
       ? clean.universityApplications.map((application) => normalizeUniversityApplication(application as UniversityApplication & Record<string, unknown>))
       : DEFAULT_USER_SETTINGS.universityApplications,
+    fundingSaved: Array.isArray(clean.fundingSaved)
+      ? Array.from(new Set(clean.fundingSaved.map((item) => `${item}`.trim()).filter(Boolean)))
+      : DEFAULT_USER_SETTINGS.fundingSaved,
+    fundingApplications: Array.isArray(clean.fundingApplications)
+      ? clean.fundingApplications.map((application) => normalizeFundingApplication(application as FundingApplication & Record<string, unknown>))
+      : DEFAULT_USER_SETTINGS.fundingApplications,
+    fundingPlanContributions: clean.fundingPlanContributions && typeof clean.fundingPlanContributions === 'object' && !Array.isArray(clean.fundingPlanContributions)
+      ? Object.fromEntries(Object.entries(clean.fundingPlanContributions).filter((entry): entry is [string, number] => typeof entry[1] === 'number' && Number.isFinite(entry[1]) && entry[1] >= 0))
+      : DEFAULT_USER_SETTINGS.fundingPlanContributions,
     proactivityControls
   }
 }

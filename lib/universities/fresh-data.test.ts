@@ -43,7 +43,7 @@ assert.deepEqual(refreshed.candidate?.signals.dates, ['15 October 2026'])
 assert.deepEqual(refreshed.candidate?.signals.fees, ['£70'])
 assert.deepEqual(refreshed.candidate?.signals.requirementTerms, ['required', 'interview', 'portfolio'])
 assert.deepEqual(refreshed.candidate?.signals.bookingUrls, ['https://apply.example.edu/register'])
-assert.ok(refreshed.candidate?.signals.claims.some((claim) => claim.requirementType === 'TEST_FEE' && claim.value === '£70'))
+assert.ok(refreshed.candidate?.signals.claims.some((claim) => claim.requirementType === 'APPLICATION_FEE' && claim.value === '£70'))
 assert.ok(refreshed.candidate?.signals.claims.some((claim) => claim.requirementType === 'INTERVIEW_REQUIREMENT'))
 assert.ok(refreshed.candidate?.signals.claims.every((claim) => claim.confidenceStatus === 'NEEDS_REVIEW'))
 
@@ -52,6 +52,13 @@ assert.equal(structuredCandidate.signals.claims.find((claim) => claim.requiremen
 assert.ok(structuredCandidate.signals.claims.some((claim) => claim.requirementType === 'ENGLISH_REQUIREMENT' && claim.test === 'IELTS'))
 assert.ok(structuredCandidate.signals.claims.some((claim) => claim.requirementType === 'TEST_REGISTRATION_DATE' && claim.value === '15 September 2026'))
 assert.ok(structuredCandidate.signals.claims.some((claim) => claim.requirementType === 'TEST_BOOKING_URL'))
+
+const fundingSource = { ...source, id: 'funding', kind: 'SCHOLARSHIPS' as const, sourceType: 'official-scholarship' as const }
+const fundingCandidate = service.extractCandidate(fundingSource, '<html><body><p>Applicants are eligible based on financial need. Applications close 15 October 2026. Awards of $5,000 are available.</p><a href="https://example.edu/funding/apply">Apply for funding</a></body></html>', '2026-09-10T00:00:00Z')
+assert.ok(fundingCandidate.signals.claims.some((claim) => claim.requirementType === 'FUNDING_ELIGIBILITY'))
+assert.ok(fundingCandidate.signals.claims.some((claim) => claim.requirementType === 'SCHOLARSHIP_DEADLINES'))
+assert.ok(fundingCandidate.signals.claims.some((claim) => claim.requirementType === 'FUNDING_AMOUNT'))
+assert.ok(fundingCandidate.signals.claims.some((claim) => claim.requirementType === 'FUNDING_APPLICATION_URL'))
 assert.ok(FRESH_SOURCE_PRIORITY['official-test-provider'] < FRESH_SOURCE_PRIORITY['official-admissions'])
 assert.equal(sourceRefreshDue({ ...source, refreshCadence: 'QUARTERLY', lastCheckedAt: '2026-06-12T00:00:00Z' }, new Date('2026-09-10T00:00:00Z')), true)
 assert.equal(sourceRefreshDue({ ...source, refreshCadence: 'QUARTERLY', lastCheckedAt: '2026-08-01T00:00:00Z' }, new Date('2026-09-10T00:00:00Z')), false)

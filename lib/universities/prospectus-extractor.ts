@@ -18,7 +18,7 @@ export interface ProspectusProgrammeCandidate {
 }
 
 export interface ProspectusClaimCandidate {
-  kind: 'CURRICULUM_REQUIREMENT' | 'ENGLISH_REQUIREMENT' | 'ADMISSIONS_TEST' | 'APPLICATION_DEADLINE' | 'APPLICATION_ROUTE'
+  kind: 'CURRICULUM_REQUIREMENT' | 'ENGLISH_REQUIREMENT' | 'ADMISSIONS_TEST' | 'APPLICATION_DEADLINE' | 'APPLICATION_ROUTE' | 'SCHOLARSHIP' | 'BURSARY' | 'GOVERNMENT_SUPPORT' | 'FUNDING_ELIGIBILITY' | 'SCHOLARSHIP_DEADLINE' | 'FUNDING_AMOUNT' | 'TUITION_FEE' | 'APPLICATION_FEE' | 'FUNDING_APPLICATION_URL'
   faculty: string
   evidence: ProspectusEvidence
   confidenceStatus: Extract<ConfidenceStatus, 'NEEDS_REVIEW'>
@@ -55,6 +55,15 @@ const CLAIM_RULES: Array<{ kind: ProspectusClaimCandidate['kind']; pattern: RegE
   { kind: 'ADMISSIONS_TEST', pattern: /\b(?:NBT|SAT|ACT|UCAT(?: ANZ)?|GAMSAT|LNAT|TMUA|ESAT|ISAT)\b/i },
   { kind: 'APPLICATION_DEADLINE', pattern: /\b(?:closing date|application deadline|applications? close)\b/i },
   { kind: 'APPLICATION_ROUTE', pattern: /\b(?:apply online|application portal|UCAS|OUAC|VTAC|UAC|QTAC|Common App|UC application)\b/i }
+  , { kind: 'SCHOLARSHIP', pattern: /\b(?:undergraduate|entrance|merit|international) scholarships?\b/i }
+  , { kind: 'BURSARY', pattern: /\b(?:undergraduate|student|financial) bursar(?:y|ies)\b/i }
+  , { kind: 'GOVERNMENT_SUPPORT', pattern: /\b(?:NSFAS|HECS-HELP|FEE-HELP|Commonwealth Supported Place|student finance)\b/i }
+  , { kind: 'FUNDING_ELIGIBILITY', pattern: /\b(?:scholarship|bursary|financial aid).{0,40}(?:eligible|eligibility|qualif(?:y|ies))\b/i }
+  , { kind: 'SCHOLARSHIP_DEADLINE', pattern: /\b(?:scholarship|bursary).{0,40}(?:closing date|deadline|applications? close)\b/i }
+  , { kind: 'FUNDING_AMOUNT', pattern: /(?:R|A\$|C\$|US\$|£|\$)\s?[\d,.]+.{0,50}(?:scholarship|bursary|grant|award)/i }
+  , { kind: 'TUITION_FEE', pattern: /\b(?:annual |international |domestic )?tuition fees?\b/i }
+  , { kind: 'APPLICATION_FEE', pattern: /\bapplication fee\b/i }
+  , { kind: 'FUNDING_APPLICATION_URL', pattern: /\b(?:apply for (?:a |the )?(?:scholarship|bursary)|funding portal|scholarship application)\b/i }
 ]
 
 function cleanEvidence(value: string) {

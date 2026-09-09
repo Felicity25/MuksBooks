@@ -11,7 +11,7 @@ const USER_AGENT = 'MuksBooks University Source Discovery/1.0 (+https://muksbook
 const REQUEST_TIMEOUT_MS = 12_000
 const CONCURRENCY = 6
 
-type SourceKey = 'prospectusUrl' | 'programmeFinderUrl' | 'undergraduateAdmissionsUrl' | 'internationalAdmissionsUrl' | 'applicationPortalUrl' | 'facultyUrl'
+type SourceKey = 'prospectusUrl' | 'programmeFinderUrl' | 'undergraduateAdmissionsUrl' | 'internationalAdmissionsUrl' | 'applicationPortalUrl' | 'facultyUrl' | 'fundingUrl' | 'scholarshipUrl' | 'feesUrl'
 
 type LinkCandidate = {
   key: SourceKey
@@ -40,6 +40,9 @@ type InstitutionDiscovery = {
   undergraduateAdmissionsUrl?: string
   internationalAdmissionsUrl?: string
   applicationPortalUrl?: string
+  fundingUrl?: string
+  scholarshipUrl?: string
+  feesUrl?: string
   facultyUrls: Array<{ name: string; url: string }>
   lastProspectusCheckAt: string
   lastWebsiteRefreshAt: string
@@ -56,7 +59,12 @@ const LINK_RULES: Array<{ key: SourceKey; pattern: RegExp; score: number }> = [
   { key: 'internationalAdmissionsUrl', pattern: /international (?:students?|admissions?|applicants?)|apply.{0,20}international/i, score: 95 },
   { key: 'applicationPortalUrl', pattern: /apply now|application portal|start (?:an?|your) application|online application/i, score: 100 },
   { key: 'facultyUrl', pattern: /facult(?:y|ies)|schools? and (?:faculties|colleges)|academic schools?/i, score: 70 }
+  , { key: 'scholarshipUrl', pattern: /undergraduate scholarships?|international scholarships?|scholarships? and awards/i, score: 105 }
+  , { key: 'fundingUrl', pattern: /financial aid|fees and funding|student funding|undergraduate bursaries|funding opportunities/i, score: 100 }
+  , { key: 'feesUrl', pattern: /tuition fees?|international student fees?|fee calculator|course fees|fees handbook|student fees/i, score: 100 }
 ]
+
+const FUNDING_SOURCE_EXCLUSIONS = /\b(?:postgraduate|graduate research|research funding|doctoral|phd|staff|executive education|business school|business and industry|collaborate|enterprise funding)\b/i
 
 function normalizedHostname(url: string) {
   return new URL(url).hostname.toLowerCase().replace(/^www\./, '')
@@ -95,6 +103,8 @@ function pageLinks(html: string, pageUrl: string, institution: Institution) {
       if (url && universityDomain(url, institution)) {
         const searchable = `${label} ${url}`
         for (const rule of LINK_RULES) {
+          if (['fundingUrl', 'scholarshipUrl', 'feesUrl'].includes(rule.key) && FUNDING_SOURCE_EXCLUSIONS.test(searchable)) continue
+          if (rule.key === 'fundingUrl' && /fees handbook|student fees/i.test(searchable)) continue
           if (rule.pattern.test(searchable)) links.push({ key: rule.key, label: label || rule.key, url, score: rule.score + (url.toLowerCase().endsWith('.pdf') ? 15 : 0), discoveredFrom: pageUrl })
         }
       }
@@ -193,8 +203,11 @@ async function discoverInstitution(institution: Institution, countryCode: Countr
   const undergraduateAdmissionsUrl = best('undergraduateAdmissionsUrl')
   const internationalAdmissionsUrl = best('internationalAdmissionsUrl')
   const applicationPortalUrl = best('applicationPortalUrl')
+  const fundingUrl = best('fundingUrl')
+  const scholarshipUrl = best('scholarshipUrl')
+  const feesUrl = best('feesUrl')
   const facultyUrls = sources.filter((source) => source.key === 'facultyUrl').map((source) => ({ name: source.label, url: source.finalUrl }))
-  const usefulLiveSource = Boolean(programmeFinderUrl || undergraduateAdmissionsUrl || internationalAdmissionsUrl || applicationPortalUrl)
+  const usefulLiveSource = Boolean(programmeFinderUrl || undergraduateAdmissionsUrl || internationalAdmissionsUrl || applicationPortalUrl || fundingUrl || scholarshipUrl || feesUrl)
   const accessBlocked = !usefulLiveSource && errors.some((error) => /HTTP 403|aborted|fetch failed/i.test(error))
 
   return {
@@ -208,6 +221,9 @@ async function discoverInstitution(institution: Institution, countryCode: Countr
     undergraduateAdmissionsUrl,
     internationalAdmissionsUrl,
     applicationPortalUrl,
+    fundingUrl,
+    scholarshipUrl,
+    feesUrl,
     facultyUrls,
     lastProspectusCheckAt: CHECKED_AT,
     lastWebsiteRefreshAt: CHECKED_AT,
@@ -246,6 +262,9 @@ async function main() {
       undergraduateAdmissionsPages: discoveries.filter((item) => item.undergraduateAdmissionsUrl).length,
       internationalAdmissionsPages: discoveries.filter((item) => item.internationalAdmissionsUrl).length,
       exactApplicationLinks: discoveries.filter((item) => item.applicationPortalUrl).length,
+      fundingPages: discoveries.filter((item) => item.fundingUrl).length,
+      scholarshipPages: discoveries.filter((item) => item.scholarshipUrl).length,
+      feePages: discoveries.filter((item) => item.feesUrl).length,
       verifiedSources: discoveries.reduce((sum, item) => sum + item.sources.length, 0)
     },
     institutions: discoveries

@@ -1,0 +1,57 @@
+'use client'
+
+import Link from 'next/link'
+import { useEffect, useState } from 'react'
+import { useParams } from 'next/navigation'
+import { ArrowLeft, CalendarDays, ExternalLink, ShieldCheck } from 'lucide-react'
+import { useAuth } from '@/components/auth-provider'
+import { FundingNavigation } from '@/components/universities/funding-navigation'
+import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+import { formatDateInTimezone } from '@/lib/universities/application-domain'
+import { createFundingApplication, getFundingEligibility } from '@/lib/universities/funding-domain'
+import { getFundingOpportunity } from '@/lib/universities/funding-data'
+import { getLearnerProfile, type LearnerProfile } from '@/lib/learner/store'
+import { universityStorage } from '@/lib/universities/storage'
+import type { ApplicantType, FundingApplication, FundingStudyLevel } from '@/lib/universities/types'
+
+const label = (value: string) => value.toLowerCase().replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
+const cta = (type: string) => type === 'GOVERNMENT_GRANT' ? 'Open funding portal' : type === 'GOVERNMENT_STUDENT_FINANCE' || type === 'TUITION_SUBSIDY' ? 'Check official eligibility' : type.includes('BURSARY') ? 'Apply for bursary' : 'Apply for scholarship'
+
+export default function FundingOpportunityPage() {
+  const { opportunityId } = useParams<{ opportunityId: string }>()
+  const { isGuest, settings, saveSettings } = useAuth()
+  const opportunity = getFundingOpportunity(opportunityId)
+  const [profile, setProfile] = useState<LearnerProfile | null>(null)
+  const [applications, setApplications] = useState<FundingApplication[]>([])
+  const [saved, setSaved] = useState<string[]>([])
+  const [applicantType, setApplicantType] = useState<ApplicantType>('UNCERTAIN')
+  const [studyLevel, setStudyLevel] = useState<FundingStudyLevel>('BACHELOR')
+  const [eligibleCourseOrPlaceConfirmed, setEligibleCourseOrPlaceConfirmed] = useState(false)
+  const [governmentEligibilityConfirmed, setGovernmentEligibilityConfirmed] = useState(false)
+
+  useEffect(() => { setProfile(getLearnerProfile()); setApplications(isGuest ? universityStorage.getFundingApplications() : settings.fundingApplications); setSaved(isGuest ? universityStorage.getFundingSaved() : settings.fundingSaved) }, [isGuest, settings.fundingApplications, settings.fundingSaved])
+  if (!opportunity) return <main className="mx-auto max-w-4xl px-4 py-10"><Card><h1 className="text-xl font-semibold">Funding opportunity not found</h1><Link href="/universities/funding" className="mt-4 inline-flex text-sky-700">Return to Scholarships &amp; Funding</Link></Card></main>
+
+  const institutionId = opportunity.eligibleInstitutions.length === 1 ? opportunity.eligibleInstitutions[0] : undefined
+  const eligibility = getFundingEligibility(opportunity, { learnerProfile: profile, destinationCountry: opportunity.eligibleDestinationCountries[0], applicantType, studyLevel, institutionId, eligibleCourseOrPlaceConfirmed, governmentEligibilityConfirmed })
+  const tracked = applications.some((application) => application.fundingOpportunityId === opportunity.id)
+  const isSaved = saved.includes(opportunity.id)
+  const persistSaved = (next: string[]) => { if (isGuest) universityStorage.saveFundingSaved(next); else void saveSettings({ fundingSaved: next }); setSaved(next) }
+  const start = () => { if (tracked) return; const next = [...applications, createFundingApplication(opportunity)]; if (isGuest) universityStorage.saveFundingApplications(next); else void saveSettings({ fundingApplications: next }); setApplications(next); if (!isSaved) persistSaved([...saved, opportunity.id]) }
+
+  return <main className="mx-auto w-full max-w-5xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
+    <Link href="/universities/funding" className="inline-flex items-center gap-2 text-sm font-medium text-sky-700"><ArrowLeft className="h-4 w-4" />Scholarships &amp; Funding</Link>
+    <FundingNavigation />
+    <header className="border-b border-slate-200 pb-6"><div className="flex flex-wrap gap-2"><span className="rounded bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800">{label(opportunity.fundingType)}</span><span className={`rounded px-2 py-1 text-xs font-semibold ${opportunity.repaymentType === 'REPAYABLE' ? 'bg-amber-50 text-amber-900' : 'bg-sky-50 text-sky-800'}`}>{label(opportunity.repaymentType)}</span></div><h1 className="mt-3 text-3xl font-semibold text-slate-950">{opportunity.name}</h1><p className="mt-2 text-slate-600">{opportunity.provider} · {opportunity.providerCountry}</p><div className="mt-5 flex flex-wrap gap-2"><Button type="button" variant={isSaved ? 'secondary' : 'outline'} onClick={() => persistSaved(isSaved ? saved.filter((id) => id !== opportunity.id) : [...saved, opportunity.id])}>{isSaved ? 'Saved' : 'Save opportunity'}</Button><Button type="button" onClick={start} disabled={tracked}>{tracked ? 'Application tracking started' : 'Start funding application'}</Button></div></header>
+    <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
+      <div className="space-y-5">
+        <Card className="p-5"><h2 className="text-xl font-semibold text-slate-950">What it may cover</h2><ul className="mt-3 space-y-2 text-sm text-slate-700">{opportunity.coverage.map((item) => <li key={item}>• {item}</li>)}</ul>{opportunity.fundingAmount ? <p className="mt-4 font-semibold text-slate-900">{opportunity.currency} {opportunity.fundingAmount.toLocaleString()}{opportunity.amountType === 'UP_TO' ? ' maximum' : ''}</p> : <p className="mt-4 text-sm text-slate-600">The amount is variable or not safely structured. Check the official source.</p>}{opportunity.duration ? <p className="mt-2 text-sm text-slate-600">Duration: {opportunity.duration}</p> : null}</Card>
+        <Card className="p-5"><h2 className="text-xl font-semibold text-slate-950">Published eligibility</h2><div className="mt-3 space-y-4 text-sm text-slate-700">{opportunity.citizenshipRules.length ? <p><strong>Citizenship:</strong> {opportunity.citizenshipRules.join(', ')}</p> : null}{opportunity.domesticInternationalRules.length ? <p><strong>Applicant status:</strong> {opportunity.domesticInternationalRules.map(label).join(', ')}</p> : null}{opportunity.eligibleStudyLevels.length ? <p><strong>Study level:</strong> {opportunity.eligibleStudyLevels.map(label).join(', ')}</p> : null}{opportunity.financialNeedRequirements?.map((item) => <p key={item}><strong>Financial need:</strong> {item}</p>)}{opportunity.otherEligibility.map((item) => <p key={item}>• {item}</p>)}</div></Card>
+        <Card className="p-5"><h2 className="text-xl font-semibold text-slate-950">Application and dates</h2><p className="mt-3 text-sm text-slate-700">{opportunity.applicationMethod}</p>{opportunity.applicationDeadline ? <p className="mt-3 flex items-center gap-2 text-sm font-semibold text-slate-900"><CalendarDays className="h-4 w-4 text-emerald-700" />Application deadline: {formatDateInTimezone(opportunity.applicationDeadline)}</p> : <p className="mt-3 text-sm text-slate-600">No exact current deadline is indexed. Confirm the current cycle before applying.</p>}<a href={opportunity.applicationUrl} target="_blank" rel="noreferrer" className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-sky-700">{cta(opportunity.fundingType)} <ExternalLink className="h-4 w-4" /></a></Card>
+        <Card className="p-5"><div className="flex gap-3"><ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-emerald-700" /><div><h2 className="font-semibold text-slate-950">Source and freshness</h2><p className="mt-1 text-sm text-slate-600">{opportunity.sourceTitle}{opportunity.sourceSection ? ` · ${opportunity.sourceSection}` : ''}</p><p className="mt-1 text-xs text-slate-500">Last checked {new Date(opportunity.lastCheckedAt).toLocaleDateString('en-AU')} · {label(opportunity.confidenceStatus)} · {opportunity.fundingCycle}</p><a href={opportunity.sourceUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex text-sm font-medium text-sky-700">Open official source</a>{opportunity.confidenceStatus === 'STALE' ? <p className="mt-2 text-sm text-amber-800">Confirm current eligibility before applying.</p> : null}{opportunity.confidenceStatus === 'CONFLICTING' ? <p className="mt-2 text-sm text-amber-800">Official sources currently show different information. Confirm with the provider before applying.</p> : null}</div></div></Card>
+      </div>
+      <aside className="space-y-4"><Card className="p-5"><h2 className="text-lg font-semibold text-slate-950">Check your context</h2><label className="mt-4 block text-sm font-medium text-slate-700">Applicant status<select value={applicantType} onChange={(event) => setApplicantType(event.target.value as ApplicantType)} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3"><option value="UNCERTAIN">Not sure</option><option value="DOMESTIC">Domestic</option><option value="INTERNATIONAL">International</option></select></label><label className="mt-3 block text-sm font-medium text-slate-700">Study level<select value={studyLevel} onChange={(event) => setStudyLevel(event.target.value as FundingStudyLevel)} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3"><option value="SCHOOL_LEAVER">School leaver</option><option value="BACHELOR">Bachelor</option><option value="DIPLOMA">Diploma</option><option value="TRANSFER">Transfer</option><option value="CURRENT_UNIVERSITY">Current university</option><option value="HONOURS">Honours</option></select></label>{opportunity.requiredContext?.includes('ELIGIBLE_COURSE_OR_PLACE') ? <label className="mt-4 flex gap-2 text-sm text-slate-700"><input type="checkbox" checked={eligibleCourseOrPlaceConfirmed} onChange={(event) => setEligibleCourseOrPlaceConfirmed(event.target.checked)} /><span>I checked that my course or place is eligible on the official provider site.</span></label> : null}{opportunity.requiredContext?.includes('GOVERNMENT_ELIGIBILITY') ? <label className="mt-3 flex gap-2 text-sm text-slate-700"><input type="checkbox" checked={governmentEligibilityConfirmed} onChange={(event) => setGovernmentEligibilityConfirmed(event.target.checked)} /><span>I checked the current citizenship, visa and residence rules on the government site.</span></label> : null}</Card><Card className="p-5"><p className="text-xs font-semibold uppercase text-emerald-700">{label(eligibility.state)}</p><h2 className="mt-1 text-lg font-semibold text-slate-950">Eligibility indication</h2>{eligibility.reasons.length ? <div className="mt-3"><p className="text-sm font-semibold text-slate-800">Why</p>{eligibility.reasons.map((reason) => <p key={reason} className="mt-1 text-sm text-slate-600">✓ {reason}</p>)}</div> : null}{eligibility.missing.length || eligibility.checks.length ? <div className="mt-3"><p className="text-sm font-semibold text-slate-800">Still check</p>{[...eligibility.missing, ...eligibility.checks].map((check) => <p key={check} className="mt-1 text-sm text-slate-600">• {check}</p>)}</div> : null}<p className="mt-4 text-xs text-slate-500">A match indicates published criteria may fit. It is not an award or eligibility guarantee.</p></Card></aside>
+    </div>
+  </main>
+}

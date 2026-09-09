@@ -32,7 +32,7 @@ async function ingest(institution: DiscoveryInstitution) {
   const qualified = qualification(source)
   if (!qualified.accepted) return { institutionId: institution.institutionId, institutionName: institution.institutionName, countryCode: institution.countryCode, status: 'EXCLUDED' as const, sourceUrl: source.finalUrl, academicYear: qualified.year, reason: qualified.reason }
   try {
-    const response = await fetch(source.finalUrl, { headers: { 'user-agent': 'MuksBooks Prospectus Ingestion/1.0 (+https://muksbooks.com)' } })
+    const response = await fetch(source.finalUrl, { headers: { 'user-agent': 'MuksBooks Prospectus Ingestion/1.0 (+https://muksbooks.com)' }, signal: AbortSignal.timeout(20_000) })
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
     const bytes = Buffer.from(await response.arrayBuffer())
     const documentFingerprint = createHash('sha256').update(bytes).digest('hex')

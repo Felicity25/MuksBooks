@@ -7,8 +7,11 @@ import type { AdmissionsDeadline, AdmissionsPolicy, AdmissionsTestFee, Admission
 
 export const FRESH_SOURCE_PRIORITY: Record<SourceType, number> = {
   'official-test-provider': 1,
+  'official-scholarship': 1,
+  'government-funding': 1,
   'official-programme': 2,
   'official-course-finder': 2,
+  'official-fees': 2,
   'official-prospectus': 2,
   'official-admissions': 3,
   'official-application-portal': 4,
@@ -100,7 +103,7 @@ function parsedPageMetadata(html: string) {
   return { title, canonicalUrl, text: text.join(' ').replace(/\s+/g, ' ').trim(), links }
 }
 
-function extractReviewSignals(text: string, links: string[]) {
+function extractReviewSignals(text: string, links: string[], kind: FreshUniversityDataKind, sourceType: SourceType) {
   const month = '(?:January|February|March|April|May|June|July|August|September|October|November|December)'
   const dates = Array.from(new Set(text.match(new RegExp(`\\b(?:\\d{1,2} ${month} \\d{4}|${month} \\d{1,2},? \\d{4})\\b`, 'gi')) || []))
   const fees = Array.from(new Set(text.match(/(?:AUD\$?|USD\$?|GBP|EUR|£|€|\$)\s?\d+(?:\.\d{2})?/gi) || []))
@@ -124,9 +127,13 @@ function extractReviewSignals(text: string, links: string[]) {
     }
     if (/\binterview\b/i.test(evidence)) claims.push({ requirementType: 'INTERVIEW_REQUIREMENT', evidence, confidenceStatus: 'NEEDS_REVIEW' })
     if (/\bportfolio\b/i.test(evidence)) claims.push({ requirementType: 'PORTFOLIO_REQUIREMENT', evidence, confidenceStatus: 'NEEDS_REVIEW' })
+    if (kind === 'SCHOLARSHIPS' && /\b(?:eligible|eligibility|qualif(?:y|ies))\b/i.test(evidence)) claims.push({ requirementType: 'FUNDING_ELIGIBILITY', evidence, confidenceStatus: 'NEEDS_REVIEW' })
+    if (kind === 'SCHOLARSHIPS' && dates.some((date) => evidence.toLowerCase().includes(date.toLowerCase())) && /\b(?:deadline|closing date|applications? close)\b/i.test(evidence)) claims.push({ requirementType: 'SCHOLARSHIP_DEADLINES', evidence, confidenceStatus: 'NEEDS_REVIEW' })
+    if ((kind === 'SCHOLARSHIPS' || kind === 'FEES') && /(?:AUD\$?|USD\$?|GBP|EUR|£|€|\$)\s?\d/i.test(evidence)) claims.push({ requirementType: kind === 'FEES' && /application fee/i.test(evidence) ? 'APPLICATION_FEE' : kind === 'FEES' ? 'TUITION_FEE' : 'FUNDING_AMOUNT', evidence, confidenceStatus: 'NEEDS_REVIEW' })
   }
-  for (const fee of fees) claims.push({ requirementType: 'TEST_FEE', value: fee, evidence: fee, confidenceStatus: 'NEEDS_REVIEW' })
-  for (const bookingUrl of bookingUrls) claims.push({ requirementType: 'TEST_BOOKING_URL', value: bookingUrl, evidence: bookingUrl, confidenceStatus: 'NEEDS_REVIEW' })
+  if (kind.startsWith('TEST_') || sourceType === 'official-test-provider') for (const fee of fees) claims.push({ requirementType: 'TEST_FEE', value: fee, evidence: fee, confidenceStatus: 'NEEDS_REVIEW' })
+  if (kind === 'APPLICATION_DEADLINES' || kind === 'APPLICATION_ROUTES') for (const fee of fees) claims.push({ requirementType: 'APPLICATION_FEE', value: fee, evidence: fee, confidenceStatus: 'NEEDS_REVIEW' })
+  for (const bookingUrl of bookingUrls) claims.push({ requirementType: kind === 'SCHOLARSHIPS' ? 'FUNDING_APPLICATION_URL' : 'TEST_BOOKING_URL', value: bookingUrl, evidence: bookingUrl, confidenceStatus: 'NEEDS_REVIEW' })
   return { dates, fees, requirementTerms, bookingUrls, claims }
 }
 
@@ -231,7 +238,7 @@ export class FreshUniversityDataService {
       pageTitle: metadata.title || undefined,
       canonicalUrl: metadata.canonicalUrl || undefined,
       text: metadata.text,
-      signals: extractReviewSignals(metadata.text, metadata.links)
+      signals: extractReviewSignals(metadata.text, metadata.links, source.kind, source.sourceType)
     }
   }
 

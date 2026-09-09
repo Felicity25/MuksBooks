@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-09T06:45:39.992Z",
+  "generatedAt": "2026-09-09T10:05:20.027Z",
   "confidenceStatus": "NEEDS_REVIEW",
   "metrics": {
     "currentProspectusesProcessed": 4,
@@ -7,7 +7,7 @@
     "failedDocuments": 0,
     "facultySections": 11,
     "programmeCandidates": 81,
-    "requirementsDeadlinesAndTestingCandidates": 83
+    "requirementsDeadlinesAndTestingCandidates": 113
   },
   "institutions": [
     {
@@ -125,13 +125,13 @@
         "pages": 2,
         "faculties": 1,
         "programmes": 32,
-        "requirementsDeadlinesAndTests": 25
+        "requirementsDeadlinesAndTests": 27
       },
       "candidates": {
         "institutionId": "ul",
         "sourceUrl": "https://www.ul.ac.za/wp-content/uploads/2025/03/Undergraduate-Prospectus-2027.pdf",
         "documentFingerprint": "f6d921626ddf596f0764d780a3361897ff02aea129ea2287fd05aeca93e78de4",
-        "extractedAt": "2026-09-09T06:45:26.463Z",
+        "extractedAt": "2026-09-09T10:05:00.350Z",
         "pageCount": 2,
         "faculties": [
           {
@@ -634,6 +634,24 @@
             "confidenceStatus": "NEEDS_REVIEW"
           },
           {
+            "kind": "APPLICATION_FEE",
+            "faculty": "Unassigned",
+            "evidence": {
+              "pageNumber": 1,
+              "text": "Application fee for the permit."
+            },
+            "confidenceStatus": "NEEDS_REVIEW"
+          },
+          {
+            "kind": "TUITION_FEE",
+            "faculty": "Unassigned",
+            "evidence": {
+              "pageNumber": 1,
+              "text": "Proof of sufficient funds to cover tuition fees, maintenance and incidental"
+            },
+            "confidenceStatus": "NEEDS_REVIEW"
+          },
+          {
             "kind": "APPLICATION_ROUTE",
             "faculty": "Unassigned",
             "evidence": {
@@ -903,13 +921,13 @@
         "pages": 27,
         "faculties": 5,
         "programmes": 6,
-        "requirementsDeadlinesAndTests": 9
+        "requirementsDeadlinesAndTests": 17
       },
       "candidates": {
         "institutionId": "edinburgh",
         "sourceUrl": "https://study.ed.ac.uk/sites/default/files/2026-02/Undergraduate%20Guide%202027.pdf",
         "documentFingerprint": "ef8d4be49d4c85bce39a0f0e217c3b5f90f17bb5ec47b9a19619fcf8220f125b",
-        "extractedAt": "2026-09-09T06:45:27.531Z",
+        "extractedAt": "2026-09-09T10:05:03.551Z",
         "pageCount": 27,
         "faculties": [
           {
@@ -973,6 +991,15 @@
               }
             ],
             "claims": [
+              {
+                "kind": "FUNDING_AMOUNT",
+                "faculty": "Social & Political Sciences",
+                "evidence": {
+                  "pageNumber": 4,
+                  "text": "student startups secured more than £11.8 million in investment, grants and funding."
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
               {
                 "kind": "ADMISSIONS_TEST",
                 "faculty": "Social & Political Sciences",
@@ -1045,11 +1072,65 @@
             "programmes": [],
             "claims": [
               {
+                "kind": "TUITION_FEE",
+                "faculty": "Mathematics provides",
+                "evidence": {
+                  "pageNumber": 14,
+                  "text": "tuition fees and financial assistance can"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
                 "kind": "ADMISSIONS_TEST",
                 "faculty": "Mathematics provides",
                 "evidence": {
                   "pageNumber": 14,
                   "text": "cost £51,961 a year including the ACT levy."
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "GOVERNMENT_SUPPORT",
+                "faculty": "Mathematics provides",
+                "evidence": {
+                  "pageNumber": 14,
+                  "text": "apply for SAAS or Student Finance England,"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "TUITION_FEE",
+                "faculty": "Mathematics provides",
+                "evidence": {
+                  "pageNumber": 14,
+                  "text": "any applicable tuition fees and up to"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "SCHOLARSHIP",
+                "faculty": "Mathematics provides",
+                "evidence": {
+                  "pageNumber": 14,
+                  "text": "Robertson International Scholarships"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "TUITION_FEE",
+                "faculty": "Mathematics provides",
+                "evidence": {
+                  "pageNumber": 14,
+                  "text": "tuition fees, commencing a degree in the"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "SCHOLARSHIP",
+                "faculty": "Mathematics provides",
+                "evidence": {
+                  "pageNumber": 14,
+                  "text": "International Scholarship"
                 },
                 "confidenceStatus": "NEEDS_REVIEW"
               }
@@ -1074,7 +1155,17 @@
             "startPage": 26,
             "endPage": 27,
             "programmes": [],
-            "claims": []
+            "claims": [
+              {
+                "kind": "FUNDING_AMOUNT",
+                "faculty": "Art (ECA",
+                "evidence": {
+                  "pageNumber": 27,
+                  "text": "£2.4mWe awarded £2.4 million in undergraduate living costs support"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              }
+            ]
           }
         ],
         "unassignedProgrammes": [],
@@ -1145,13 +1236,13 @@
         "pages": 156,
         "faculties": 3,
         "programmes": 36,
-        "requirementsDeadlinesAndTests": 44
+        "requirementsDeadlinesAndTests": 60
       },
       "candidates": {
         "institutionId": "swansea",
         "sourceUrl": "https://www.swansea.ac.uk/media/Swansea-University-Undergraduate-Prospectus-2026.pdf",
         "documentFingerprint": "c46693de85652cc03eede599868be6a129ee5503df04f42086b07018760ea03e",
-        "extractedAt": "2026-09-09T06:45:38.761Z",
+        "extractedAt": "2026-09-09T10:05:16.891Z",
         "pageCount": 156,
         "faculties": [
           {
@@ -1295,11 +1386,38 @@
             ],
             "claims": [
               {
+                "kind": "FUNDING_AMOUNT",
+                "faculty": "HUMANITIES",
+                "evidence": {
+                  "pageNumber": 27,
+                  "text": "CA MPAIGNER, COM MONWEALTH YOUNG PERSON AWARD"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
                 "kind": "CURRICULUM_REQUIREMENT",
                 "faculty": "HUMANITIES",
                 "evidence": {
                   "pageNumber": 43,
                   "text": "than taking A Levels."
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "TUITION_FEE",
+                "faculty": "HUMANITIES",
+                "evidence": {
+                  "pageNumber": 44,
+                  "text": "TUITION FEES"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "TUITION_FEE",
+                "faculty": "HUMANITIES",
+                "evidence": {
+                  "pageNumber": 44,
+                  "text": "find the tuition fee clearly displayed"
                 },
                 "confidenceStatus": "NEEDS_REVIEW"
               },
@@ -1318,6 +1436,78 @@
                 "evidence": {
                   "pageNumber": 46,
                   "text": "for AAB at A Level or equivalent*"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "SCHOLARSHIP",
+                "faculty": "HUMANITIES",
+                "evidence": {
+                  "pageNumber": 46,
+                  "text": "MERIT SCHOLARSHIPS"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "TUITION_FEE",
+                "faculty": "HUMANITIES",
+                "evidence": {
+                  "pageNumber": 46,
+                  "text": "Undergraduate tuition fees are charged annually to all students."
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "TUITION_FEE",
+                "faculty": "HUMANITIES",
+                "evidence": {
+                  "pageNumber": 46,
+                  "text": "UK (home) Undergraduate Tuition Fees are set by the Welsh Government"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "TUITION_FEE",
+                "faculty": "HUMANITIES",
+                "evidence": {
+                  "pageNumber": 46,
+                  "text": "will all be eligible for a repayable tuition fee loan to cover the cost."
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "GOVERNMENT_SUPPORT",
+                "faculty": "HUMANITIES",
+                "evidence": {
+                  "pageNumber": 46,
+                  "text": "loans are provided by the student finance body of your home nation and"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "TUITION_FEE",
+                "faculty": "HUMANITIES",
+                "evidence": {
+                  "pageNumber": 46,
+                  "text": "As well as a tuition fee loan,"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "TUITION_FEE",
+                "faculty": "HUMANITIES",
+                "evidence": {
+                  "pageNumber": 47,
+                  "text": "funding your tuition fees."
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "GOVERNMENT_SUPPORT",
+                "faculty": "HUMANITIES",
+                "evidence": {
+                  "pageNumber": 47,
+                  "text": "reduced rate loan from Student Finance:"
                 },
                 "confidenceStatus": "NEEDS_REVIEW"
               },
@@ -1417,6 +1607,15 @@
                 "evidence": {
                   "pageNumber": 51,
                   "text": "be notified by UCAS."
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "GOVERNMENT_SUPPORT",
+                "faculty": "HUMANITIES",
+                "evidence": {
+                  "pageNumber": 52,
+                  "text": "Student Finance Wales."
                 },
                 "confidenceStatus": "NEEDS_REVIEW"
               },
@@ -1646,6 +1845,15 @@
                 "confidenceStatus": "NEEDS_REVIEW"
               },
               {
+                "kind": "FUNDING_AMOUNT",
+                "faculty": "Actuaries",
+                "evidence": {
+                  "pageNumber": 65,
+                  "text": "research-focused year, awarding you"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
                 "kind": "CURRICULUM_REQUIREMENT",
                 "faculty": "Actuaries",
                 "evidence": {
@@ -1673,11 +1881,29 @@
                 "confidenceStatus": "NEEDS_REVIEW"
               },
               {
+                "kind": "TUITION_FEE",
+                "faculty": "Actuaries",
+                "evidence": {
+                  "pageNumber": 96,
+                  "text": "NO TUITION FEES:"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
                 "kind": "APPLICATION_ROUTE",
                 "faculty": "Actuaries",
                 "evidence": {
                   "pageNumber": 107,
                   "text": "For individual UCAS course codes please"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "FUNDING_AMOUNT",
+                "faculty": "Actuaries",
+                "evidence": {
+                  "pageNumber": 113,
+                  "text": "year, awarding you a master’s"
                 },
                 "confidenceStatus": "NEEDS_REVIEW"
               },
@@ -1876,6 +2102,15 @@
                 "evidence": {
                   "pageNumber": 153,
                   "text": "by logging into the UCAS Hub."
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "GOVERNMENT_SUPPORT",
+                "faculty": "Actuaries",
+                "evidence": {
+                  "pageNumber": 153,
+                  "text": "accommodation and student finance."
                 },
                 "confidenceStatus": "NEEDS_REVIEW"
               }
@@ -2101,13 +2336,13 @@
         "pages": 11,
         "faculties": 2,
         "programmes": 7,
-        "requirementsDeadlinesAndTests": 5
+        "requirementsDeadlinesAndTests": 9
       },
       "candidates": {
         "institutionId": "dalhousie",
         "sourceUrl": "https://www.dal.ca/content/dam/www/study/viewbooks/domestic-viewbook.pdf",
         "documentFingerprint": "662742814d9add93b4b2ecf057fe3e5a2b4cb1050a95c30a87dcf632d6e0d7e7",
-        "extractedAt": "2026-09-09T06:45:39.992Z",
+        "extractedAt": "2026-09-09T10:05:20.026Z",
         "pageCount": 11,
         "faculties": [
           {
@@ -2185,6 +2420,42 @@
                 "evidence": {
                   "pageNumber": 6,
                   "text": "A levels or 4 AS"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "TUITION_FEE",
+                "faculty": "Agriculture admission and supplemental requirements",
+                "evidence": {
+                  "pageNumber": 7,
+                  "text": "International Tuition Fee Guarantee"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "TUITION_FEE",
+                "faculty": "Agriculture admission and supplemental requirements",
+                "evidence": {
+                  "pageNumber": 7,
+                  "text": "Your tuition fee is fixed and guaranteed for the"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "TUITION_FEE",
+                "faculty": "Agriculture admission and supplemental requirements",
+                "evidence": {
+                  "pageNumber": 7,
+                  "text": "predictable annual tuition fees over the course"
+                },
+                "confidenceStatus": "NEEDS_REVIEW"
+              },
+              {
+                "kind": "BURSARY",
+                "faculty": "Agriculture admission and supplemental requirements",
+                "evidence": {
+                  "pageNumber": 7,
+                  "text": "Student Bursary."
                 },
                 "confidenceStatus": "NEEDS_REVIEW"
               },
