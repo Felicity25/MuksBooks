@@ -1,19 +1,29 @@
 'use client'
 
 import Link from 'next/link'
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { CalendarDays, WalletCards } from 'lucide-react'
 import { useAuth } from '@/components/auth-provider'
 import { Card } from '@/components/ui/card'
 import { FUNDING_DEADLINES, FUNDING_OPPORTUNITIES, getFundingOpportunity } from '@/lib/universities/funding-data'
 import { fundingPlanTotals } from '@/lib/universities/funding-domain'
 import { universityStorage } from '@/lib/universities/storage'
+import type { FundingApplication } from '@/lib/universities/types'
 
 export function FundingHomePulse() {
   const { isGuest, settings } = useAuth()
-  const fundingSaved = isGuest ? universityStorage.getFundingSaved() : settings.fundingSaved
-  const fundingApplications = isGuest ? universityStorage.getFundingApplications() : settings.fundingApplications
-  const planningActive = (settings.academicMode === 'LEARNER' || isGuest) && Boolean((isGuest ? universityStorage.getShortlist().length || universityStorage.getApplications().length : settings.universityShortlist.length || settings.universityApplications.length) || fundingSaved.length || fundingApplications.length)
+  const [guestFundingSaved, setGuestFundingSaved] = useState<string[]>([])
+  const [guestFundingApplications, setGuestFundingApplications] = useState<FundingApplication[]>([])
+  const [guestUniversityPlanningActive, setGuestUniversityPlanningActive] = useState(false)
+  useEffect(() => {
+    if (!isGuest) return
+    setGuestFundingSaved(universityStorage.getFundingSaved())
+    setGuestFundingApplications(universityStorage.getFundingApplications())
+    setGuestUniversityPlanningActive(Boolean(universityStorage.getShortlist().length || universityStorage.getApplications().length))
+  }, [isGuest])
+  const fundingSaved = isGuest ? guestFundingSaved : settings.fundingSaved
+  const fundingApplications = isGuest ? guestFundingApplications : settings.fundingApplications
+  const planningActive = (settings.academicMode === 'LEARNER' || isGuest) && Boolean((isGuest ? guestUniversityPlanningActive : settings.universityShortlist.length || settings.universityApplications.length) || fundingSaved.length || fundingApplications.length)
   const upcoming = useMemo(() => {
     const trackedIds = new Set([...fundingSaved, ...fundingApplications.map((application) => application.fundingOpportunityId).filter((id): id is string => Boolean(id))])
     return FUNDING_DEADLINES.filter((deadline) => trackedIds.has(deadline.fundingOpportunityId) && new Date(`${deadline.dueAt}T23:59:59Z`).getTime() >= Date.now()).sort((left, right) => left.dueAt.localeCompare(right.dueAt)).slice(0, 2)

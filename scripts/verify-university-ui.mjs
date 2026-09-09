@@ -91,6 +91,10 @@ await page.getByRole('heading', { name: 'My Funding Plan' }).waitFor()
 await page.getByText('Awarded or accepted only').waitFor()
 await page.getByText('Not guaranteed or secured').waitFor()
 
+await page.goto(baseUrl, { waitUntil: 'load' })
+await page.getByText('1 saved · 2 applications').waitFor()
+await page.getByRole('link', { name: 'Open Scholarships & Funding' }).waitFor()
+
 await page.goto(`${baseUrl}/universities/mit/mit-course-6`, { waitUntil: 'load' })
 await page.getByRole('heading', { name: 'Tuition & funding' }).waitFor()
 
