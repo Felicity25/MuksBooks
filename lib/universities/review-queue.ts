@@ -3,6 +3,7 @@ import sourceDiscovery from '../../data/university-source-discovery.json' with {
 import { flattenSearchRecords, normalizeUniversityQuery } from './catalog.ts'
 
 export type ReviewDecisionAction = 'APPROVE' | 'REJECT' | 'MERGE'
+export type ReviewRecommendation = ReviewDecisionAction | 'HOLD'
 
 export interface UniversityReviewItem {
   id: string
@@ -19,6 +20,11 @@ export interface UniversityReviewItem {
   confidenceStatus: 'NEEDS_REVIEW'
   duplicateSuspicion: 'NONE' | 'POSSIBLE' | 'EXACT'
   canonicalMatches: Array<{ id: string; name: string }>
+  sourceKind: 'PROSPECTUS' | 'OFFICIAL_DISCOVERY'
+  prospectusYear?: string
+  discoveredAt?: string
+  reviewRecommendation: ReviewRecommendation
+  priorityScore: number
 }
 
 type Candidate = {
@@ -43,6 +49,22 @@ type ProspectusInstitution = {
   }
 }
 
+const OBVIOUS_NOISE = /^(admissions?|applications?|contents?|contact|fees?|funding|programmes?|requirements?|undergraduate)$/i
+const CLEAR_PROGRAMME = /^(bachelor|bsc|ba |bcom|beng|bed|btech|diploma|certificate|llb|mbchb|mbbs)/i
+const CLEAR_FUNDING_TYPES = new Set(['OFFICIAL_FUNDING_SOURCE', 'OFFICIAL_SCHOLARSHIP_SOURCE', 'OFFICIAL_FEE_SOURCE'])
+
+function recommendation(candidateType: string, value: string, duplicateSuspicion: UniversityReviewItem['duplicateSuspicion']): Pick<UniversityReviewItem, 'reviewRecommendation' | 'priorityScore'> {
+  if (duplicateSuspicion === 'EXACT') return { reviewRecommendation: 'MERGE', priorityScore: 0 }
+  if (value.length < 4 || value.length > 140 || OBVIOUS_NOISE.test(value.trim())) return { reviewRecommendation: 'REJECT', priorityScore: 10 }
+  if (candidateType === 'PROGRAMME' && CLEAR_PROGRAMME.test(value.trim())) return { reviewRecommendation: 'APPROVE', priorityScore: 20 }
+  if (CLEAR_FUNDING_TYPES.has(candidateType)) return { reviewRecommendation: 'APPROVE', priorityScore: 30 }
+  return { reviewRecommendation: 'HOLD', priorityScore: duplicateSuspicion === 'POSSIBLE' ? 40 : 100 }
+}
+
+function prospectusYear(sourceUrl: string) {
+  return sourceUrl.match(/(?:20)\d{2}/)?.[0]
+}
+
 function canonicalMatches(institutionId: string, value: string) {
   const normalizedValue = normalizeUniversityQuery(value)
   return flattenSearchRecords()
@@ -59,6 +81,7 @@ function reviewItem(institution: ProspectusInstitution, candidate: Candidate, ca
   const value = candidate.name || candidate.kind || candidate.evidence.text.slice(0, 100)
   const matches = candidateType === 'PROGRAMME' ? canonicalMatches(institution.institutionId, value) : []
   const exact = matches.some((match) => normalizeUniversityQuery(match.name) === normalizeUniversityQuery(value))
+  const duplicateSuspicion = exact ? 'EXACT' : matches.length ? 'POSSIBLE' : 'NONE'
   return {
     id: [institution.institutionId, institution.candidates?.documentFingerprint, candidateType, candidate.evidence.pageNumber, index, value].map((part) => encodeURIComponent(String(part))).join(':'),
     institutionId: institution.institutionId,
@@ -72,8 +95,12 @@ function reviewItem(institution: ProspectusInstitution, candidate: Candidate, ca
     pageNumber: candidate.evidence.pageNumber,
     evidence: candidate.evidence.text,
     confidenceStatus: 'NEEDS_REVIEW',
-    duplicateSuspicion: exact ? 'EXACT' : matches.length ? 'POSSIBLE' : 'NONE',
-    canonicalMatches: matches
+    duplicateSuspicion,
+    canonicalMatches: matches,
+    sourceKind: 'PROSPECTUS',
+    prospectusYear: prospectusYear(institution.sourceUrl || ''),
+    discoveredAt: prospectusCandidates.generatedAt,
+    ...recommendation(candidateType, value, duplicateSuspicion)
   }
 }
 
@@ -107,11 +134,14 @@ export function buildUniversityReviewQueue() {
         evidence: `Official-domain link classified from its label and URL: ${source.label}`,
         confidenceStatus: 'NEEDS_REVIEW',
         duplicateSuspicion: 'NONE',
-        canonicalMatches: []
+        canonicalMatches: [],
+        sourceKind: 'OFFICIAL_DISCOVERY',
+        discoveredAt: sourceDiscovery.generatedAt,
+        ...recommendation(source.key === 'feesUrl' ? 'OFFICIAL_FEE_SOURCE' : source.key === 'scholarshipUrl' ? 'OFFICIAL_SCHOLARSHIP_SOURCE' : 'OFFICIAL_FUNDING_SOURCE', source.label, 'NONE')
       })
     })
   }
-  return queue
+  return queue.sort((left, right) => left.priorityScore - right.priorityScore || left.institutionName.localeCompare(right.institutionName) || left.candidateValue.localeCompare(right.candidateValue))
 }
 
 export function getUniversityReviewDiagnostics() {

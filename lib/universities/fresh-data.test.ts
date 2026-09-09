@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 import { ADMISSIONS_POLICIES, ADMISSIONS_TEST_FEES, ADMISSIONS_TEST_SESSIONS } from './admissions-data.ts'
 import { ADMISSIONS_DEADLINES, CURRICULUM_RESULTS_EVENTS, OFFICIAL_UNIVERSITY_SOURCES } from './fresh-data.ts'
 import { FRESH_SOURCE_PRIORITY, FreshUniversityDataService, sourceRefreshDue } from './fresh-data-service.ts'
+import { REVIEWED_CATALOGUE_DEPTH } from './catalogue-depth-data.ts'
+import { FUNDING_OPPORTUNITIES, PROGRAMME_COSTS } from './funding-data.ts'
 
 assert.ok(OFFICIAL_UNIVERSITY_SOURCES.length >= 100, 'Priority institutions should have refreshable official source records')
 assert.ok(OFFICIAL_UNIVERSITY_SOURCES.some((item) => item.kind === 'ENGLISH_REQUIREMENTS' && item.institutionId === 'ubc'), 'Verified English policies should participate in refresh monitoring')
@@ -9,6 +11,9 @@ assert.ok(OFFICIAL_UNIVERSITY_SOURCES.some((item) => item.kind === 'TEST_DATES')
 assert.ok(OFFICIAL_UNIVERSITY_SOURCES.some((item) => item.kind === 'TEST_FEES'), 'Official test fees should participate in refresh monitoring')
 assert.ok(OFFICIAL_UNIVERSITY_SOURCES.some((item) => item.kind === 'PROSPECTUS' && item.contentFingerprint), 'Current prospectuses should be fingerprinted and monitored quarterly')
 assert.ok(OFFICIAL_UNIVERSITY_SOURCES.some((item) => item.kind === 'APPLICATION_ROUTES' && item.refreshCadence === 'DAILY'), 'Application destinations should refresh more frequently than prospectuses')
+assert.ok(REVIEWED_CATALOGUE_DEPTH.every((programme) => OFFICIAL_UNIVERSITY_SOURCES.some((source) => source.kind === 'PROGRAMMES' && source.institutionId === programme.institutionId && source.url === programme.sourceUrl)), 'Every reviewed catalogue-depth source should participate in refresh monitoring')
+assert.ok(FUNDING_OPPORTUNITIES.every((opportunity) => OFFICIAL_UNIVERSITY_SOURCES.some((source) => source.id === `${opportunity.id}-funding` && source.url === opportunity.sourceUrl)), 'Every canonical funding source should participate in refresh monitoring')
+assert.ok(PROGRAMME_COSTS.every((cost) => OFFICIAL_UNIVERSITY_SOURCES.some((source) => source.id === `${cost.id}-fees` && source.url === cost.sourceUrl)), 'Every canonical fee source should participate in refresh monitoring')
 assert.ok(ADMISSIONS_DEADLINES.some((item) => item.institutionId === 'oxford' && item.dueAt.startsWith('2026-10-15')), 'Oxford 2027 UCAS deadline should be structured')
 assert.ok(ADMISSIONS_DEADLINES.some((item) => item.institutionId === 'manchester' && item.dueAt.startsWith('2027-01-13')), 'Most-course 2027 UCAS deadline should be structured')
 assert.ok(ADMISSIONS_DEADLINES.some((item) => item.institutionId === 'unimelb' && item.applicantType === 'DOMESTIC' && item.dueAt.startsWith('2026-09-28')), 'VTAC timely deadline should be domestic and structured')

@@ -318,6 +318,32 @@ export interface CoverageSummary {
   overall: CoverageLevel
 }
 
+export type InstitutionCoverageRating = 'STRONG' | 'PARTIAL' | 'WEAK' | 'UNKNOWN'
+export type InstitutionIngestionPriority = 'HIGH' | 'MEDIUM' | 'MAINTAIN'
+
+export interface InstitutionCoverageDiagnostic {
+  institutionId: string
+  programmeCoverage: InstitutionCoverageRating
+  facultyCoverage: InstitutionCoverageRating
+  majorCoverage: InstitutionCoverageRating
+  combinedDegreeCoverage: InstitutionCoverageRating
+  requirementsCoverage: InstitutionCoverageRating
+  fundingCoverage: InstitutionCoverageRating
+  tuitionCoverage: InstitutionCoverageRating
+  applicationLinkCoverage: InstitutionCoverageRating
+  ingestionPriority: InstitutionIngestionPriority
+  evidence: {
+    indexedProgrammes: number
+    indexedFaculties: number
+    indexedMajorsAndSpecialisations: number
+    indexedCombinedDegrees: number
+    structuredRequirementRecords: number
+    fundingOpportunities: number
+    tuitionRecords: number
+    programmeApplicationLinks: number
+  }
+}
+
 export interface CountryCatalogue {
   code: CountryCode
   name: string
@@ -373,6 +399,7 @@ export type FundingType = 'UNIVERSITY_SCHOLARSHIP' | 'FACULTY_SCHOLARSHIP' | 'PR
 export type FundingRepaymentType = 'NON_REPAYABLE' | 'REPAYABLE' | 'FEE_SUBSIDY' | 'MIXED' | 'UNKNOWN'
 export type FundingStudyLevel = 'SCHOOL_LEAVER' | 'FOUNDATION' | 'DIPLOMA' | 'BACHELOR' | 'TRANSFER' | 'CURRENT_UNIVERSITY' | 'HONOURS' | 'POSTGRADUATE'
 export type FundingAmountType = 'FIXED' | 'UP_TO' | 'RANGE' | 'FULL_TUITION' | 'PARTIAL_TUITION' | 'FULL_COST' | 'VARIABLE' | 'NOT_PUBLISHED'
+export type FundingCycleStatus = 'OPEN' | 'UPCOMING' | 'CLOSED' | 'CURRENT_CYCLE_UNKNOWN'
 export type FundingEligibilityState = 'STRONG_POTENTIAL_MATCH' | 'POTENTIAL_MATCH' | 'POSSIBLE_MATCH' | 'MISSING_INFORMATION' | 'LIKELY_INELIGIBLE' | 'NOT_APPLICABLE' | 'REQUIREMENTS_NOT_STRUCTURED' | 'DEADLINE_PASSED' | 'NEEDS_VERIFICATION'
 export type FundingApplicationStatus = 'INTERESTED' | 'SAVED' | 'PREPARING' | 'READY' | 'SUBMITTED' | 'AWAITING_DECISION' | 'INTERVIEW' | 'AWARDED' | 'PARTIALLY_AWARDED' | 'UNSUCCESSFUL' | 'ACCEPTED' | 'DECLINED' | 'WITHDRAWN'
 export type FundingDeadlineType = 'APPLICATION_OPENS' | 'APPLICATION_DEADLINE' | 'DOCUMENT_DEADLINE' | 'REFERENCE_DEADLINE' | 'INTERVIEW_DATE' | 'RESULT_DATE' | 'ACCEPTANCE_DEADLINE' | 'RENEWAL_DEADLINE'
@@ -429,6 +456,7 @@ export interface FundingOpportunity {
   sourceTitle: string
   sourceSection?: string
   fundingCycle: string
+  cycleStatus?: FundingCycleStatus
   lastCheckedAt: string
   lastVerifiedAt?: string
   confidenceStatus: ConfidenceStatus

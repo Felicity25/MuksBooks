@@ -3,6 +3,7 @@ import { ADMISSIONS_POLICIES, ADMISSIONS_TEST_FEES, ADMISSIONS_TEST_SESSIONS } f
 import { PRIORITY_INSTITUTION_SOURCE_PROFILES } from './source-registry.ts'
 import { REVIEWED_APPLICATION_ROUTES } from './application-routes.ts'
 import { FUNDING_OPPORTUNITIES, PROGRAMME_COSTS } from './funding-data.ts'
+import { REVIEWED_CATALOGUE_DEPTH } from './catalogue-depth-data.ts'
 import type { AdmissionsDeadline, CurriculumResultsEvent, FreshUniversitySource } from './types'
 
 export const UNIVERSITY_DATA_CHECKED_AT = '2026-09-09T02:35:00Z'
@@ -91,9 +92,19 @@ const reviewedRouteSources: FreshUniversitySource[] = REVIEWED_APPLICATION_ROUTE
   lastSuccessfulAt: route.lastVerifiedAt, confidenceStatus: 'VERIFIED_OFFICIAL'
 }))
 
+const reviewedProgrammeSources: FreshUniversitySource[] = Array.from(
+  new Map(REVIEWED_CATALOGUE_DEPTH.map((programme) => [`${programme.institutionId}:${programme.sourceUrl}`, programme])).values()
+).map((programme) => ({
+  id: `${programme.institutionId}-reviewed-programmes`, kind: 'PROGRAMMES', institutionId: programme.institutionId,
+  url: programme.sourceUrl, sourceType: programme.sourceType ?? 'official-course-finder', sourceAcademicYear: programme.sourceAcademicYear,
+  admissionsCycle: programme.admissionsCycle, refreshCadence: 'MONTHLY', lastCheckedAt: programme.lastCheckedAt ?? programme.lastVerifiedAt,
+  lastSuccessfulAt: programme.lastVerifiedAt, confidenceStatus: programme.confidenceStatus ?? 'VERIFIED_OFFICIAL'
+}))
+
 export const OFFICIAL_UNIVERSITY_SOURCES: FreshUniversitySource[] = [
   ...institutionSources,
   ...reviewedRouteSources,
+  ...reviewedProgrammeSources,
   ...FUNDING_OPPORTUNITIES.map((opportunity) => ({ id: `${opportunity.id}-funding`, kind: opportunity.applicationDeadline ? 'SCHOLARSHIP_DEADLINES' as const : 'SCHOLARSHIPS' as const, url: opportunity.sourceUrl, sourceType: opportunity.sourceType, admissionsCycle: opportunity.fundingCycle, refreshCadence: opportunity.applicationDeadline ? 'DAILY' as const : opportunity.providerType === 'GOVERNMENT' ? 'WEEKLY' as const : 'MONTHLY' as const, lastCheckedAt: opportunity.lastCheckedAt, lastSuccessfulAt: opportunity.lastVerifiedAt, confidenceStatus: opportunity.confidenceStatus })),
   ...PROGRAMME_COSTS.map((cost) => ({ id: `${cost.id}-fees`, kind: 'FEES' as const, institutionId: cost.institutionId, url: cost.sourceUrl, sourceType: 'official-fees' as const, sourceAcademicYear: String(cost.academicYear), refreshCadence: 'MONTHLY' as const, lastCheckedAt: cost.lastCheckedAt, lastSuccessfulAt: cost.lastVerifiedAt, confidenceStatus: cost.confidenceStatus })),
   { id: 'ucas-2027-deadlines', kind: 'APPLICATION_DEADLINES', countryCode: 'GB', url: UCAS_SOURCE, sourceType: 'official-application-portal', admissionsCycle: '2027', refreshCadence: 'WEEKLY', lastCheckedAt: UNIVERSITY_DATA_CHECKED_AT, lastSuccessfulAt: UNIVERSITY_DATA_CHECKED_AT, confidenceStatus: 'VERIFIED_OFFICIAL' },

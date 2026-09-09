@@ -10,6 +10,11 @@ assert.equal(getInstitution('ul')?.faculties?.length, 4, 'University of Limpopo 
 assert.deepEqual(getProgramme('ul-llb')?.streams, ['Standard curriculum', 'Extended Curriculum Programme'], 'The LLB extended curriculum should remain a stream')
 assert.deepEqual(getProgramme('ul-bsc')?.streams, ['Mathematical Sciences', 'Life Sciences', 'Physical Sciences'], 'BSc variants should remain streams')
 assert.equal(getProgramme('ul-mbchb')?.officialProgrammeUrl, 'https://www.ul.ac.za/faculty-of-health-sciences/school-of-medicine/', 'Reviewed medicine should use its exact official destination')
+assert.ok(getProgramme('unimelb-bsc')?.majors?.includes('Data Science'), 'Melbourne Data Science should be indexed honestly as a Bachelor of Science major')
+assert.ok(getProgramme('monash-commerce-computer-science')?.degreeType === 'Double degree', 'Monash combined degrees should remain distinct programmes')
+assert.ok(getProgramme('unsw-engineering-computer-science')?.degreeType === 'Double degree', 'UNSW combined degrees should remain distinct programmes')
+assert.ok(searchUniversityCatalogue('Business Analytics').some((entry) => entry.programme.majors?.includes('Business Analytics')), 'Business Analytics majors should participate in search')
+assert.ok(searchUniversityCatalogue('Data Science').some((entry) => entry.programme.majors?.includes('Data Science')), 'Data Science majors should participate in search')
 
 const za = getCountryCatalogue('ZA')
 assert.ok(za, 'South Africa catalogue should exist')
@@ -58,10 +63,17 @@ assert.ok(searchUniversityCatalogue('NUS').some((entry) => entry.institution.id 
 assert.ok(searchUniversityCatalogue('law').slice(0, 2).every((entry) => entry.programme.studyAreas.includes('Law') || entry.programme.normalizedName.includes('law')), 'Law search should prioritise programme-relevant results')
 assert.ok(searchUniversityCatalogue('economics', { region: 'England' }).every((entry) => entry.region === 'England'), 'Region filters should constrain results')
 
-for (const query of ['actuarial science', 'medicine', 'law', 'economics', 'computer science', 'engineering', 'psychology', 'finance']) {
+for (const query of ['actuarial science', 'computer science', 'medicine', 'law', 'engineering', 'finance', 'economics', 'psychology', 'education', 'data science', 'architecture', 'business analytics']) {
 	const results = searchUniversityCatalogue(query)
 	assert.ok(results.length > 0, `${query} should return programme results`)
 	assert.ok(results.slice(0, 3).every((entry) => [entry.programme.name, entry.programme.normalizedName, ...entry.programme.studyAreas, ...entry.programme.tags].join(' ').toLowerCase().includes(query)), `${query} top results should be programme-relevant`)
+}
+
+for (const institutionId of ['uct', 'wits', 'uj', 'up', 'stellenbosch', 'monash', 'unimelb', 'unsw', 'usyd', 'uq', 'oxford', 'cambridge', 'ucl', 'manchester', 'edinburgh', 'utoronto', 'ubc', 'mcgill', 'waterloo', 'mit', 'stanford', 'harvard', 'berkeley', 'umich', 'nyu']) {
+	const programmes = getInstitutionProgrammes(institutionId)
+	assert.ok(programmes.length >= 15, `${institutionId} should have materially deep programme coverage`)
+	const canonicalKeys = programmes.map((programme) => `${programme.institutionId}:${programme.normalizedName}:${programme.degreeType === 'Double degree' ? programme.id : 'single'}`)
+	assert.equal(new Set(canonicalKeys).size, canonicalKeys.length, `${institutionId} should not duplicate equivalent degree aliases`)
 }
 
 assert.equal(searchUniversityCatalogue('definitely-not-a-real-course-xyz').length, 0, 'Irrelevant searches should return no results')

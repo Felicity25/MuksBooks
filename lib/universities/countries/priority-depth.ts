@@ -1,4 +1,5 @@
 import type { CountryCatalogue, CountryCode, Institution, Programme } from '../types.ts'
+import { REVIEWED_CATALOGUE_DEPTH } from '../catalogue-depth-data.ts'
 
 const CHECKED_AT = '2026-09-09'
 
@@ -294,6 +295,16 @@ export function deepenExistingInstitutions(catalogues: CountryCatalogue[]) {
     for (const candidate of VERIFIED_BREADTH_PROGRAMMES.filter((entry) => entry.country === catalogue.name)) {
       const duplicateIndex = programmes.findIndex((entry) => entry.id === candidate.id)
       if (duplicateIndex >= 0) programmes[duplicateIndex] = { ...programmes[duplicateIndex], ...candidate }
+      else programmes.push(candidate)
+    }
+    for (const candidate of REVIEWED_CATALOGUE_DEPTH.filter((entry) => entry.country === catalogue.name)) {
+      const duplicateIndex = programmes.findIndex((entry) => entry.id === candidate.id || (
+        entry.institutionId === candidate.institutionId &&
+        entry.normalizedName === candidate.normalizedName &&
+        entry.degreeType !== 'Double degree' &&
+        candidate.degreeType !== 'Double degree'
+      ))
+      if (duplicateIndex >= 0) programmes[duplicateIndex] = candidate
       else programmes.push(candidate)
     }
     return { ...catalogue, status: 'partial' as const, institutions, programmes }

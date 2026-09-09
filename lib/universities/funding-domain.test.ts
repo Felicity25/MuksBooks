@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { DEFAULT_LEARNER_PROFILE } from '../learner/store.ts'
 import { createFundingApplication, createManualFundingApplication, fundingPlanGap, fundingPlanTotals, getFundingEligibility, reconcileFundingDeadline, searchFundingOpportunities, selectProgrammeCost } from './funding-domain.ts'
+import { FUNDING_OPPORTUNITIES } from './funding-data.ts'
 import type { FundingApplication, FundingOpportunity, ProgrammeCost } from './types.ts'
 
 const opportunity = (overrides: Partial<FundingOpportunity>): FundingOpportunity => ({
@@ -51,5 +52,28 @@ assert.ok(createFundingApplication(needsIncome).documents.some((item) => item.ty
 assert.ok(createFundingApplication(needsIncome).documents.some((item) => item.type === 'OFFER_LETTER'))
 assert.equal(createManualFundingApplication({ name: 'Local award', provider: 'School', applicationUrl: 'https://school.example/apply' }).applicationUrlOverride, 'https://school.example/apply')
 assert.equal(createManualFundingApplication({ name: 'Unsafe award', provider: 'School', applicationUrl: 'javascript:alert(1)' }).applicationUrlOverride, undefined)
+
+assert.equal(FUNDING_OPPORTUNITIES.find((item) => item.id === 'za-funza-lushaka-2026')?.cycleStatus, 'CLOSED', 'Historical cycles must remain explicitly closed')
+assert.equal(FUNDING_OPPORTUNITIES.find((item) => item.id === 'utoronto-pearson-2027')?.applicationDeadline, '2026-11-06', 'Current official funding deadlines should remain exact')
+assert.deepEqual(FUNDING_OPPORTUNITIES.find((item) => item.id === 'ubc-okanagan-commerce-launch-2027')?.eligibleProgrammes, ['ubc-bachelor-of-commerce'], 'Programme funding should remain programme-scoped')
+assert.equal(FUNDING_OPPORTUNITIES.find((item) => item.id === 'au-fee-help')?.domesticInternationalRules.includes('INTERNATIONAL'), false, 'Australian government loans must not be shown as internationally applicable')
+assert.equal(FUNDING_OPPORTUNITIES.find((item) => item.id === 'us-pell-grant-2026-27')?.fundingAmountMax, 7395, 'Published grant maxima should be captured without extrapolation')
+
+for (const [query, expectedId] of [
+  ['NSFAS', 'za-nsfas'],
+  ['HECS', 'au-hecs-help'],
+  ['engineering bursary', 'za-isfap-current'],
+  ['international scholarship', 'utoronto-pearson-2027'],
+  ['Monash scholarship', 'monash-scholarship-portfolio-current'],
+  ['UCT funding', 'za-allan-gray-fellowship-2026'],
+  ['medicine scholarship', 'za-isfap-current'],
+  ['finance bursary', 'za-thuthuka-bursary-current'],
+  ['current student scholarship', 'wits-undergraduate-funding']
+] as const) {
+  assert.ok(searchFundingOpportunities(FUNDING_OPPORTUNITIES, query).some((item) => item.id === expectedId), `${query} should find ${expectedId}`)
+}
+
+assert.ok(FUNDING_OPPORTUNITIES.every((item) => item.officialUrl.startsWith('https://') && item.applicationUrl.startsWith('https://')), 'Every funding opportunity should retain exact HTTPS destinations')
+assert.ok(FUNDING_OPPORTUNITIES.filter((item) => item.applicationDeadline).every((item) => item.fundingCycle && item.lastVerifiedAt), 'Dated funding must retain its cycle and verification date')
 
 console.log('Funding domain tests passed')
