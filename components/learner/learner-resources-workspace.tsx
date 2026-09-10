@@ -6,10 +6,18 @@ import { ArrowRight, BookOpen, ExternalLink } from 'lucide-react'
 import { CurriculumSelector } from './curriculum-selector'
 import { useCurriculum } from './curriculum-context'
 import { curriculumPath } from '@/lib/learner/curriculum-registry'
+import { searchCurriculumResources, type LearnerResourceType } from '@/lib/learner/curriculum-resources'
+
+const trustLabel = (status: 'OFFICIAL' | 'VERIFIED' | 'GENERAL') => status === 'OFFICIAL' ? 'Official' : status === 'VERIFIED' ? 'Verified Resource' : 'General'
 
 export function LearnerResourcesWorkspace() {
   const { profile, viewingCurriculum, curriculum, selectedLevelId, isProfileLoading } = useCurriculum()
   const [exploreAll, setExploreAll] = useState(false)
+  const [query, setQuery] = useState('')
+  const [resourceScope, setResourceScope] = useState<'MY' | 'ALL'>('MY')
+  const [subjectFilter, setSubjectFilter] = useState('')
+  const [typeFilter, setTypeFilter] = useState<LearnerResourceType | ''>('')
+  const [officialOnly, setOfficialOnly] = useState(false)
   const personalisedSubjects = useMemo(() => {
     if (viewingCurriculum !== 'MY' || profile.curriculum !== curriculum.id) return []
     const profileNames = new Set(profile.subjects.map((subject) => subject.name.toLowerCase()))
@@ -19,6 +27,18 @@ export function LearnerResourcesWorkspace() {
   const visibleSubjects = !exploreAll && personalisedSubjects.length ? personalisedSubjects : curriculum.subjects
   const level = curriculum.levels.find((item) => item.id === selectedLevelId)
   const topicLabel = curriculum.terminology.topic === 'Area of Study' ? 'Areas of Study' : `${curriculum.terminology.topic}s`
+  const filteredSubject = curriculum.subjects.find((subject) => subject.id === subjectFilter)
+  const searchResults = useMemo(() => searchCurriculumResources({
+    text: query,
+    scope: resourceScope === 'MY' ? curriculum.id : 'ALL',
+    levelId: resourceScope === 'MY' ? selectedLevelId : undefined,
+    subjectId: filteredSubject?.id,
+    subjectTitle: filteredSubject?.title,
+    canonicalArea: filteredSubject?.canonicalArea,
+    officialOnly,
+    type: typeFilter || undefined
+  }), [curriculum.id, filteredSubject, officialOnly, query, resourceScope, selectedLevelId, typeFilter])
+  const resourceTypes: LearnerResourceType[] = ['Curriculum / Syllabus', 'Topic Explanation', 'Worked Examples', 'Practice Questions', 'Past Paper', 'Assessment Guidance', 'Revision Guide']
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-7 px-4 py-7 sm:px-6 lg:px-8">
@@ -32,6 +52,25 @@ export function LearnerResourcesWorkspace() {
           <CurriculumSelector />
         </div>
       </header>
+
+      <section className="border-b border-slate-200 pb-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-xl font-semibold text-slate-950">Search the catalogue</h2>
+          <div className="inline-flex border border-slate-300 p-1" aria-label="Resource scope">
+            {(['MY', 'ALL'] as const).map((scope) => <button key={scope} type="button" onClick={() => setResourceScope(scope)} className={`px-3 py-1.5 text-sm font-semibold ${resourceScope === scope ? 'bg-slate-900 text-white' : 'text-slate-700'}`}>{scope === 'MY' ? 'My curriculum' : 'All curricula'}</button>)}
+          </div>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_220px_220px_auto]">
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search title, subject, topic or source" className="min-w-0 border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950" />
+          <select value={subjectFilter} onChange={(event) => setSubjectFilter(event.target.value)} className="border border-slate-300 bg-white px-3 py-2 text-sm"><option value="">All subjects</option>{curriculum.subjects.map((subject) => <option key={subject.id} value={subject.id}>{subject.title}</option>)}</select>
+          <select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as LearnerResourceType | '')} className="border border-slate-300 bg-white px-3 py-2 text-sm"><option value="">All resource types</option>{resourceTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select>
+          <label className="flex items-center gap-2 text-sm font-medium text-slate-700"><input type="checkbox" checked={officialOnly} onChange={(event) => setOfficialOnly(event.target.checked)} /> Official only</label>
+        </div>
+        <div className="mt-4 divide-y divide-slate-200 border-y border-slate-200">
+          {searchResults.slice(0, 12).map((resource) => <article key={resource.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-start sm:justify-between"><div><p className={`text-xs font-semibold uppercase ${resource.trustStatus === 'OFFICIAL' ? 'text-teal-700' : resource.trustStatus === 'VERIFIED' ? 'text-blue-700' : 'text-slate-600'}`}>{trustLabel(resource.trustStatus)} · {resource.type}</p><h3 className="mt-1 font-semibold text-slate-950">{resource.title}</h3><p className="mt-1 text-sm text-slate-600">{resource.summary}</p></div><a href={resource.sourceUrl} target="_blank" rel="noreferrer" className="inline-flex shrink-0 items-center gap-1 text-sm font-semibold text-teal-800">Open <ExternalLink className="h-3.5 w-3.5" /></a></article>)}
+          {!searchResults.length ? <p className="py-4 text-sm text-slate-600">No active resources match these filters.</p> : null}
+        </div>
+      </section>
 
       <section>
         <div className="flex flex-wrap items-end justify-between gap-3">

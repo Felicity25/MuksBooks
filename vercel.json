@@ -15,6 +15,10 @@
     {
       "path": "/api/universities/refresh",
       "schedule": "15 3 * * *"
+    },
+    {
+      "path": "/api/learner/curriculum-resources/refresh",
+      "schedule": "45 3 * * *"
     }
   ]
 }

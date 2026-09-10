@@ -1,6 +1,6 @@
 export type LearnerLevel = 'HL' | 'SL'
 export type LearnerProjectType = 'IA' | 'EE' | 'TOK' | 'CAS' | 'Mock' | 'Exam' | 'Oral'
-export type LearnerCurriculumId = 'IB' | 'VCE' | 'HSC' | 'QCE' | 'A_LEVEL' | 'GCSE' | 'IGCSE' | 'AP' | 'NSC' | 'IEB' | 'CUSTOM'
+export type LearnerCurriculumId = 'IB' | 'IB_MYP' | 'VCE' | 'HSC' | 'QCE' | 'A_LEVEL' | 'GCSE' | 'IGCSE' | 'AP' | 'NSC' | 'IEB' | 'CUSTOM'
 
 export interface SchoolProfile {
   name: string
@@ -170,7 +170,8 @@ export const DEFAULT_LEARNER_PROFILE: LearnerProfile = {
 }
 
 export const LEARNER_CURRICULUM_OPTIONS: Array<{ value: LearnerCurriculumId; label: string }> = [
-  { value: 'IB', label: 'International Baccalaureate (IB)' },
+  { value: 'IB', label: 'IB Diploma Programme' },
+  { value: 'IB_MYP', label: 'IB Middle Years Programme' },
   { value: 'VCE', label: 'VCE' },
   { value: 'HSC', label: 'HSC' },
   { value: 'QCE', label: 'QCE' },
@@ -185,6 +186,7 @@ export const LEARNER_CURRICULUM_OPTIONS: Array<{ value: LearnerCurriculumId; lab
 
 export function getSubjectLevelOptions(curriculum: LearnerCurriculumId): string[] {
   if (curriculum === 'IB') return ['HL', 'SL']
+  if (curriculum === 'IB_MYP') return ['MYP 1', 'MYP 2', 'MYP 3', 'MYP 4', 'MYP 5']
   if (curriculum === 'A_LEVEL') return ['AS', 'A2']
   if (curriculum === 'VCE' || curriculum === 'HSC' || curriculum === 'QCE' || curriculum === 'NSC' || curriculum === 'IEB') return ['Unit 1', 'Unit 2', 'Unit 3', 'Unit 4']
   return ['Standard', 'Higher', 'Advanced']
