@@ -7,11 +7,13 @@ import { useAuth } from '@/components/auth-provider'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { THEMES } from '@/lib/design/themes'
+import { useCurriculum } from '@/components/learner/curriculum-context'
+import { getCurriculum, isSupportedCurriculumId, SUPPORTED_CURRICULA, type SupportedCurriculumId } from '@/lib/learner/curriculum-registry'
 import type { UserSettings, YearLevel } from '@/lib/user-settings'
 
 const INTERESTS = [
-  'Actuarial', 'Finance', 'Data', 'Statistics', 'Technology',
-  'Consulting', 'Economics', 'Insurance', 'Risk', 'Quantitative Finance'
+  'STEM', 'Humanities', 'Economics', 'Biology', 'Psychology',
+  'Engineering', 'Languages', 'Design', 'Mathematics', 'Research'
 ]
 
 const YEAR_LEVELS: Array<{ value: YearLevel; label: string }> = [
@@ -28,19 +30,6 @@ const ACADEMIC_MODES = [
   { value: 'LEARNER', label: 'School / Learner' }
 ] as const
 
-const LEARNER_CURRICULA = [
-  { value: 'IB Diploma Programme', label: 'IB Diploma Programme' },
-  { value: 'Other', label: 'Other (coming soon)' }
-] as const
-
-const LEARNER_YEAR_LEVELS = [
-  { value: 'DP1', label: 'DP1' },
-  { value: 'DP2', label: 'DP2' },
-  { value: 'Year 11', label: 'Year 11' },
-  { value: 'Year 12', label: 'Year 12' },
-  { value: 'Other', label: 'Other' }
-] as const
-
 function toggle(list: string[], value: string, enabled: boolean) {
   if (enabled) return list.includes(value) ? list : [...list, value]
   return list.filter((item) => item !== value)
@@ -49,32 +38,58 @@ function toggle(list: string[], value: string, enabled: boolean) {
 export function OnboardingFlow() {
   const router = useRouter()
   const { settings, saveSettings } = useAuth()
+  const { profile, saveProfile } = useCurriculum()
   const [step, setStep] = useState(1)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [draft, setDraft] = useState(settings)
+  const [learnerCurriculumId, setLearnerCurriculumId] = useState<SupportedCurriculumId>(isSupportedCurriculumId(profile.curriculum) ? profile.curriculum : 'VCE')
+  const initialCurriculum = getCurriculum(learnerCurriculumId)
+  const [learnerLevelId, setLearnerLevelId] = useState(initialCurriculum.levels.find((level) => level.label === profile.yearLevel)?.id || initialCurriculum.levels[0]?.id || '')
+  const [learnerSubjectIds, setLearnerSubjectIds] = useState<string[]>(profile.subjects.map((subject) => subject.curriculumSubjectCode).filter((value): value is string => Boolean(value)))
 
-  const progress = useMemo(() => `${step}/8`, [step])
+  const isLearner = draft.academicMode === 'LEARNER'
+  const learnerCurriculum = getCurriculum(learnerCurriculumId)
+  const learnerLevel = learnerCurriculum.levels.find((level) => level.id === learnerLevelId) || learnerCurriculum.levels[0]
+  const progress = useMemo(() => `${step}/9`, [step])
 
-  const next = () => setStep((value) => Math.min(8, value + 1))
+  const next = () => setStep((value) => Math.min(9, value + 1))
   const previous = () => setStep((value) => Math.max(1, value - 1))
 
   const finish = async () => {
     setSubmitting(true)
     setError('')
     try {
+      if (isLearner) await saveProfile({
+        preferredName: draft.name || profile.preferredName || '',
+        school: {
+          name: draft.schoolName || profile.school?.name || '',
+          country: draft.schoolCountry || profile.school?.country || '',
+          stateRegion: profile.school?.stateRegion || ''
+        },
+        curriculum: learnerCurriculum.id,
+        curriculumLabel: learnerCurriculum.shortName,
+        yearLevel: learnerLevel?.label || '',
+        expectedGraduationYear: draft.examSession || profile.expectedGraduationYear || '',
+        subjects: learnerCurriculum.subjects
+          .filter((subject) => learnerSubjectIds.includes(subject.id))
+          .map((subject) => {
+            const existing = profile.subjects.find((item) => item.curriculumSubjectCode === subject.id || item.name === subject.title)
+            return existing || { id: `${learnerCurriculum.id}-${subject.id}`, name: subject.title, curriculumSubjectCode: subject.id, level: learnerLevel?.label || '' }
+          }),
+        onboardingCompleted: true,
+        updatedAt: new Date().toISOString()
+      })
+
       await saveSettings({
         academicMode: draft.academicMode,
-        curriculum: draft.curriculum,
-        schoolName: draft.schoolName,
-        schoolCountry: draft.schoolCountry,
-        schoolYear: draft.schoolYear,
-        examSession: draft.examSession,
-        institution: draft.institution,
-        degree: draft.degree,
-        fieldOfStudy: draft.fieldOfStudy,
-        major: draft.major,
-        yearLevel: draft.yearLevel,
+        ...(isLearner ? {} : {
+          institution: draft.institution,
+          degree: draft.degree,
+          fieldOfStudy: draft.fieldOfStudy,
+          major: draft.major,
+          yearLevel: draft.yearLevel
+        }),
         careerInterests: draft.careerInterests,
         academicInterests: draft.academicInterests,
         theme: draft.theme,
@@ -130,7 +145,8 @@ export function OnboardingFlow() {
 
       {step === 3 ? (
         <section className="space-y-4">
-          <h2 className="text-section-title text-slate-950">Tell us about your school</h2>
+          <h2 className="text-section-title text-slate-950">{isLearner ? 'Tell us about your school' : 'Choose your institution'}</h2>
+          {!isLearner ? <label className="block text-sm font-medium text-slate-700">University or institution<input value={draft.institution} onChange={(event) => setDraft({ ...draft, institution: event.target.value })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2" placeholder="Monash University" /></label> : <>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block text-sm font-medium text-slate-700">School name
               <input value={draft.schoolName} onChange={(event) => setDraft({ ...draft, schoolName: event.target.value })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2" placeholder="International School of Melbourne" />
@@ -141,34 +157,34 @@ export function OnboardingFlow() {
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block text-sm font-medium text-slate-700">Curriculum
-              <select value={draft.curriculum} onChange={(event) => setDraft({ ...draft, curriculum: event.target.value as UserSettings['curriculum'] })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2">
-                {LEARNER_CURRICULA.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              <select value={learnerCurriculumId} onChange={(event) => { const next = event.target.value as SupportedCurriculumId; const definition = getCurriculum(next); setLearnerCurriculumId(next); setLearnerLevelId(definition.levels[0]?.id || ''); setLearnerSubjectIds([]) }} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2">
+                {SUPPORTED_CURRICULA.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
               </select>
             </label>
-            <label className="block text-sm font-medium text-slate-700">Academic year
-              <select value={draft.schoolYear} onChange={(event) => setDraft({ ...draft, schoolYear: event.target.value as UserSettings['schoolYear'] })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2">
-                {LEARNER_YEAR_LEVELS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            <label className="block text-sm font-medium text-slate-700">{learnerCurriculum.terminology.level}
+              <select value={learnerLevelId} onChange={(event) => setLearnerLevelId(event.target.value)} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2">
+                {learnerCurriculum.levels.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
               </select>
             </label>
           </div>
           <label className="block text-sm font-medium text-slate-700">Exam session (optional)
             <input value={draft.examSession} onChange={(event) => setDraft({ ...draft, examSession: event.target.value })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2" placeholder="May 2027" />
           </label>
+          </>}
         </section>
       ) : null}
 
       {step === 4 ? (
         <section className="space-y-3">
-          <h2 className="text-section-title text-slate-950">Where do you study?</h2>
-          <label className="block text-sm font-medium text-slate-700">Institution / university
-            <input value={draft.institution} onChange={(event) => setDraft({ ...draft, institution: event.target.value })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2" placeholder="Monash University" />
-          </label>
+          <h2 className="text-section-title text-slate-950">{isLearner ? `Choose your ${learnerCurriculum.terminology.subject.toLowerCase()}s` : 'What are you studying?'}</h2>
+          {isLearner ? <div className="grid max-h-80 gap-2 overflow-y-auto sm:grid-cols-2">{learnerCurriculum.subjects.map((subject) => { const selected = learnerSubjectIds.includes(subject.id); return <label key={subject.id} className={`flex items-center gap-3 rounded-md border p-3 text-sm ${selected ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-800'}`}><input type="checkbox" checked={selected} onChange={(event) => setLearnerSubjectIds(toggle(learnerSubjectIds, subject.id, event.target.checked))} />{subject.title}</label> })}</div> : <label className="block text-sm font-medium text-slate-700">Degree<input value={draft.degree} onChange={(event) => setDraft({ ...draft, degree: event.target.value })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2" placeholder="Bachelor of Actuarial Science" /></label>}
         </section>
       ) : null}
 
       {step === 5 ? (
         <section className="space-y-3">
-          <h2 className="text-section-title text-slate-950">What are you studying?</h2>
+          <h2 className="text-section-title text-slate-950">{isLearner ? 'What do you want MuksBooks to support?' : 'What are you studying?'}</h2>
+          {isLearner ? <p className="text-sm leading-6 text-slate-600">Your {learnerCurriculum.shortName} profile will use {learnerCurriculum.terminology.syllabus.toLowerCase()}, {learnerCurriculum.terminology.topic.toLowerCase()} and {learnerCurriculum.terminology.assessment.toLowerCase()} terminology throughout School and Resources.</p> : <>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block text-sm font-medium text-slate-700">Degree
               <input value={draft.degree} onChange={(event) => setDraft({ ...draft, degree: event.target.value })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2" placeholder="Bachelor of Actuarial Science" />
@@ -180,15 +196,16 @@ export function OnboardingFlow() {
           <label className="block text-sm font-medium text-slate-700">Major / specialisation
             <input value={draft.major} onChange={(event) => setDraft({ ...draft, major: event.target.value })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2" placeholder="Quantitative Finance" />
           </label>
+          </>}
         </section>
       ) : null}
 
       {step === 6 ? (
         <section className="space-y-3">
-          <h2 className="text-section-title text-slate-950">What year are you in?</h2>
-          <select value={draft.yearLevel} onChange={(event) => setDraft({ ...draft, yearLevel: event.target.value as YearLevel })} className="h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm">
+          <h2 className="text-section-title text-slate-950">{isLearner ? 'When do you expect to graduate?' : 'What year are you in?'}</h2>
+          {isLearner ? <input value={draft.examSession} onChange={(event) => setDraft({ ...draft, examSession: event.target.value })} placeholder="2027" className="h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm" /> : <select value={draft.yearLevel} onChange={(event) => setDraft({ ...draft, yearLevel: event.target.value as YearLevel })} className="h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm">
             {YEAR_LEVELS.map((level) => <option key={level.value} value={level.value}>{level.label}</option>)}
-          </select>
+          </select>}
         </section>
       ) : null}
 

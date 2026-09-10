@@ -519,6 +519,52 @@ function migrate(db: any) {
       FOREIGN KEY(course_id) REFERENCES courses(id)
     );
 
+    CREATE TABLE IF NOT EXISTS note_notebooks (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      description TEXT,
+      folder_id TEXT,
+      color TEXT,
+      is_default INTEGER NOT NULL DEFAULT 0,
+      academic_context_json TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY(user_id) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS note_folders (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      parent_id TEXT,
+      kind TEXT NOT NULL DEFAULT 'folder',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY(user_id) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS notes (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      notebook_id TEXT NOT NULL,
+      folder_id TEXT,
+      title TEXT NOT NULL,
+      body TEXT,
+      summary TEXT,
+      tags TEXT,
+      is_pinned INTEGER NOT NULL DEFAULT 0,
+      is_archived INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      last_edited_at TEXT,
+      context_json TEXT,
+      attachments_json TEXT,
+      cover_color TEXT,
+      FOREIGN KEY(user_id) REFERENCES users(id),
+      FOREIGN KEY(notebook_id) REFERENCES note_notebooks(id)
+    );
+
     CREATE TABLE IF NOT EXISTS student_memory (
       id TEXT PRIMARY KEY,
       user_id TEXT,
@@ -592,6 +638,10 @@ function migrate(db: any) {
     CREATE INDEX IF NOT EXISTS idx_batches_course ON upload_batches(course_id);
     CREATE INDEX IF NOT EXISTS idx_unit_mastery_user ON unit_mastery(user_id);
     CREATE INDEX IF NOT EXISTS idx_unit_mastery_course ON unit_mastery(course_id);
+    CREATE INDEX IF NOT EXISTS idx_note_notebooks_user ON note_notebooks(user_id);
+    CREATE INDEX IF NOT EXISTS idx_note_folders_user ON note_folders(user_id);
+    CREATE INDEX IF NOT EXISTS idx_notes_user ON notes(user_id);
+    CREATE INDEX IF NOT EXISTS idx_notes_notebook ON notes(notebook_id);
     CREATE INDEX IF NOT EXISTS idx_batch_files_batch ON batch_files(batch_id);
     CREATE INDEX IF NOT EXISTS idx_batch_files_status ON batch_files(processing_status);
     CREATE INDEX IF NOT EXISTS idx_batch_files_hash ON batch_files(file_hash);

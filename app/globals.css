@@ -16,8 +16,8 @@
   --surface-tertiary: #e2e9f2;
 
   --sidebar: #0b132b;
-  --sidebar-text: #dbe7ff;
-  --sidebar-muted: #94a6c6;
+  --sidebar-text: #f2ebdf;
+  --sidebar-muted: #d5c7b1;
   --sidebar-border: #1c2541;
 
   --text-primary: #0f172a;
@@ -202,8 +202,8 @@ html[data-theme='oxford'] {
   --surface-secondary: #f1ebe1;
   --surface-tertiary: #e4dacb;
   --sidebar: #14213d;
-  --sidebar-text: #e9e2d6;
-  --sidebar-muted: #c9b79c;
+  --sidebar-text: #f4ecdf;
+  --sidebar-muted: #ddcfbb;
   --sidebar-border: #2c415c;
   --text-primary: #1a2742;
   --text-secondary: #304766;

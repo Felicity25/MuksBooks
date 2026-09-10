@@ -10,6 +10,7 @@ import { AuthPromptModal } from '@/components/auth-prompt-modal'
 import { ReadAloudProvider } from '@/components/study/read-aloud-provider'
 import { GlobalStudyProvider } from '@/components/study/global-study-provider'
 import { GlobalStudyBar } from '@/components/study/global-study-bar'
+import { CurriculumProvider } from '@/components/learner/curriculum-context'
 
 const uiFont = IBM_Plex_Sans({
   subsets: ['latin'],
@@ -53,21 +54,25 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 if (theme === 'system') theme = prefersDark ? 'midnight' : 'oxford';
                 if (theme === 'light') theme = 'oxford';
                 if (theme === 'dark') theme = 'midnight';
+                var font = parsed && parsed.font ? parsed.font : 'academic';
                 document.documentElement.dataset.theme = theme;
+                document.documentElement.dataset.font = font;
               } catch (e) {}
             })();`
           }}
         />
         <AuthProvider>
-          <ReadAloudProvider>
-            <GlobalStudyProvider>
-              <AppStateMigrator />
-              <AppShell>{children}</AppShell>
-              <ErrorManager />
-              <GlobalStudyBar />
-            </GlobalStudyProvider>
-          </ReadAloudProvider>
-          <AuthPromptModal />
+          <CurriculumProvider>
+            <ReadAloudProvider>
+              <GlobalStudyProvider>
+                <AppStateMigrator />
+                <AppShell>{children}</AppShell>
+                <ErrorManager />
+                <GlobalStudyBar />
+              </GlobalStudyProvider>
+            </ReadAloudProvider>
+            <AuthPromptModal />
+          </CurriculumProvider>
         </AuthProvider>
       </body>
     </html>

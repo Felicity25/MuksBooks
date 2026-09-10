@@ -1,6 +1,6 @@
 import type { WidgetId, WidgetSize } from '@/lib/user-settings'
 
-export type WidgetCategory = 'Study' | 'Learning' | 'Career' | 'Progress'
+export type WidgetCategory = 'MuksFocus' | 'Learning' | 'Career' | 'Progress'
 
 export interface WidgetDefinition {
   id: WidgetId
@@ -13,13 +13,13 @@ export interface WidgetDefinition {
 }
 
 export const WIDGETS: WidgetDefinition[] = [
-  { id: 'suggested-actions', title: 'Suggested Actions', description: 'Ranked academic and opportunity recommendations.', category: 'Study', sizes: ['small', 'medium', 'large', 'wide'], defaultSize: 'large', refreshable: true },
-  { id: 'planner', title: 'Today', description: 'Your current, upcoming, and completed plans for today.', category: 'Study', sizes: ['medium', 'large', 'wide'], defaultSize: 'large', refreshable: true },
-  { id: 'todays-classes', title: "Today's Classes", description: 'Confirmed classes and preparation.', category: 'Study', sizes: ['small', 'medium', 'large'], defaultSize: 'medium' },
-  { id: 'current-week', title: 'This Week', description: 'Current teaching week and unit topics.', category: 'Study', sizes: ['small', 'medium', 'large'], defaultSize: 'medium' },
-  { id: 'units', title: 'Units', description: 'Active units and current mastery.', category: 'Study', sizes: ['medium', 'large', 'wide'], defaultSize: 'large' },
-  { id: 'mastery-pulse', title: 'Mastery Pulse', description: 'Strongest units and areas needing attention.', category: 'Study', sizes: ['small', 'medium', 'large'], defaultSize: 'medium' },
-  { id: 'semester-timeline', title: 'Semester Timeline', description: 'Teaching weeks and key semester dates.', category: 'Study', sizes: ['medium', 'large', 'wide'], defaultSize: 'large' },
+  { id: 'suggested-actions', title: 'Suggested Actions', description: 'Ranked academic and opportunity recommendations.', category: 'MuksFocus', sizes: ['small', 'medium', 'large', 'wide'], defaultSize: 'large', refreshable: true },
+  { id: 'planner', title: 'Today', description: 'Your current, upcoming, and completed plans for today.', category: 'MuksFocus', sizes: ['medium', 'large', 'wide'], defaultSize: 'large', refreshable: true },
+  { id: 'todays-classes', title: "Today's Classes", description: 'Confirmed classes and preparation.', category: 'MuksFocus', sizes: ['small', 'medium', 'large'], defaultSize: 'medium' },
+  { id: 'current-week', title: 'This Week', description: 'Current teaching week and unit topics.', category: 'MuksFocus', sizes: ['small', 'medium', 'large'], defaultSize: 'medium' },
+  { id: 'units', title: 'Units', description: 'Active units and current mastery.', category: 'MuksFocus', sizes: ['medium', 'large', 'wide'], defaultSize: 'large' },
+  { id: 'mastery-pulse', title: 'Mastery Pulse', description: 'Strongest units and areas needing attention.', category: 'MuksFocus', sizes: ['small', 'medium', 'large'], defaultSize: 'medium' },
+  { id: 'semester-timeline', title: 'Semester Timeline', description: 'Teaching weeks and key semester dates.', category: 'MuksFocus', sizes: ['medium', 'large', 'wide'], defaultSize: 'large' },
   { id: 'tutor', title: 'Tutor', description: 'Open a context-aware tutoring conversation.', category: 'Learning', sizes: ['small', 'medium'], defaultSize: 'medium' },
   { id: 'resources', title: 'Resources for You', description: 'Relevant learning resources and templates.', category: 'Learning', sizes: ['small', 'medium', 'large'], defaultSize: 'medium' },
   { id: 'distribution', title: 'Distribution of the Day', description: 'A compact daily probability concept.', category: 'Learning', sizes: ['small', 'medium'], defaultSize: 'small' },

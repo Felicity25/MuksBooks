@@ -124,7 +124,7 @@ export function ensureUser(userId: string, defaults?: Partial<UserSettings>) {
   `).run(
     userId,
     defaults?.name || 'Student',
-    'Monash',
+    defaults?.institution || '',
     'Australia/Melbourne',
     'Semester 2',
     json(defaults || {}),
@@ -1331,8 +1331,8 @@ export function updateUserSettings(userId: string, updates: Partial<UserSettings
     ...current,
     ...updates
   })
-  db.prepare('UPDATE users SET name = ?, preferences = ?, updated_at = ? WHERE id = ?')
-    .run(merged.name || 'Student', json(merged), nowIso(), userId)
+  db.prepare('UPDATE users SET name = ?, university = ?, preferences = ?, updated_at = ? WHERE id = ?')
+    .run(merged.name || 'Student', merged.institution || '', json(merged), nowIso(), userId)
   createEvent('STUDY_PLAN_UPDATED', { userId, settingsUpdated: true })
   return merged
 }

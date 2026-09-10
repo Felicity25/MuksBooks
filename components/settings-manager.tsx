@@ -9,6 +9,7 @@ import { Card } from '@/components/ui/card'
 import { UniversityPlanningSettings } from '@/components/universities/university-planning-settings'
 import { DEFAULT_USER_SETTINGS, HOMEPAGE_PRESETS, PROACTIVITY_DEFAULTS, type HomepagePreset, type ProactivityControls, type ProactivityLevel, type ThemePreference, type UserSettings, type YearLevel } from '@/lib/user-settings'
 import { THEMES } from '@/lib/design/themes'
+import { LearnerAcademicProfileSettings } from '@/components/learner/learner-academic-profile-settings'
 
 const PRESET_LABELS: Record<HomepagePreset, string> = {
   'academic-weapon': 'Academic Weapon',
@@ -196,6 +197,7 @@ export function SettingsManager() {
         {draft.academicMode === 'LEARNER' ? <UniversityPlanningSettings /> : null}
 
         <Card className="space-y-4">
+          {draft.academicMode === 'LEARNER' ? <LearnerAcademicProfileSettings /> : <>
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-500">Academic profile</p>
             <p className="mt-1 text-sm text-slate-600">Stored now for profile use and future recommendations. You can change all fields later.</p>
@@ -208,19 +210,20 @@ export function SettingsManager() {
               </select>
             </label>
             <label className="text-sm font-medium text-slate-700">Preferred name<input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2" /></label>
-            <label className="text-sm font-medium text-slate-700">{draft.academicMode === 'LEARNER' ? 'School / institution' : 'University or institution'}<input value={draft.institution} onChange={(event) => setDraft({ ...draft, institution: event.target.value })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2" placeholder={draft.academicMode === 'LEARNER' ? 'International School of Melbourne' : 'Monash University'} /></label>
-            <label className="text-sm font-medium text-slate-700">{draft.academicMode === 'LEARNER' ? 'Curriculum / programme' : 'Academic track'}<input value={draft.degree} onChange={(event) => setDraft({ ...draft, degree: event.target.value })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2" placeholder={draft.academicMode === 'LEARNER' ? 'IB Diploma Programme' : 'IB Diploma'} /></label>
-            <label className="text-sm font-medium text-slate-700">{draft.academicMode === 'LEARNER' ? 'School year / level' : 'Year level'}
+            <label className="text-sm font-medium text-slate-700">University or institution<input value={draft.institution} onChange={(event) => setDraft({ ...draft, institution: event.target.value })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2" placeholder="Monash University" /></label>
+            <label className="text-sm font-medium text-slate-700">Academic track<input value={draft.degree} onChange={(event) => setDraft({ ...draft, degree: event.target.value })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2" placeholder="Bachelor of Actuarial Science" /></label>
+            <label className="text-sm font-medium text-slate-700">Year level
               <select value={draft.yearLevel} onChange={(event) => setDraft({ ...draft, yearLevel: event.target.value as YearLevel })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2">
                 {YEAR_LEVELS.map((level) => <option key={level.value} value={level.value}>{level.label}</option>)}
               </select>
             </label>
-            <label className="text-sm font-medium text-slate-700">{draft.academicMode === 'LEARNER' ? 'Target profile' : 'Target marks'}<input value={draft.targetMarks} onChange={(event) => setDraft({ ...draft, targetMarks: event.target.value })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2" placeholder={draft.academicMode === 'LEARNER' ? 'Predicted 41/45 or 6/7 focus' : 'HD / 90+'} /></label>
-            <label className="text-sm font-medium text-slate-700">Field of study<input value={draft.fieldOfStudy} onChange={(event) => setDraft({ ...draft, fieldOfStudy: event.target.value })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2" placeholder={draft.academicMode === 'LEARNER' ? 'Humanities / STEM / Business' : 'Humanities / STEM / Business'} /></label>
-            <label className="text-sm font-medium text-slate-700">{draft.academicMode === 'LEARNER' ? 'Main subjects / focus' : 'Major / specialisation'}<input value={draft.major} onChange={(event) => setDraft({ ...draft, major: event.target.value })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2" placeholder={draft.academicMode === 'LEARNER' ? 'Economics / Biology / Psychology' : 'Economics / Biology / Psychology'} /></label>
+            <label className="text-sm font-medium text-slate-700">Target marks<input value={draft.targetMarks} onChange={(event) => setDraft({ ...draft, targetMarks: event.target.value })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2" placeholder="HD / 90+" /></label>
+            <label className="text-sm font-medium text-slate-700">Field of study<input value={draft.fieldOfStudy} onChange={(event) => setDraft({ ...draft, fieldOfStudy: event.target.value })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2" placeholder="Actuarial studies" /></label>
+            <label className="text-sm font-medium text-slate-700">Major / specialisation<input value={draft.major} onChange={(event) => setDraft({ ...draft, major: event.target.value })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2" placeholder="Quantitative finance" /></label>
             <label className="text-sm font-medium text-slate-700">Feedback strictness<select value={draft.feedbackStrictness} onChange={(event) => setDraft({ ...draft, feedbackStrictness: event.target.value as UserSettings['feedbackStrictness'] })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2"><option value="lenient">Lenient</option><option value="normal">Normal</option><option value="strict">Strict</option></select></label>
           </div>
           <Button type="submit" disabled={saving}>Save profile</Button>
+          </>}
         </Card>
 
         <Card className="space-y-4">

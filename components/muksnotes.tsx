@@ -1,11 +1,16 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { BookOpen, FileText, Folder, FolderPlus, Grid3X3, NotebookPen, PenSquare, Plus, Search, Sparkles, Star, Trash2, Upload, Wand2 } from 'lucide-react'
+import { BookOpen, FileText, Folder, FolderPlus, Grid3X3, Maximize2, Minimize2, NotebookPen, PenSquare, Plus, Search, Sigma, Sparkles, Star, Trash2, Upload, Wand2 } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
+import rehypeKatex from 'rehype-katex'
+import rehypeHighlight from 'rehype-highlight'
 import { useAuth } from '@/components/auth-provider'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { createFolderRecord, createInitialNotebook, createNoteRecord, sortNotesByUpdatedAt, buildNoteSearchIndex, summarizeNoteText, buildMarkdownPreview, type NoteRecord, type NotebookRecord, type FolderRecord } from '@/lib/notes/notes-core'
+import { createFolderRecord, createInitialNotebook, createNoteRecord, sortNotesByUpdatedAt, buildNoteSearchIndex, summarizeNoteText, type NoteRecord, type NotebookRecord, type FolderRecord } from '@/lib/notes/notes-core'
 
 const STORAGE_KEY = 'muksbooks:notes:v1'
 
@@ -13,7 +18,7 @@ function loadInitialState(): { notebooks: NotebookRecord[]; notes: NoteRecord[];
   if (typeof window === 'undefined') {
     const personal = createInitialNotebook({ name: 'Personal', userId: 'guest' })
     const sample = createNoteRecord({ notebookId: personal.id, userId: 'guest', title: 'Quick ideas', body: 'Capture thoughts, formulas, and review notes here.', tags: ['ideas'] })
-    const folder = createFolderRecord({ name: 'Study', userId: 'guest' })
+    const folder = createFolderRecord({ name: 'MuksFocus', userId: 'guest' })
     return { notebooks: [personal], notes: [sample], folders: [folder] }
   }
 
@@ -22,18 +27,18 @@ function loadInitialState(): { notebooks: NotebookRecord[]; notes: NoteRecord[];
     if (!raw) {
       const personal = createInitialNotebook({ name: 'Personal', userId: 'guest' })
       const sample = createNoteRecord({ notebookId: personal.id, userId: 'guest', title: 'Quick ideas', body: 'Capture thoughts, formulas, and review notes here.', tags: ['ideas'] })
-      const folder = createFolderRecord({ name: 'Study', userId: 'guest' })
+      const folder = createFolderRecord({ name: 'MuksFocus', userId: 'guest' })
       return { notebooks: [personal], notes: [sample], folders: [folder] }
     }
     const parsed = JSON.parse(raw) as { notebooks?: NotebookRecord[]; notes?: NoteRecord[]; folders?: FolderRecord[] }
-    if (Array.isArray(parsed.notebooks) && parsed.notebooks.length) return { notebooks: parsed.notebooks, notes: Array.isArray(parsed.notes) ? parsed.notes : [], folders: Array.isArray(parsed.folders) ? parsed.folders : [createFolderRecord({ name: 'Study', userId: 'guest' })] }
+    if (Array.isArray(parsed.notebooks) && parsed.notebooks.length) return { notebooks: parsed.notebooks, notes: Array.isArray(parsed.notes) ? parsed.notes : [], folders: Array.isArray(parsed.folders) ? parsed.folders : [createFolderRecord({ name: 'MuksFocus', userId: 'guest' })] }
   } catch {
     // fallback taken below
   }
 
   const personal = createInitialNotebook({ name: 'Personal', userId: 'guest' })
   const sample = createNoteRecord({ notebookId: personal.id, userId: 'guest', title: 'Quick ideas', body: 'Capture thoughts, formulas, and review notes here.', tags: ['ideas'] })
-  const folder = createFolderRecord({ name: 'Study', userId: 'guest' })
+  const folder = createFolderRecord({ name: 'MuksFocus', userId: 'guest' })
   return { notebooks: [personal], notes: [sample], folders: [folder] }
 }
 
@@ -49,6 +54,8 @@ export function MuksNotesWorkspace() {
   const [isSaving, setIsSaving] = useState(false)
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null)
   const [showMarkdownPreview, setShowMarkdownPreview] = useState(false)
+  const [showMathSymbols, setShowMathSymbols] = useState(false)
+  const [isFullscreen, setIsFullscreen] = useState(false)
   const [draggingNoteId, setDraggingNoteId] = useState<string | null>(null)
   const editorRef = useRef<HTMLTextAreaElement | null>(null)
 
@@ -193,7 +200,7 @@ export function MuksNotesWorkspace() {
     updateCurrentNote({ summary })
   }
 
-  const applyMarkdownAction = (variant: 'h1' | 'h2' | 'bold' | 'italic' | 'bullet' | 'quote' | 'code') => {
+  const applyMarkdownAction = (variant: 'h1' | 'h2' | 'bold' | 'italic' | 'bullet' | 'quote' | 'code' | 'mathInline' | 'mathBlock' | 'fraction' | 'sqrt' | 'sum' | 'integral' | 'matrix' | 'subscript' | 'superscript') => {
     if (!currentNote || !editorRef.current) return
     const textarea = editorRef.current
     const start = textarea.selectionStart
@@ -209,6 +216,15 @@ export function MuksNotesWorkspace() {
     if (variant === 'bullet') injected = selected.includes('\n') ? selected.split('\n').map((line) => `- ${line}`).join('\n') : `- ${selected}`
     if (variant === 'quote') injected = `> ${selected}`
     if (variant === 'code') injected = `\`${selected}\``
+    if (variant === 'mathInline') injected = `$${selected}$`
+    if (variant === 'mathBlock') injected = `\n$$\n${selected}\n$$\n`
+    if (variant === 'fraction') injected = `\\frac{${selected || 'a'}}{b}`
+    if (variant === 'sqrt') injected = `\\sqrt{${selected || 'x'}}`
+    if (variant === 'sum') injected = `\\sum_{i=1}^{n} ${selected || 'x_i'}`
+    if (variant === 'integral') injected = `\\int_0^T ${selected || 'f(t)'}\\,dt`
+    if (variant === 'matrix') injected = `\\begin{bmatrix}\na & b \\\\ \nc & d\n\\end{bmatrix}`
+    if (variant === 'subscript') injected = `${selected || 'x'}_i`
+    if (variant === 'superscript') injected = `${selected || 'x'}^2`
 
     const nextValue = currentValue.slice(0, start) + injected + currentValue.slice(end)
     updateCurrentNote({ body: nextValue, summary: summarizeNoteText(nextValue) })
@@ -226,7 +242,22 @@ export function MuksNotesWorkspace() {
     setDraggingNoteId(null)
   }
 
-  const markdownPreviewHtml = currentNote ? buildMarkdownPreview(currentNote.body) : ''
+  const insertRawText = (raw: string) => {
+    if (!currentNote || !editorRef.current) return
+    const textarea = editorRef.current
+    const start = textarea.selectionStart
+    const end = textarea.selectionEnd
+    const currentValue = textarea.value
+    const nextValue = currentValue.slice(0, start) + raw + currentValue.slice(end)
+    updateCurrentNote({ body: nextValue, summary: summarizeNoteText(nextValue) })
+    requestAnimationFrame(() => {
+      textarea.focus()
+      const nextCursor = start + raw.length
+      textarea.setSelectionRange(nextCursor, nextCursor)
+    })
+  }
+
+  const mathSymbols = ['\\alpha', '\\beta', '\\gamma', '\\theta', '\\lambda', '\\mu', '\\sigma', '\\pi', '\\leq', '\\geq', '\\neq', '\\infty']
 
   return (
     <div className="space-y-5">
@@ -332,7 +363,7 @@ export function MuksNotesWorkspace() {
           </div>
         </aside>
 
-        <Card className="min-h-[620px] p-0">
+        <Card className={`${isFullscreen ? 'fixed inset-3 z-50 m-0 min-h-0 overflow-hidden rounded-xl bg-white shadow-2xl' : 'min-h-[620px]'} p-0`}>
           {currentNote ? (
             <div className="flex h-full flex-col">
               <div className="flex flex-wrap items-center justify-between border-b border-slate-200 p-4">
@@ -345,6 +376,7 @@ export function MuksNotesWorkspace() {
                   />
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setIsFullscreen((value) => !value)}>{isFullscreen ? <Minimize2 className="mr-2 h-4 w-4" /> : <Maximize2 className="mr-2 h-4 w-4" />}{isFullscreen ? 'Exit full screen' : 'Full screen'}</Button>
                   <Button variant="outline" size="sm" onClick={() => updateCurrentNote({ isPinned: !currentNote.isPinned })}><Star className={`mr-2 h-4 w-4 ${currentNote.isPinned ? 'fill-current' : ''}`} />Pin</Button>
                   <Button variant="outline" size="sm" onClick={() => duplicateNote(currentNote.id)}><Folder className="mr-2 h-4 w-4" />Duplicate</Button>
                   <Button variant="destructive" size="sm" onClick={() => deleteNote(currentNote.id)}><Trash2 className="mr-2 h-4 w-4" />Delete</Button>
@@ -368,6 +400,9 @@ export function MuksNotesWorkspace() {
                 <Button variant="ghost" size="sm" onClick={() => applyMarkdownAction('bullet')}>• List</Button>
                 <Button variant="ghost" size="sm" onClick={() => applyMarkdownAction('quote')}>❝ Quote</Button>
                 <Button variant="ghost" size="sm" onClick={() => applyMarkdownAction('code')}>Code</Button>
+                <Button variant="ghost" size="sm" onClick={() => applyMarkdownAction('mathInline')}><Sigma className="mr-2 h-4 w-4" />Inline math</Button>
+                <Button variant="ghost" size="sm" onClick={() => applyMarkdownAction('mathBlock')}>Display math</Button>
+                <Button variant="ghost" size="sm" onClick={() => setShowMathSymbols((value) => !value)}>{showMathSymbols ? 'Hide symbols' : 'Math symbols'}</Button>
                 <Button variant="ghost" size="sm"><PenSquare className="h-4 w-4" />Highlight</Button>
                 <Button variant="ghost" size="sm"><Upload className="h-4 w-4" />Attach</Button>
                 <Button variant="ghost" size="sm" onClick={addNoteAttachment}><Wand2 className="mr-2 h-4 w-4" />Image</Button>
@@ -375,15 +410,34 @@ export function MuksNotesWorkspace() {
                 <Button variant="ghost" size="sm" onClick={() => setShowMarkdownPreview((value) => !value)}>{showMarkdownPreview ? 'Edit' : 'Preview'}</Button>
               </div>
 
+              {showMathSymbols ? (
+                <div className="flex flex-wrap gap-2 border-b border-slate-200 px-4 py-3">
+                  <Button variant="outline" size="sm" onClick={() => applyMarkdownAction('fraction')}>Fraction</Button>
+                  <Button variant="outline" size="sm" onClick={() => applyMarkdownAction('sqrt')}>Root</Button>
+                  <Button variant="outline" size="sm" onClick={() => applyMarkdownAction('sum')}>Summation</Button>
+                  <Button variant="outline" size="sm" onClick={() => applyMarkdownAction('integral')}>Integral</Button>
+                  <Button variant="outline" size="sm" onClick={() => applyMarkdownAction('matrix')}>Matrix</Button>
+                  <Button variant="outline" size="sm" onClick={() => applyMarkdownAction('subscript')}>Subscript</Button>
+                  <Button variant="outline" size="sm" onClick={() => applyMarkdownAction('superscript')}>Superscript</Button>
+                  {mathSymbols.map((symbol) => (
+                    <Button key={symbol} variant="outline" size="sm" onClick={() => insertRawText(`${symbol} `)}>{symbol}</Button>
+                  ))}
+                </div>
+              ) : null}
+
               <div className="flex-1 p-4">
                 {showMarkdownPreview ? (
-                  <div className="prose prose-slate max-w-none rounded-xl border border-slate-200 bg-slate-50 p-4 text-[15px] leading-7 text-slate-800" dangerouslySetInnerHTML={{ __html: markdownPreviewHtml }} />
+                  <div className="prose prose-slate max-w-none overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-4 text-[15px] leading-7 text-slate-800">
+                    <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex, rehypeHighlight]}>
+                      {currentNote.body}
+                    </ReactMarkdown>
+                  </div>
                 ) : (
                   <textarea
                     ref={editorRef}
                     value={currentNote.body}
                     onChange={(event) => updateCurrentNote({ body: event.target.value, summary: summarizeNoteText(event.target.value) })}
-                    className="h-[420px] w-full resize-none border-0 bg-transparent text-[15px] leading-7 text-slate-800 outline-none"
+                    className={`${isFullscreen ? 'h-[calc(100vh-290px)]' : 'h-[420px]'} w-full resize-none border-0 bg-transparent text-[15px] leading-7 text-slate-800 outline-none`}
                     placeholder="Write your thoughts, formulae, and revision notes here..."
                   />
                 )}

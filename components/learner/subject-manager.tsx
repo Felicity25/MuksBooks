@@ -1,26 +1,22 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { BookOpenText, Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { getLearnerProfile, saveLearnerProfile, type LearnerSubject } from '@/lib/learner/store'
+import { useCurriculum } from '@/components/learner/curriculum-context'
+import type { LearnerSubject } from '@/lib/learner/store'
 
 interface SubjectRecord extends LearnerSubject {}
 
 export function SubjectManager() {
-  const [subjects, setSubjects] = useState<SubjectRecord[]>([])
-  const [form, setForm] = useState({ name: '', level: 'HL' as SubjectRecord['level'], teacher: '', targetGrade: '', predictedGrade: '', currentGrade: '', notes: '' })
+  const { profile, curriculum, viewingCurriculum, saveProfile } = useCurriculum()
+  const subjects = profile.subjects
+  const isViewingSavedCurriculum = viewingCurriculum === 'MY' && profile.curriculum === curriculum.id
+  const [form, setForm] = useState({ subjectId: '', level: curriculum.levels[0]?.label || '', teacher: '', targetGrade: '', predictedGrade: '', currentGrade: '', notes: '' })
 
-  useEffect(() => {
-    const profile = getLearnerProfile()
-    setSubjects(profile.subjects)
-  }, [])
-
-  const persist = (next: SubjectRecord[]) => {
-    const profile = getLearnerProfile()
-    const saved = saveLearnerProfile({ ...profile, subjects: next, updatedAt: new Date().toISOString() })
-    setSubjects(saved.subjects)
+  const persist = async (next: SubjectRecord[]) => {
+    await saveProfile({ subjects: next })
   }
 
   const average = useMemo(() => {
@@ -34,12 +30,14 @@ export function SubjectManager() {
   }, [subjects])
 
   const addSubject = () => {
-    if (!form.name.trim()) return
+    const curriculumSubject = curriculum.subjects.find((subject) => subject.id === form.subjectId)
+    if (!curriculumSubject || subjects.some((subject) => subject.curriculumSubjectCode === curriculumSubject.id)) return
 
     const next = [{
       id: `${Date.now()}`,
-      name: form.name.trim(),
+      name: curriculumSubject.title,
       level: form.level,
+      curriculumSubjectCode: curriculumSubject.id,
       teacher: form.teacher.trim(),
       targetGrade: form.targetGrade.trim(),
       predictedGrade: form.predictedGrade.trim() || form.targetGrade.trim() || '—',
@@ -47,12 +45,12 @@ export function SubjectManager() {
       notes: form.notes.trim() || 'No notes yet.'
     }, ...subjects]
 
-    persist(next)
-    setForm({ name: '', level: 'HL', teacher: '', targetGrade: '', predictedGrade: '', currentGrade: '', notes: '' })
+    void persist(next)
+    setForm({ subjectId: '', level: curriculum.levels[0]?.label || '', teacher: '', targetGrade: '', predictedGrade: '', currentGrade: '', notes: '' })
   }
 
   const removeSubject = (id: string) => {
-    persist(subjects.filter((subject) => subject.id !== id))
+    void persist(subjects.filter((subject) => subject.id !== id))
   }
 
   return (
@@ -60,16 +58,24 @@ export function SubjectManager() {
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
           <BookOpenText className="h-4 w-4 text-sky-700" />
-          Subject tracker
+          My {curriculum.terminology.subject}s
         </div>
         <span className="rounded-full bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-700">Average: {average}</span>
       </div>
 
+      {!isViewingSavedCurriculum ? (
+        <div className="mt-4">
+          <p className="text-sm text-slate-600">You are temporarily viewing {curriculum.shortName}. Your saved subjects have not changed.</p>
+          <div className="mt-3 flex flex-wrap gap-2">{curriculum.subjects.map((subject) => <span key={subject.id} className="rounded-full border border-slate-200 px-2.5 py-1 text-xs text-slate-700">{subject.title}</span>)}</div>
+        </div>
+      ) : <>
       <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        <input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Subject name" className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900" />
-        <select value={form.level} onChange={(event) => setForm({ ...form, level: event.target.value as SubjectRecord['level'] })} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900">
-          <option value="HL">HL</option>
-          <option value="SL">SL</option>
+        <select value={form.subjectId} onChange={(event) => setForm({ ...form, subjectId: event.target.value })} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900">
+          <option value="">Select {curriculum.terminology.subject.toLowerCase()}</option>
+          {curriculum.subjects.map((subject) => <option key={subject.id} value={subject.id}>{subject.title}</option>)}
+        </select>
+        <select value={form.level} onChange={(event) => setForm({ ...form, level: event.target.value })} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900">
+          {curriculum.levels.map((level) => <option key={level.id} value={level.label}>{level.label}</option>)}
         </select>
         <input value={form.teacher} onChange={(event) => setForm({ ...form, teacher: event.target.value })} placeholder="Teacher (optional)" className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900" />
         <input value={form.targetGrade} onChange={(event) => setForm({ ...form, targetGrade: event.target.value })} placeholder="Target grade" className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900" />
@@ -100,7 +106,9 @@ export function SubjectManager() {
             </Button>
           </div>
         ))}
+        {!subjects.length ? <p className="rounded-md border border-dashed border-slate-300 p-4 text-sm text-slate-600">No subjects added yet. Choose your official curriculum subjects above.</p> : null}
       </div>
+      </>}
     </Card>
   )
 }

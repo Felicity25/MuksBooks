@@ -6,6 +6,7 @@ import { HomeDailyHub } from '@/components/dashboard/home-daily-hub'
 import { PersonalHomeDashboard } from '@/components/dashboard/personal-home-dashboard'
 import { useAuth } from '@/components/auth-provider'
 import { UniversityPlanningPulse } from '@/components/universities/university-planning-pulse'
+import { getLearnerProfile } from '@/lib/learner/store'
 
 const MODE_OPTIONS = [
   {
@@ -24,6 +25,7 @@ const MODE_OPTIONS = [
 
 export default function HomePage() {
   const { settings, saveSettings } = useAuth()
+  const learnerProfile = getLearnerProfile()
   const [switchingMode, setSwitchingMode] = useState(false)
   const [modeMessage, setModeMessage] = useState('')
   const isLearnerMode = settings.academicMode === 'LEARNER'
@@ -85,7 +87,7 @@ export default function HomePage() {
 
         {isLearnerMode ? (
           <p className="mt-3 text-sm text-slate-700">
-            {settings.curriculum || 'IB Diploma Programme'} • {settings.schoolName || 'School profile in progress'} • {settings.schoolYear || 'DP1'}
+            {learnerProfile.curriculumLabel || learnerProfile.curriculum || 'IB'} • {learnerProfile.school?.name || 'School profile in progress'} • {learnerProfile.yearLevel || 'Year 12'}
           </p>
         ) : null}
       </div>

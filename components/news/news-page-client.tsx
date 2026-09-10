@@ -1,9 +1,10 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { NewsCard } from '@/components/news/news-card'
 import { useAuth } from '@/components/auth-provider'
+import { useReadAloud } from '@/components/study/read-aloud-provider'
 import type { BriefItem, NewsItem, SavedNewsItem } from '@/lib/news/types'
 
 function buildMuksBrief(stories: NewsItem[], academicMode?: string, degree?: string) {
@@ -22,7 +23,7 @@ function buildMuksBrief(stories: NewsItem[], academicMode?: string, degree?: str
 
   const primary = stories[0]
   const context = academicMode === 'LEARNER'
-    ? 'This is useful for current affairs and classroom connections.'
+    ? 'This is useful for current affairs, wider reading, and classroom connections.'
     : degree
       ? `This is relevant to ${degree} and professional practice.`
       : 'This is relevant to university-level practice and professional understanding.'
@@ -36,7 +37,7 @@ function buildMuksBrief(stories: NewsItem[], academicMode?: string, degree?: str
     },
     {
       heading: 'Why it matters',
-      body: `These developments matter because they affect the same decision-makers, markets, and risks that shape actuarial and professional work. ${context}`
+      body: `These developments matter because they shape the context around policy, markets, and broader change that informs thoughtful study and analysis. ${context}`
     },
     {
       heading: 'How these stories connect',
@@ -113,6 +114,7 @@ interface NewsResponse {
 
 export function NewsPageClient() {
   const { user, settings, isLoading: authLoading, requireAuth } = useAuth()
+  const readAloud = useReadAloud()
   const [data, setData] = useState<NewsResponse>({ items: [], brief: [], sinceYesterday: [], concepts: [], savedIds: [] })
   const [savedItems, setSavedItems] = useState<SavedNewsItem[]>([])
   const [savedUrls, setSavedUrls] = useState<string[]>([])
@@ -127,8 +129,20 @@ export function NewsPageClient() {
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [briefOpen, setBriefOpen] = useState(false)
   const [briefMode, setBriefMode] = useState<'READ' | 'LISTEN'>('READ')
-  const [isSpeaking, setIsSpeaking] = useState(false)
-  const speechRef = useRef<SpeechSynthesisUtterance | null>(null)
+  const [briefLength, setBriefLength] = useState<'SHORT' | 'STANDARD' | 'DEEP'>('STANDARD')
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const stored = window.localStorage.getItem('muksbooks:muksbrief:length')
+    if (stored === 'SHORT' || stored === 'STANDARD' || stored === 'DEEP') {
+      setBriefLength(stored)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem('muksbooks:muksbrief:length', briefLength)
+  }, [briefLength])
 
   const loadSaved = useCallback(async () => {
     if (!user) {
@@ -234,37 +248,23 @@ export function NewsPageClient() {
     setSelectedIds((previous) => previous.includes(article.id) ? previous.filter((id) => id !== article.id) : [...previous, article.id])
   }, [])
 
+  const selectedSections = useMemo(() => {
+    if (briefLength === 'SHORT') return briefSummary.sections.slice(0, 2)
+    if (briefLength === 'DEEP') return briefSummary.sections
+    return briefSummary.sections.slice(0, 3)
+  }, [briefLength, briefSummary.sections])
+
   const handleListen = useCallback(() => {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return
-
-    const text = briefSummary.sections.map((section) => `${section.heading}. ${section.body}`).join(' ')
+    const text = selectedSections.map((section) => `${section.heading}. ${section.body}`).join(' ')
     if (!text.trim()) return
+    readAloud.speakText(text)
+  }, [readAloud, selectedSections])
 
-    if (isSpeaking) {
-      window.speechSynthesis.cancel()
-      setIsSpeaking(false)
-      return
-    }
-
-    const cleanText = text.replace(/\s+/g, ' ').trim()
-    const utterance = new SpeechSynthesisUtterance(cleanText)
-    speechRef.current = utterance
-
-    utterance.onstart = () => setIsSpeaking(true)
-    utterance.onend = () => setIsSpeaking(false)
-    utterance.onerror = () => setIsSpeaking(false)
-
-    window.speechSynthesis.cancel()
-    window.speechSynthesis.speak(utterance)
-  }, [briefSummary, isSpeaking])
-
-  useEffect(() => {
-    return () => {
-      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-        window.speechSynthesis.cancel()
-      }
-    }
-  }, [])
+  const readAloudStatus = readAloud.status === 'playing'
+    ? 'Playing'
+    : readAloud.status === 'paused'
+      ? 'Paused'
+      : 'Idle'
 
   const toggleSave = async (article: NewsItem) => {
     if (requireAuth('Sign in or create a MuksBooks account to keep articles in your personal Saved collection.', '/news')) return
@@ -333,7 +333,7 @@ export function NewsPageClient() {
                   {briefMode === 'READ' ? (
                     <div className="space-y-4 rounded-2xl border border-sky-100 bg-white p-4">
                       <h3 className="text-base font-semibold text-slate-900">{briefSummary.title}</h3>
-                      {briefSummary.sections.map((section) => (
+                      {selectedSections.map((section) => (
                         <div key={section.heading} className="space-y-1">
                           <p className="text-sm font-semibold uppercase tracking-wide text-slate-700">{section.heading}</p>
                           <p className="text-sm leading-6 text-slate-700">{section.body}</p>
@@ -353,10 +353,68 @@ export function NewsPageClient() {
                     </div>
                   ) : (
                     <div className="space-y-4 rounded-2xl border border-sky-100 bg-white p-4">
-                      <p className="text-sm text-slate-700">The briefing is read aloud from the selected stories only. No audio plays automatically.</p>
-                      <button type="button" onClick={handleListen} className="rounded-full bg-sky-700 px-4 py-2 text-sm font-medium text-white">
-                        {isSpeaking ? 'Pause' : 'Listen'}
-                      </button>
+                      <p className="text-sm text-slate-700">Personalise your MuksBrief voice, pace, and duration. Playback only uses the selected stories.</p>
+
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <label className="text-sm font-medium text-slate-700">Voice
+                          <select
+                            value={readAloud.voiceURI}
+                            onChange={(event) => readAloud.setVoiceURI(event.target.value)}
+                            className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2"
+                          >
+                            {readAloud.voices.map((voice) => (
+                              <option key={voice.voiceURI} value={voice.voiceURI}>{voice.name} ({voice.lang})</option>
+                            ))}
+                          </select>
+                        </label>
+
+                        <label className="text-sm font-medium text-slate-700">MuksBrief duration
+                          <select
+                            value={briefLength}
+                            onChange={(event) => setBriefLength(event.target.value as 'SHORT' | 'STANDARD' | 'DEEP')}
+                            className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2"
+                          >
+                            <option value="SHORT">Short (2 sections)</option>
+                            <option value="STANDARD">Standard (3 sections)</option>
+                            <option value="DEEP">Deep (full brief)</option>
+                          </select>
+                        </label>
+
+                        <label className="text-sm font-medium text-slate-700">Pace / speed: {readAloud.rate.toFixed(2)}x
+                          <input
+                            type="range"
+                            min={0.5}
+                            max={2}
+                            step={0.05}
+                            value={readAloud.rate}
+                            onChange={(event) => readAloud.setRate(Number(event.target.value))}
+                            className="mt-2 w-full"
+                          />
+                        </label>
+
+                        <label className="text-sm font-medium text-slate-700">Volume: {Math.round(readAloud.volume * 100)}%
+                          <input
+                            type="range"
+                            min={0}
+                            max={1}
+                            step={0.05}
+                            value={readAloud.volume}
+                            onChange={(event) => readAloud.setVolume(Number(event.target.value))}
+                            className="mt-2 w-full"
+                          />
+                        </label>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2">
+                        <button type="button" onClick={handleListen} className="rounded-full bg-sky-700 px-4 py-2 text-sm font-medium text-white">Listen</button>
+                        <button type="button" onClick={readAloud.pause} className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700">Pause</button>
+                        <button type="button" onClick={readAloud.resume} className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700">Resume</button>
+                        <button type="button" onClick={readAloud.stop} className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700">Stop</button>
+                      </div>
+
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                        Status: {readAloudStatus}
+                      </div>
                     </div>
                   )}
                 </>

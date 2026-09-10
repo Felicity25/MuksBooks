@@ -122,14 +122,14 @@ function emptyContext(): PlanningContext {
 async function getCloudProactivitySettings(userId: string) {
   const client = createSupabaseServerClient()
   const defaults = normalizeUserSettings(null)
-  if (!client) return { level: defaults.proactivityLevel, controls: defaults.proactivityControls, timezone: defaults.timezone }
+  if (!client) return { level: defaults.proactivityLevel, controls: defaults.proactivityControls, timezone: defaults.timezone, university: defaults.institution }
 
   try {
     const { data } = await client.from('user_settings').select('preferences').eq('user_id', userId).maybeSingle()
     const normalized = normalizeUserSettings(data?.preferences || null)
-    return { level: normalized.proactivityLevel, controls: normalized.proactivityControls, timezone: normalized.timezone }
+    return { level: normalized.proactivityLevel, controls: normalized.proactivityControls, timezone: normalized.timezone, university: normalized.institution }
   } catch {
-    return { level: defaults.proactivityLevel, controls: defaults.proactivityControls, timezone: defaults.timezone }
+    return { level: defaults.proactivityLevel, controls: defaults.proactivityControls, timezone: defaults.timezone, university: defaults.institution }
   }
 }
 
@@ -148,23 +148,25 @@ export async function getPlanningContext(userId: string | undefined | null, refe
   const calendarRangeStart = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000).toISOString()
   const calendarRangeEnd = new Date(now.getTime() + 21 * 24 * 60 * 60 * 1000).toISOString()
 
-  const [cloudUnits, allSchedule, calendarEventsRaw, cloudDocs, cloudAssessments, tasksRaw, proactivity, snapshot] = await Promise.all([
+  const [cloudUnits, allSchedule, calendarEventsRaw, cloudDocs, cloudAssessments, tasksRaw, proactivity] = await Promise.all([
     listCloudUnits(userId),
     listAllScheduleEntries(userId),
     listCalendarEvents(userId, calendarRangeStart, calendarRangeEnd),
     listCloudDocuments(userId),
     listCloudAssessments(userId),
     listUserTasks(),
-    getCloudProactivitySettings(userId),
-    getSemesterCalendarSnapshot(new Date(), { allowRefresh: true }).catch(() => null)
+    getCloudProactivitySettings(userId)
   ])
+
+  const universityName = proactivity.university || undefined
+  const snapshot = await getSemesterCalendarSnapshot(new Date(), { allowRefresh: true, universityName }).catch(() => null)
 
   if (cloudUnits === null) {
     // No Supabase connection available at all — return an empty, clearly-unauthenticated shape.
     return emptyContext()
   }
 
-  const current = snapshot ? getCurrentSemesterWeek(new Date(), snapshot.calendar) : null
+  const current = snapshot ? getCurrentSemesterWeek(new Date(), snapshot.calendar, universityName) : null
 
   const units: PlanningUnit[] = cloudUnits.map((unit: any) => ({
     id: unit.id,

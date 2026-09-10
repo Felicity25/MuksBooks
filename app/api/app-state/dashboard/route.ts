@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getDashboard } from '@/lib/app-state/service'
+import { getDashboard, getUserSettings } from '@/lib/app-state/service'
 import { getAuthenticatedUser } from '@/lib/supabase/server'
 import { getCurrentSemesterWeek } from '@/lib/semester-calendar'
 import { getSemesterCalendarSnapshot } from '@/lib/semester-calendar-server'
@@ -14,10 +14,11 @@ export const dynamic = 'force-dynamic'
 export async function GET() {
   try {
     const user = await getAuthenticatedUser()
+    const userSettings = getUserSettings(user?.id || 'default')
     const data = { ...getDashboard(user?.id || 'default'), todayClasses: [] as any[], academicRecommendations: [] as any[] }
 
-    const snapshot = await getSemesterCalendarSnapshot(new Date(), { allowRefresh: true })
-    const current = getCurrentSemesterWeek(new Date(), snapshot.calendar)
+    const snapshot = await getSemesterCalendarSnapshot(new Date(), { allowRefresh: true, universityName: userSettings.institution })
+    const current = getCurrentSemesterWeek(new Date(), snapshot.calendar, userSettings.institution)
     if (current) {
       data.currentWeek = {
         label: current.label,

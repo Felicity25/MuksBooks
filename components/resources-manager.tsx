@@ -10,7 +10,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/components/auth-provider'
 import { StochasticProcessesLab } from '@/components/resources/stochastic-processes-lab'
-import { ACTUARIAL_RESOURCES, PROFESSIONAL_SUBJECTS, relevanceScore, type ActuarialResource, type ResourceKind } from '@/lib/resources/catalog'
+import { ACTUARIAL_RESOURCES, getResourceCatalogForMode, PROFESSIONAL_SUBJECTS, relevanceScore, type ActuarialResource, type ResourceKind } from '@/lib/resources/catalog'
 import {
   DISTRIBUTIONS, defaultParameters, distributionMetricPoints, distributionQuantile,
   distributionPlotYMax, distributionSummary, intervalProbability, normalizeParameters,
@@ -308,7 +308,9 @@ function ExemptionPlanner() {
 }
 
 export function ResourcesManager() {
-  const { user, requireAuth } = useAuth()
+  const { user, settings, saveSettings, requireAuth } = useAuth()
+  const isLearnerMode = settings.academicMode === 'LEARNER'
+  const resourceCatalog = getResourceCatalogForMode(settings.academicMode)
   const [dashboard, setDashboard] = useState<DashboardData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -326,6 +328,16 @@ export function ResourcesManager() {
   const [probabilityBounds, setProbabilityBounds] = useState({ lower: 0, upper: 1 })
   const [quantileProbability, setQuantileProbability] = useState(0.95)
   const [simulation, setSimulation] = useState<number[]>([])
+  const generalInterests = [
+    'Mathematics', 'Statistics', 'Finance', 'Economics', 'Business', 'Computer Science',
+    'Engineering', 'Science', 'Law', 'Medicine / Health', 'Writing', 'Languages', 'Career Development'
+  ]
+  const generalResources = [
+    { title: 'Math and problem-solving foundations', summary: 'Strengthen algebra, calculus, and quantitative reasoning with scaffolded examples.', href: '/ai-tutor?topic=Mathematics&mode=explain' },
+    { title: 'Academic writing and communication', summary: 'Improve note structure, argument flow, and evidence-based writing for assessments.', href: '/notes' },
+    { title: 'Study planning and weekly execution', summary: 'Build practical weekly plans linked to classes, deadlines, and revision blocks.', href: '/planner' },
+    { title: 'Career readiness toolkit', summary: 'Start internships, CV prep, interview reflections, and opportunity tracking early.', href: '/careers' }
+  ]
 
   useEffect(() => {
     Promise.all([
@@ -343,18 +355,53 @@ export function ResourcesManager() {
     ...(dashboard?.recentResources || []).filter((resource) => selectedUnit === 'All' || resource.course_code === selectedUnit).flatMap((resource) => [resource.filename, resource.document_type || '', resource.course_code || ''])
   ].filter(Boolean), [dashboard, selectedUnit])
 
-  const recommendations = useMemo(() => [...ACTUARIAL_RESOURCES]
-    .sort((left, right) => relevanceScore(right, contextTopics) - relevanceScore(left, contextTopics))
-    .slice(0, 3), [contextTopics])
+  const selectedInterests = useMemo(() => Array.isArray(settings.academicInterests) ? settings.academicInterests : [], [settings.academicInterests])
+  const hasKnownAcademicProfile = useMemo(() => {
+    const hasUnits = Boolean((dashboard?.activeCourses?.length || 0) > 0)
+    const hasDegreeOrInstitution = Boolean(settings.degree?.trim() || settings.fieldOfStudy?.trim() || settings.institution?.trim())
+    const hasUploadsOrTopics = contextTopics.length > 0 || Boolean((dashboard?.recentResources?.length || 0) > 0)
+    const hasInterests = selectedInterests.length > 0
+    return hasUnits || hasDegreeOrInstitution || hasUploadsOrTopics || hasInterests
+  }, [contextTopics, dashboard?.activeCourses?.length, dashboard?.recentResources?.length, selectedInterests.length, settings.degree, settings.fieldOfStudy, settings.institution])
 
-  const filteredResources = useMemo(() => ACTUARIAL_RESOURCES.filter((resource) => {
+  const unitPriorityTokens = useMemo(() => [
+    ...(dashboard?.activeCourses || []).map((course) => `${course.course_code} ${course.course_name || ''}`),
+    ...(dashboard?.currentTopics || []).map((topic) => topic.name || ''),
+    ...(dashboard?.weakTopics || []).map((topic) => topic.name || '')
+  ].filter(Boolean), [dashboard?.activeCourses, dashboard?.currentTopics, dashboard?.weakTopics])
+  const degreePriorityTokens = useMemo(() => [settings.degree, settings.fieldOfStudy, settings.major].filter(Boolean) as string[], [settings.degree, settings.fieldOfStudy, settings.major])
+  const uploadPriorityTokens = useMemo(() => (dashboard?.recentResources || []).flatMap((resource) => [resource.filename, resource.document_type || '']).filter(Boolean), [dashboard?.recentResources])
+  const interestPriorityTokens = useMemo(() => selectedInterests, [selectedInterests])
+
+  const weightedContextTopics = useMemo(() => [
+    ...unitPriorityTokens,
+    ...unitPriorityTokens,
+    ...degreePriorityTokens,
+    ...uploadPriorityTokens,
+    ...interestPriorityTokens,
+    ...contextTopics
+  ], [contextTopics, degreePriorityTokens, interestPriorityTokens, unitPriorityTokens, uploadPriorityTokens])
+
+  const recommendations = useMemo(() => [...resourceCatalog]
+    .sort((left, right) => relevanceScore(right, weightedContextTopics) - relevanceScore(left, weightedContextTopics))
+    .slice(0, 3), [resourceCatalog, weightedContextTopics])
+
+  const toggleInterest = async (interest: string) => {
+    const enabled = selectedInterests.includes(interest)
+    const next = enabled
+      ? selectedInterests.filter((item) => item !== interest)
+      : [...selectedInterests, interest]
+    await saveSettings({ academicInterests: next })
+  }
+
+  const filteredResources = useMemo(() => resourceCatalog.filter((resource) => {
     const query = search.toLowerCase().trim()
     const matchesKind = kind === 'All' || resource.kind === kind
     const matchesDifficulty = difficulty === 'All' || resource.difficulty === difficulty
     const matchesSubject = professionalSubject === 'All' || resource.professionalSubjects.includes(professionalSubject)
     const haystack = [resource.title, resource.summary, ...resource.topics, ...resource.professionalSubjects].join(' ').toLowerCase()
     return matchesKind && matchesDifficulty && matchesSubject && (!query || haystack.includes(query))
-  }), [difficulty, kind, professionalSubject, search])
+  }), [difficulty, kind, professionalSubject, resourceCatalog, search])
 
   const points = useMemo(() => distributionMetricPoints(distribution.id, parameters, metric), [distribution, metric, parameters])
   const plotYMax = useMemo(() => distributionPlotYMax(distribution.id, metric), [distribution.id, metric])
@@ -395,14 +442,55 @@ export function ResourcesManager() {
     }
   }
 
+  if (!hasKnownAcademicProfile) {
+    return (
+      <div className="mx-auto w-full min-w-0 max-w-6xl space-y-8 overflow-x-hidden px-4 py-8 sm:px-6 lg:px-8">
+        <header className="rounded-2xl border border-slate-200 bg-white p-6">
+          <p className="text-sm font-semibold text-teal-700">Personalised resources</p>
+          <h1 className="mt-2 text-3xl font-semibold text-slate-950 sm:text-4xl">What are you interested in?</h1>
+          <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">Resources starts general until MuksBooks knows your university profile, units, or uploaded study material. Pick multiple interests to personalise this page now. You can edit these later in Personalisation.</p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {generalInterests.map((interest) => {
+              const selected = selectedInterests.includes(interest)
+              return (
+                <button
+                  key={interest}
+                  type="button"
+                  onClick={() => void toggleInterest(interest)}
+                  className={`rounded-full border px-3 py-1.5 text-sm ${selected ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-300 bg-white text-slate-700 hover:border-slate-500'}`}
+                >
+                  {interest}
+                </button>
+              )
+            })}
+          </div>
+        </header>
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-6">
+          <h2 className="text-2xl font-semibold text-slate-950">General academic resources</h2>
+          <p className="mt-2 text-sm text-slate-600">Guest mode is fully supported. Sign in only if you want cross-device sync.</p>
+          <div className="mt-5 grid gap-4 md:grid-cols-2">
+            {generalResources.map((resource) => (
+              <article key={resource.title} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <h3 className="text-lg font-semibold text-slate-950">{resource.title}</h3>
+                <p className="mt-2 text-sm leading-6 text-slate-600">{resource.summary}</p>
+                <Link href={resource.href} className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-slate-700">Open <ChevronRight size={16} /></Link>
+              </article>
+            ))}
+          </div>
+        </section>
+      </div>
+    )
+  }
+
   return (
     <div className="mx-auto w-full min-w-0 max-w-7xl space-y-12 overflow-x-hidden px-4 py-8 sm:px-6 lg:px-8">
       <header className="border-b border-slate-200 pb-8">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl">
-            <p className="text-sm font-semibold uppercase text-teal-700">Actuarial knowledge system</p>
+            <p className="text-sm font-semibold uppercase text-teal-700">Academic knowledge system</p>
             <h1 className="mt-3 text-4xl font-semibold text-slate-950 sm:text-5xl">Resources</h1>
-            <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">Move from this week&apos;s Monash topics into rigorous mathematics, professional syllabi, primary sources and interactive models.</p>
+            <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">Move from your current unit topics into rigorous concepts, validated sources, and interactive learning tools.</p>
           </div>
           <div className="grid min-w-0 grid-cols-3 divide-x divide-slate-200 border-y border-slate-200 py-3 text-center lg:min-w-[430px]">
             <div><p className="text-2xl font-semibold text-slate-950">{dashboard?.activeCourses?.length || 0}</p><p className="text-xs text-slate-500">Active units</p></div>
@@ -414,14 +502,14 @@ export function ResourcesManager() {
 
       <section aria-labelledby="for-you-title">
         <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div><p className="text-sm font-semibold text-teal-700">{dashboard?.currentWeek?.label || 'Current study context'}</p><h2 id="for-you-title" className="mt-1 text-2xl font-semibold text-slate-950">For you this week</h2></div>
-          <div className="flex items-center gap-3"><label className="text-sm text-slate-600">Unit <select value={selectedUnit} onChange={(event) => setSelectedUnit(event.target.value)} className="ml-2 h-9 rounded-md border border-slate-300 bg-white px-2"><option>All</option>{dashboard?.activeCourses?.map((course) => <option key={course.id} value={course.course_code}>{course.course_code}</option>)}</select></label><Link href="/planner" className="inline-flex items-center gap-1 text-sm font-semibold text-slate-700">Open semester plan <ChevronRight size={16} /></Link></div>
+          <div><p className="text-sm font-semibold text-teal-700">{dashboard?.currentWeek?.label || 'Current study context'}</p><h2 id="for-you-title" className="mt-1 text-2xl font-semibold text-slate-950">{isLearnerMode ? 'Suggested for this week' : 'For you this week'}</h2></div>
+          <div className="flex items-center gap-3"><label className="text-sm text-slate-600">{isLearnerMode ? 'Subject' : 'Unit'} <select value={selectedUnit} onChange={(event) => setSelectedUnit(event.target.value)} className="ml-2 h-9 rounded-md border border-slate-300 bg-white px-2"><option>All</option>{dashboard?.activeCourses?.map((course) => <option key={course.id} value={course.course_code}>{course.course_code}</option>)}</select></label><Link href="/planner" className="inline-flex items-center gap-1 text-sm font-semibold text-slate-700">Open plan <ChevronRight size={16} /></Link></div>
         </div>
         {isLoading ? <div className="flex h-36 items-center justify-center border-y border-slate-200 text-slate-500"><Loader2 className="mr-2 animate-spin" size={18} /> Reading your study context</div> : (
           <div className="grid border-y border-slate-200 lg:grid-cols-[0.75fr_2fr]">
             <div className="border-b border-slate-200 py-6 lg:border-b-0 lg:border-r lg:pr-6">
               <p className="text-xs font-semibold uppercase text-slate-500">Detected topics</p>
-              <div className="mt-4 flex min-w-0 flex-wrap gap-2">{contextTopics.length ? contextTopics.slice(0, 8).map((topic) => <span key={topic} className="max-w-full break-words rounded-full border border-slate-200 px-3 py-1.5 text-sm text-slate-700">{topic}</span>) : <p className="text-sm leading-6 text-slate-500">Add weekly topics in Units or upload lecture material to personalise this shelf.</p>}</div>
+              <div className="mt-4 flex min-w-0 flex-wrap gap-2">{contextTopics.length ? contextTopics.slice(0, 8).map((topic) => <span key={topic} className="max-w-full break-words rounded-full border border-slate-200 px-3 py-1.5 text-sm text-slate-700">{topic}</span>) : <p className="text-sm leading-6 text-slate-500">Add weekly topics in your subjects or upload class material to personalise this shelf.</p>}</div>
               {!!dashboard?.recentResources?.length && <p className="mt-5 text-xs text-slate-500">Grounded by {dashboard.recentResources.length} recent upload{dashboard.recentResources.length === 1 ? '' : 's'}.</p>}
             </div>
             <div className="grid gap-x-6 py-6 lg:grid-cols-3 lg:pl-6">{recommendations.map((resource) => <ResourceCard key={resource.id} resource={resource} unit={selectedUnit} saved={savedIds.has(resource.id)} onSave={toggleSaved} />)}</div>
@@ -429,67 +517,75 @@ export function ResourcesManager() {
         )}
       </section>
 
-      <DeepResearchPanel selectedUnit={selectedUnit} />
+      {!isLearnerMode ? <DeepResearchPanel selectedUnit={selectedUnit} /> : null}
 
-      <section aria-labelledby="distribution-title" className="bg-slate-950 px-5 py-8 text-white sm:px-8">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div><div className="flex items-center gap-2 text-sm font-semibold text-teal-300"><FlaskConical size={18} /> Distribution laboratory</div><h2 id="distribution-title" className="mt-2 text-3xl font-semibold">Distribution of the day: {distribution.name}</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">{distribution.intuition}</p></div>
-          <label className="text-sm text-slate-300">Distribution<select value={distribution.id} onChange={(event) => selectDistribution(event.target.value as DistributionId)} className="ml-3 h-10 rounded-md border border-slate-600 bg-slate-900 px-3 text-white">{DISTRIBUTIONS.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-        </div>
-        <div className="mt-6 flex gap-2 overflow-x-auto pb-1">{(['density', 'cdf', 'survival', 'hazard'] as DistributionMetric[]).map((item) => <button key={item} onClick={() => setMetric(item)} className={`shrink-0 rounded-full px-3 py-2 text-xs font-semibold uppercase ${metric === item ? 'bg-teal-300 text-slate-950' : 'bg-slate-800 text-slate-300'}`}>{item === 'density' ? distribution.family === 'Discrete' ? 'PMF' : 'PDF' : item}</button>)}</div>
-        <div className="mt-5 grid gap-7 lg:grid-cols-[minmax(0,1.65fr)_minmax(270px,0.75fr)]">
-          <div><DistributionChart points={points} comparison={comparisonPoints} fixedYMax={plotYMax} discrete={distribution.family === 'Discrete' && metric === 'density'} /><div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0 space-y-1 overflow-x-auto text-xs text-teal-200"><MathFormula value={distribution.latex.density} /><div className="text-slate-300"><MathFormula value={distribution.latex.cdf} /></div></div><label className="shrink-0 text-xs text-slate-300">Compare with <select value={comparisonId} onChange={(event) => setComparisonId(event.target.value as 'None' | DistributionId)} className="ml-2 h-8 rounded-md border border-slate-600 bg-slate-900 px-2"><option>None</option>{DISTRIBUTIONS.filter((item) => item.id !== distribution.id).map((item) => <option key={item.id} value={item.id}>{item.name} defaults</option>)}</select></label></div></div>
-          <div className="space-y-5">
-            {distribution.parameters.map((parameter) => <label key={parameter.key} className="block text-sm"><span className="flex justify-between"><span>{parameter.label} (<MathFormula value={parameter.symbol} />)</span><strong>{parameters[parameter.key]}</strong></span><input type="range" min={parameter.min} max={parameter.max} step={parameter.step} value={parameters[parameter.key]} onChange={(event) => setParameters((current) => normalizeParameters(distribution, { ...current, [parameter.key]: Number(event.target.value) }))} className="mt-3 w-full accent-teal-400" /><span className="mt-1 block text-xs leading-5 text-slate-400">{parameter.description}</span></label>)}
-            <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg bg-slate-700 text-sm"><div className="bg-slate-900 p-3"><p className="text-slate-400">Mean</p><p className="mt-1 font-semibold">{summary.meanNote || compactNumber(summary.mean)}</p><MathFormula value={distribution.latex.mean} className="mt-1 block text-xs text-slate-400" /></div><div className="bg-slate-900 p-3"><p className="text-slate-400">Variance</p><p className="mt-1 font-semibold">{summary.varianceNote || compactNumber(summary.variance)}</p><MathFormula value={distribution.latex.variance} className="mt-1 block text-xs text-slate-400" /></div><div className="bg-slate-900 p-3"><p className="text-slate-400">Std. deviation</p><p className="mt-1 font-semibold">{compactNumber(summary.standardDeviation)}</p></div><div className="bg-slate-900 p-3"><p className="text-slate-400">Support</p><MathFormula value={summary.support} className="mt-1 block font-semibold" /></div></div>
-          </div>
-        </div>
-        <div className="mt-7 grid gap-4 border-t border-slate-700 pt-6 md:grid-cols-2"><div className="text-sm leading-6 text-slate-300"><p><strong className="text-white">Actuarial connection.</strong> {distribution.actuarialUse}</p><div className="mt-2 flex flex-wrap gap-2">{distribution.syllabus.map((subject) => <span key={subject} className="rounded-full bg-slate-800 px-2.5 py-1 text-xs text-teal-200">{subject}</span>)}</div></div><div className="text-sm leading-6 text-slate-300"><p><strong className="text-white">Watch for.</strong> {distribution.commonMistake}</p><p className="mt-2 text-xs text-slate-400"><strong className="text-slate-200">Related:</strong> {distribution.related}</p>{distribution.latex.moment ? <MathFormula value={distribution.latex.moment} className="mt-2 block overflow-x-auto text-xs text-teal-200" /> : null}</div></div>
-        <div className="mt-6 grid gap-px overflow-hidden rounded-lg bg-slate-700 lg:grid-cols-3">
-          <div className="bg-slate-900 p-5">
-            <p className="text-sm font-semibold">Interval probability</p>
-            <div className="mt-3 flex items-center gap-2"><input type="number" value={probabilityBounds.lower} onChange={(event) => setProbabilityBounds((current) => ({ ...current, lower: Number(event.target.value) }))} className="h-10 min-w-0 flex-1 rounded-md border border-slate-600 bg-slate-950 px-2" aria-label="Lower probability bound" /><span>to</span><input type="number" value={probabilityBounds.upper} onChange={(event) => setProbabilityBounds((current) => ({ ...current, upper: Number(event.target.value) }))} className="h-10 min-w-0 flex-1 rounded-md border border-slate-600 bg-slate-950 px-2" aria-label="Upper probability bound" /></div>
-            <p className="mt-3 text-xl font-semibold text-teal-300">P = {compactNumber(probability)}</p>
-          </div>
-          <div className="bg-slate-900 p-5">
-            <p className="text-sm font-semibold">Quantile calculator</p>
-            <label className="mt-3 block text-xs text-slate-400">Cumulative probability<input type="number" min="0.001" max="0.999" step="0.01" value={quantileProbability} onChange={(event) => setQuantileProbability(Math.min(0.999, Math.max(0.001, Number(event.target.value))))} className="mt-1 h-10 w-full rounded-md border border-slate-600 bg-slate-950 px-2 text-white" /></label>
-            <p className="mt-3 text-xl font-semibold text-teal-300">q = {compactNumber(quantile)}</p>
-          </div>
-          <div className="bg-slate-900 p-5">
-            <div className="flex items-center justify-between gap-3"><p className="text-sm font-semibold">Simulation check</p><button onClick={() => setSimulation(simulateDistribution(distribution.id, parameters, 500))} className="rounded-full bg-teal-300 px-3 py-1.5 text-xs font-semibold text-slate-950">Run 500</button></div>
-            <p className="mt-4 text-sm text-slate-400">Simulated mean</p><p className="mt-1 text-xl font-semibold text-teal-300">{simulatedMean === null ? '--' : compactNumber(simulatedMean)}</p><p className="mt-2 text-xs text-slate-500">Theoretical: {compactNumber(summary.mean)}</p>
-          </div>
-        </div>
-        <div className="mt-6 flex flex-wrap items-center gap-2 border-t border-slate-700 pt-5"><span className="mr-2 text-xs font-semibold uppercase text-slate-400">Previous days</span>{Array.from({ length: Math.min(4, DISTRIBUTIONS.length - 1) }, (_, offset) => { const item = DISTRIBUTIONS[(DISTRIBUTIONS.indexOf(dailyDistribution) - offset - 1 + DISTRIBUTIONS.length) % DISTRIBUTIONS.length]; return <button key={item.id} onClick={() => selectDistribution(item.id)} className="rounded-full border border-slate-600 px-3 py-1.5 text-xs text-slate-300 hover:border-teal-300">{item.name}</button> })}</div>
-      </section>
+      {!isLearnerMode ? (
+        <>
+          <section aria-labelledby="distribution-title" className="bg-slate-950 px-5 py-8 text-white sm:px-8">
+            <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+              <div><div className="flex items-center gap-2 text-sm font-semibold text-teal-300"><FlaskConical size={18} /> Distribution laboratory</div><h2 id="distribution-title" className="mt-2 text-3xl font-semibold">Distribution of the day: {distribution.name}</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">{distribution.intuition}</p></div>
+              <label className="text-sm text-slate-300">Distribution<select value={distribution.id} onChange={(event) => selectDistribution(event.target.value as DistributionId)} className="ml-3 h-10 rounded-md border border-slate-600 bg-slate-900 px-3 text-white">{DISTRIBUTIONS.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+            </div>
+            <div className="mt-6 flex gap-2 overflow-x-auto pb-1">{(['density', 'cdf', 'survival', 'hazard'] as DistributionMetric[]).map((item) => <button key={item} onClick={() => setMetric(item)} className={`shrink-0 rounded-full px-3 py-2 text-xs font-semibold uppercase ${metric === item ? 'bg-teal-300 text-slate-950' : 'bg-slate-800 text-slate-300'}`}>{item === 'density' ? distribution.family === 'Discrete' ? 'PMF' : 'PDF' : item}</button>)}</div>
+            <div className="mt-5 grid gap-7 lg:grid-cols-[minmax(0,1.65fr)_minmax(270px,0.75fr)]">
+              <div><DistributionChart points={points} comparison={comparisonPoints} fixedYMax={plotYMax} discrete={distribution.family === 'Discrete' && metric === 'density'} /><div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0 space-y-1 overflow-x-auto text-xs text-teal-200"><MathFormula value={distribution.latex.density} /><div className="text-slate-300"><MathFormula value={distribution.latex.cdf} /></div></div><label className="shrink-0 text-xs text-slate-300">Compare with <select value={comparisonId} onChange={(event) => setComparisonId(event.target.value as 'None' | DistributionId)} className="ml-2 h-8 rounded-md border border-slate-600 bg-slate-900 px-2"><option>None</option>{DISTRIBUTIONS.filter((item) => item.id !== distribution.id).map((item) => <option key={item.id} value={item.id}>{item.name} defaults</option>)}</select></label></div></div>
+              <div className="space-y-5">
+                {distribution.parameters.map((parameter) => <label key={parameter.key} className="block text-sm"><span className="flex justify-between"><span>{parameter.label} (<MathFormula value={parameter.symbol} />)</span><strong>{parameters[parameter.key]}</strong></span><input type="range" min={parameter.min} max={parameter.max} step={parameter.step} value={parameters[parameter.key]} onChange={(event) => setParameters((current) => normalizeParameters(distribution, { ...current, [parameter.key]: Number(event.target.value) }))} className="mt-3 w-full accent-teal-400" /><span className="mt-1 block text-xs leading-5 text-slate-400">{parameter.description}</span></label>)}
+                <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg bg-slate-700 text-sm"><div className="bg-slate-900 p-3"><p className="text-slate-400">Mean</p><p className="mt-1 font-semibold">{summary.meanNote || compactNumber(summary.mean)}</p><MathFormula value={distribution.latex.mean} className="mt-1 block text-xs text-slate-400" /></div><div className="bg-slate-900 p-3"><p className="text-slate-400">Variance</p><p className="mt-1 font-semibold">{summary.varianceNote || compactNumber(summary.variance)}</p><MathFormula value={distribution.latex.variance} className="mt-1 block text-xs text-slate-400" /></div><div className="bg-slate-900 p-3"><p className="text-slate-400">Std. deviation</p><p className="mt-1 font-semibold">{compactNumber(summary.standardDeviation)}</p></div><div className="bg-slate-900 p-3"><p className="text-slate-400">Support</p><MathFormula value={summary.support} className="mt-1 block font-semibold" /></div></div>
+              </div>
+            </div>
+            <div className="mt-7 grid gap-4 border-t border-slate-700 pt-6 md:grid-cols-2"><div className="text-sm leading-6 text-slate-300"><p><strong className="text-white">Actuarial connection.</strong> {distribution.actuarialUse}</p><div className="mt-2 flex flex-wrap gap-2">{distribution.syllabus.map((subject) => <span key={subject} className="rounded-full bg-slate-800 px-2.5 py-1 text-xs text-teal-200">{subject}</span>)}</div></div><div className="text-sm leading-6 text-slate-300"><p><strong className="text-white">Watch for.</strong> {distribution.commonMistake}</p><p className="mt-2 text-xs text-slate-400"><strong className="text-slate-200">Related:</strong> {distribution.related}</p>{distribution.latex.moment ? <MathFormula value={distribution.latex.moment} className="mt-2 block overflow-x-auto text-xs text-teal-200" /> : null}</div></div>
+            <div className="mt-6 grid gap-px overflow-hidden rounded-lg bg-slate-700 lg:grid-cols-3">
+              <div className="bg-slate-900 p-5">
+                <p className="text-sm font-semibold">Interval probability</p>
+                <div className="mt-3 flex items-center gap-2"><input type="number" value={probabilityBounds.lower} onChange={(event) => setProbabilityBounds((current) => ({ ...current, lower: Number(event.target.value) }))} className="h-10 min-w-0 flex-1 rounded-md border border-slate-600 bg-slate-950 px-2" aria-label="Lower probability bound" /><span>to</span><input type="number" value={probabilityBounds.upper} onChange={(event) => setProbabilityBounds((current) => ({ ...current, upper: Number(event.target.value) }))} className="h-10 min-w-0 flex-1 rounded-md border border-slate-600 bg-slate-950 px-2" aria-label="Upper probability bound" /></div>
+                <p className="mt-3 text-xl font-semibold text-teal-300">P = {compactNumber(probability)}</p>
+              </div>
+              <div className="bg-slate-900 p-5">
+                <p className="text-sm font-semibold">Quantile calculator</p>
+                <label className="mt-3 block text-xs text-slate-400">Cumulative probability<input type="number" min="0.001" max="0.999" step="0.01" value={quantileProbability} onChange={(event) => setQuantileProbability(Math.min(0.999, Math.max(0.001, Number(event.target.value))))} className="mt-1 h-10 w-full rounded-md border border-slate-600 bg-slate-950 px-2 text-white" /></label>
+                <p className="mt-3 text-xl font-semibold text-teal-300">q = {compactNumber(quantile)}</p>
+              </div>
+              <div className="bg-slate-900 p-5">
+                <div className="flex items-center justify-between gap-3"><p className="text-sm font-semibold">Simulation check</p><button onClick={() => setSimulation(simulateDistribution(distribution.id, parameters, 500))} className="rounded-full bg-teal-300 px-3 py-1.5 text-xs font-semibold text-slate-950">Run 500</button></div>
+                <p className="mt-4 text-sm text-slate-400">Simulated mean</p><p className="mt-1 text-xl font-semibold text-teal-300">{simulatedMean === null ? '--' : compactNumber(simulatedMean)}</p><p className="mt-2 text-xs text-slate-500">Theoretical: {compactNumber(summary.mean)}</p>
+              </div>
+            </div>
+            <div className="mt-6 flex flex-wrap items-center gap-2 border-t border-slate-700 pt-5"><span className="mr-2 text-xs font-semibold uppercase text-slate-400">Previous days</span>{Array.from({ length: Math.min(4, DISTRIBUTIONS.length - 1) }, (_, offset) => { const item = DISTRIBUTIONS[(DISTRIBUTIONS.indexOf(dailyDistribution) - offset - 1 + DISTRIBUTIONS.length) % DISTRIBUTIONS.length]; return <button key={item.id} onClick={() => selectDistribution(item.id)} className="rounded-full border border-slate-600 px-3 py-1.5 text-xs text-slate-300 hover:border-teal-300">{item.name}</button> })}</div>
+          </section>
 
-      <StochasticProcessesLab />
+          <StochasticProcessesLab />
+        </>
+      ) : null}
 
       <section aria-labelledby="library-title">
-        <div className="mb-6 flex items-center gap-3"><Library className="text-teal-700" /><div><p className="text-sm font-semibold text-teal-700">Research and deep learning</p><h2 id="library-title" className="text-2xl font-semibold text-slate-950">Actuarial library</h2></div></div>
+        <div className="mb-6 flex items-center gap-3"><Library className="text-teal-700" /><div><p className="text-sm font-semibold text-teal-700">Research and deep learning</p><h2 id="library-title" className="text-2xl font-semibold text-slate-950">{isLearnerMode ? 'Study library' : 'Actuarial library'}</h2></div></div>
         <div className="flex flex-col gap-3 border-y border-slate-200 py-4 xl:flex-row xl:items-center xl:justify-between">
-          <label className="relative block lg:w-96"><Search className="absolute left-3 top-3 text-slate-400" size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search MLE, Pareto, CS2 survival..." className="h-11 w-full rounded-md border border-slate-300 pl-10 pr-3 text-sm outline-none focus:border-teal-700" /></label>
-          <div className="flex gap-2 overflow-x-auto pb-1"><select value={professionalSubject} onChange={(event) => setProfessionalSubject(event.target.value)} className="h-10 shrink-0 rounded-md border border-slate-300 bg-white px-2 text-sm"><option>All</option>{['CS1', 'CS2', 'CM1', 'CM2', 'Actuary Program'].map((subject) => <option key={subject}>{subject}</option>)}</select><select value={difficulty} onChange={(event) => setDifficulty(event.target.value)} className="h-10 shrink-0 rounded-md border border-slate-300 bg-white px-2 text-sm"><option>All</option>{['Introductory', 'University', 'Professional', 'Advanced'].map((level) => <option key={level}>{level}</option>)}</select>{resourceKinds.map((item) => <button key={item} onClick={() => setKind(item)} className={`shrink-0 rounded-full px-3 py-2 text-sm font-medium ${kind === item ? 'bg-slate-950 text-white' : 'bg-slate-100 text-slate-700'}`}>{item}</button>)}</div>
+          <label className="relative block lg:w-96"><Search className="absolute left-3 top-3 text-slate-400" size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={isLearnerMode ? 'Search essays, revision, data, IA planning...' : 'Search MLE, Pareto, CS2 survival...'} className="h-11 w-full rounded-md border border-slate-300 pl-10 pr-3 text-sm outline-none focus:border-teal-700" /></label>
+          <div className="flex gap-2 overflow-x-auto pb-1"><select value={professionalSubject} onChange={(event) => setProfessionalSubject(event.target.value)} className="h-10 shrink-0 rounded-md border border-slate-300 bg-white px-2 text-sm"><option>All</option>{(isLearnerMode ? ['Mathematics', 'Biology', 'Economics', 'English', 'Science'] : ['CS1', 'CS2', 'CM1', 'CM2', 'Actuary Program']).map((subject) => <option key={subject}>{subject}</option>)}</select><select value={difficulty} onChange={(event) => setDifficulty(event.target.value)} className="h-10 shrink-0 rounded-md border border-slate-300 bg-white px-2 text-sm"><option>All</option>{['Introductory', 'University', 'Professional', 'Advanced'].map((level) => <option key={level}>{level}</option>)}</select>{resourceKinds.map((item) => <button key={item} onClick={() => setKind(item)} className={`shrink-0 rounded-full px-3 py-2 text-sm font-medium ${kind === item ? 'bg-slate-950 text-white' : 'bg-slate-100 text-slate-700'}`}>{item}</button>)}</div>
         </div>
         <div className="grid gap-x-10 py-6 md:grid-cols-2">{filteredResources.map((resource) => <ResourceCard key={resource.id} resource={resource} unit={selectedUnit} saved={savedIds.has(resource.id)} onSave={toggleSaved} />)}</div>
         {!filteredResources.length && <p className="border-b border-slate-200 py-10 text-center text-slate-500">No curated resources match those filters.</p>}
       </section>
 
+      {!isLearnerMode ? (
       <section aria-labelledby="professional-title">
         <div className="mb-6 flex items-center gap-3"><GraduationCap className="text-teal-700" /><div><p className="text-sm font-semibold text-teal-700">University to profession</p><h2 id="professional-title" className="text-2xl font-semibold text-slate-950">Professional syllabus map</h2></div></div>
         <div className="grid border-y border-slate-200 md:grid-cols-2">{PROFESSIONAL_SUBJECTS.map((subject, index) => <a key={subject.id} href={subject.sourceUrl} target="_blank" rel="noreferrer" className={`group p-5 hover:bg-slate-50 ${index % 2 === 0 ? 'md:border-r' : ''} ${index < PROFESSIONAL_SUBJECTS.length - 2 ? 'border-b' : ''} border-slate-200`}><p className="text-xs font-semibold uppercase text-teal-700">{subject.institute} / {subject.stage}</p><div className="mt-2 flex items-start justify-between gap-4"><h3 className="font-semibold text-slate-950">{subject.title}</h3><ArrowUpRight className="shrink-0 text-slate-400 group-hover:text-teal-700" size={17} /></div><p className="mt-3 text-sm leading-6 text-slate-600">{subject.themes.join(' / ')}</p></a>)}</div>
         <p className="mt-3 text-xs leading-5 text-slate-500">Indicative topic navigation only. Actuaries Institute Australia and IFoA are shown separately; official syllabi and recognition decisions remain authoritative.</p>
       </section>
+      ) : null}
 
+      {!isLearnerMode ? (
       <section aria-labelledby="exemptions-title">
         <div className="mb-6 flex items-center gap-3"><Calculator className="text-teal-700" /><div><p className="text-sm font-semibold text-teal-700">Professional progress</p><h2 id="exemptions-title" className="text-2xl font-semibold text-slate-950">Monash actuarial exemptions</h2></div></div>
         <ExemptionPlanner />
       </section>
+      ) : null}
 
       <section aria-labelledby="saved-title" className="border-t border-slate-200 pt-8">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-semibold text-teal-700">Your library</p><h2 id="saved-title" className="text-2xl font-semibold text-slate-950">Saved resources</h2></div>{!user && <Button variant="outline" onClick={() => requireAuth('Sign in to keep your actuarial library across devices.', '/resources')}>Sign in to sync</Button>}</div>
-        {savedIds.size ? <div className="mt-5 grid gap-x-10 md:grid-cols-2">{ACTUARIAL_RESOURCES.filter((resource) => savedIds.has(resource.id)).map((resource) => <ResourceCard key={resource.id} resource={resource} saved onSave={toggleSaved} />)}</div> : <div className="mt-5 flex items-center gap-4 border-y border-slate-200 py-7 text-slate-500"><Bookmark size={22} /><p className="text-sm">Bookmark a Deep Dive, book, paper or professional source to build your library.</p></div>}
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-semibold text-teal-700">Your library</p><h2 id="saved-title" className="text-2xl font-semibold text-slate-950">Saved resources</h2></div>{!user && <Button variant="outline" onClick={() => requireAuth(isLearnerMode ? 'Sign in to keep your study library across devices.' : 'Sign in to keep your actuarial library across devices.', '/resources')}>Sign in to sync</Button>}</div>
+        {savedIds.size ? <div className="mt-5 grid gap-x-10 md:grid-cols-2">{resourceCatalog.filter((resource) => savedIds.has(resource.id)).map((resource) => <ResourceCard key={resource.id} resource={resource} saved onSave={toggleSaved} />)}</div> : <div className="mt-5 flex items-center gap-4 border-y border-slate-200 py-7 text-slate-500"><Bookmark size={22} /><p className="text-sm">{isLearnerMode ? 'Bookmark revision, writing, or IA support tools to build your study library.' : 'Bookmark a Deep Dive, book, paper or professional source to build your library.'}</p></div>}
       </section>
 
       <aside className="grid gap-4 border-t border-slate-200 pt-8 sm:grid-cols-3">

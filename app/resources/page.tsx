@@ -1,5 +1,5 @@
-import { ResourcesManager } from '@/components/resources-manager'
+import { ResourcesPageContent } from '@/components/resources-page-content'
 
 export default function ResourcesPage() {
-  return <ResourcesManager />
+  return <ResourcesPageContent />
 }

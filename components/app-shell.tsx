@@ -33,7 +33,6 @@ const learnerNav = [
   { href: '/school', label: 'School', icon: School },
   { href: '/study', label: 'MuksFocus', icon: Timer },
   { href: '/planner', label: 'Planner', icon: CalendarClock },
-  { href: '/news', label: 'News', icon: Sparkles },
   { href: '/universities', label: 'Universities', icon: GraduationCap },
   { href: '/resources', label: 'Resources', icon: BookOpen },
   { href: '/settings', label: 'Personalisation', icon: Settings }
