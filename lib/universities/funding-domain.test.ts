@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { DEFAULT_LEARNER_PROFILE } from '../learner/store.ts'
 import { createFundingApplication, createManualFundingApplication, fundingPlanGap, fundingPlanTotals, getFundingEligibility, reconcileFundingDeadline, searchFundingOpportunities, selectProgrammeCost } from './funding-domain.ts'
-import { FUNDING_OPPORTUNITIES } from './funding-data.ts'
+import { FUNDING_OPPORTUNITIES, PROGRAMME_COSTS } from './funding-data.ts'
 import type { FundingApplication, FundingOpportunity, ProgrammeCost } from './types.ts'
 
 const opportunity = (overrides: Partial<FundingOpportunity>): FundingOpportunity => ({
@@ -24,8 +24,8 @@ const guardedHecs = opportunity({ ...hecs, requiredContext: ['ELIGIBLE_COURSE_OR
 assert.equal(getFundingEligibility(guardedHecs, { learnerProfile: australianProfile, destinationCountry: 'Australia', applicantType: 'DOMESTIC', studyLevel: 'BACHELOR' }).state, 'MISSING_INFORMATION')
 
 const costs: ProgrammeCost[] = [
-  { id: 'domestic', institutionId: 'monash', academicYear: 2027, applicantType: 'DOMESTIC', placeType: 'CSP', feeType: 'TUITION_ANNUAL', currency: 'AUD', amountBasis: 'Annual student contribution', sourceUrl: 'https://www.studyassist.gov.au/', lastCheckedAt: '2026-09-09', confidenceStatus: 'VERIFIED_OFFICIAL' },
-  { id: 'international', institutionId: 'monash', academicYear: 2027, applicantType: 'INTERNATIONAL', feeType: 'TUITION_ANNUAL', amount: 48000, currency: 'AUD', amountBasis: 'Annual', sourceUrl: 'https://www.monash.edu/study/fees-scholarships/fees', lastCheckedAt: '2026-09-09', confidenceStatus: 'VERIFIED_OFFICIAL' }
+  { id: 'domestic', institutionId: 'monash', academicYear: 2027, applicantType: 'DOMESTIC', placeType: 'CSP', feeType: 'TUITION_ANNUAL', precision: 'OFFICIAL_CALCULATOR', currency: 'AUD', amountBasis: 'Annual student contribution', sourceUrl: 'https://www.studyassist.gov.au/', lastCheckedAt: '2026-09-09', confidenceStatus: 'VERIFIED_OFFICIAL' },
+  { id: 'international', institutionId: 'monash', academicYear: 2027, applicantType: 'INTERNATIONAL', feeType: 'TUITION_ANNUAL', precision: 'EXACT_PROGRAMME', amount: 48000, currency: 'AUD', amountBasis: 'Annual', sourceUrl: 'https://www.monash.edu/study/fees-scholarships/fees', lastCheckedAt: '2026-09-09', confidenceStatus: 'VERIFIED_OFFICIAL' }
 ]
 assert.equal(selectProgrammeCost(costs, { institutionId: 'monash', academicYear: 2027, applicantType: 'INTERNATIONAL' })?.id, 'international')
 assert.equal(selectProgrammeCost(costs, { institutionId: 'monash', academicYear: 2027, applicantType: 'DOMESTIC', placeType: 'CSP' })?.id, 'domestic')
@@ -74,9 +74,14 @@ for (const [query, expectedId] of [
 }
 
 assert.ok(FUNDING_OPPORTUNITIES.every((item) => item.officialUrl.startsWith('https://') && item.applicationUrl.startsWith('https://')), 'Every funding opportunity should retain exact HTTPS destinations')
+assert.ok(FUNDING_OPPORTUNITIES.length >= 89, 'Build 4.6 should retain substantial named funding depth')
+assert.equal(new Set(FUNDING_OPPORTUNITIES.map((item) => item.id)).size, FUNDING_OPPORTUNITIES.length, 'Funding opportunity IDs must remain unique')
 assert.ok(FUNDING_OPPORTUNITIES.filter((item) => item.applicationDeadline).every((item) => item.fundingCycle && item.lastVerifiedAt), 'Dated funding must retain its cycle and verification date')
 assert.ok(FUNDING_OPPORTUNITIES.every((item) => item.cycleStatus), 'Every funding opportunity should expose an explicit lifecycle status')
 assert.ok(FUNDING_OPPORTUNITIES.filter((item) => item.cycleStatus === 'CLOSED').every((item) => !item.active), 'Closed funding cycles must not be presented as active')
 assert.ok(FUNDING_OPPORTUNITIES.filter((item) => item.cycleStatus === 'OPEN' || item.cycleStatus === 'UPCOMING').every((item) => item.active), 'Open and upcoming funding cycles should remain discoverable')
+assert.ok(PROGRAMME_COSTS.length >= 90, 'Build 4.6 should retain broad official tuition coverage')
+assert.equal(new Set(PROGRAMME_COSTS.map((item) => item.id)).size, PROGRAMME_COSTS.length, 'Programme cost IDs must remain unique')
+assert.ok(PROGRAMME_COSTS.every((item) => ['EXACT_PROGRAMME', 'FACULTY_LEVEL', 'STUDY_AREA_RANGE', 'UNIVERSITY_RANGE', 'OFFICIAL_CALCULATOR'].includes(item.precision)), 'Every tuition record should state its precision')
 
 console.log('Funding domain tests passed')

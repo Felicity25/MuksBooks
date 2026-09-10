@@ -12,6 +12,7 @@ assert.ok(queue.every((item) => ['APPROVE', 'REJECT', 'MERGE', 'HOLD'].includes(
 assert.ok(queue.every((item, index) => index === 0 || queue[index - 1].priorityScore <= item.priorityScore), 'Review queue should be sorted by deterministic priority')
 assert.ok(queue.filter((item) => item.duplicateSuspicion === 'EXACT').every((item) => item.reviewRecommendation === 'MERGE'), 'Exact duplicates should be prioritised for merge')
 assert.ok(queue.filter((item) => item.sourceKind === 'OFFICIAL_DISCOVERY').every((item) => item.reviewRecommendation === 'APPROVE'), 'Clear official source discoveries should be prioritised for approval')
+assert.ok(queue.filter((item) => item.sourceKind === 'OFFICIAL_INDEX').length >= 400, 'Build 4.6 official-index programme candidates should enter the review queue')
 assert.equal(diagnostics.candidates, queue.length)
 assert.ok(diagnostics.programmes > 0)
 

@@ -67,6 +67,7 @@ type CostSeed = Pick<ProgrammeCost, 'id' | 'institutionId' | 'academicYear' | 'a
 function officialTuitionFallback(seed: CostSeed): ProgrammeCost {
   return {
     feeType: 'TUITION_ANNUAL',
+    precision: 'OFFICIAL_CALCULATOR',
     amountBasis: 'Official institution-level fee schedule or calculator; programme-specific amount not indexed',
     lastCheckedAt: CHECKED_AT,
     lastVerifiedAt: CHECKED_AT,

@@ -1,4 +1,5 @@
 import type { Programme } from './types.ts'
+import { SCALE_CATALOGUE_DEPTH } from './catalogue-scale-data.ts'
 
 const CHECKED_AT = '2026-09-10'
 
@@ -419,5 +420,6 @@ const ADDITIONAL_PRIORITY_DEPTH: InstitutionDepthSeed[] = [
 
 export const REVIEWED_CATALOGUE_DEPTH: Programme[] = [
   ...REVIEWED_CORE_DEPTH,
-  ...ADDITIONAL_PRIORITY_DEPTH.flatMap(reviewedInstitutionDepth)
+  ...ADDITIONAL_PRIORITY_DEPTH.flatMap(reviewedInstitutionDepth),
+  ...SCALE_CATALOGUE_DEPTH
 ]

@@ -404,6 +404,7 @@ export type FundingEligibilityState = 'STRONG_POTENTIAL_MATCH' | 'POTENTIAL_MATC
 export type FundingApplicationStatus = 'INTERESTED' | 'SAVED' | 'PREPARING' | 'READY' | 'SUBMITTED' | 'AWAITING_DECISION' | 'INTERVIEW' | 'AWARDED' | 'PARTIALLY_AWARDED' | 'UNSUCCESSFUL' | 'ACCEPTED' | 'DECLINED' | 'WITHDRAWN'
 export type FundingDeadlineType = 'APPLICATION_OPENS' | 'APPLICATION_DEADLINE' | 'DOCUMENT_DEADLINE' | 'REFERENCE_DEADLINE' | 'INTERVIEW_DATE' | 'RESULT_DATE' | 'ACCEPTANCE_DEADLINE' | 'RENEWAL_DEADLINE'
 export type ProgrammeFeeType = 'TUITION_ANNUAL' | 'TUITION_TOTAL' | 'PER_CREDIT' | 'PER_UNIT' | 'APPLICATION_FEE' | 'STUDENT_SERVICES_FEE' | 'INTERNATIONAL_SURCHARGE' | 'LAB_PROGRAMME_FEE'
+export type ProgrammeCostPrecision = 'EXACT_PROGRAMME' | 'FACULTY_LEVEL' | 'STUDY_AREA_RANGE' | 'UNIVERSITY_RANGE' | 'OFFICIAL_CALCULATOR'
 
 export interface FundingAcademicRequirement {
   curriculum?: LearnerCurriculumId
@@ -513,6 +514,7 @@ export interface ProgrammeCost {
   applicantType: ApplicantType
   placeType?: 'CSP' | 'FULL_FEE' | 'OTHER'
   feeType: ProgrammeFeeType
+  precision: ProgrammeCostPrecision
   amount?: number
   currency: string
   amountBasis: string

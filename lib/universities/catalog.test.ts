@@ -1,5 +1,12 @@
 import assert from 'node:assert/strict'
 import { getCountryCatalogue, getInstitution, getInstitutionProgrammes, getProgramme, searchUniversityCatalogue } from './catalog.ts'
+import { SCALE_CATALOGUE_DEPTH } from './catalogue-scale-data.ts'
+
+assert.ok(SCALE_CATALOGUE_DEPTH.length >= 400, 'Build 4.6 should retain substantial official-index programme depth')
+assert.equal(new Set(SCALE_CATALOGUE_DEPTH.map((programme) => programme.id)).size, SCALE_CATALOGUE_DEPTH.length, 'Build 4.6 programme candidate IDs must remain unique')
+assert.ok(SCALE_CATALOGUE_DEPTH.every((programme) => programme.confidenceStatus === 'NEEDS_REVIEW'), 'Official-index candidates must remain review-gated until individual programme evidence is approved')
+assert.ok(SCALE_CATALOGUE_DEPTH.every((programme) => programme.sourceUrl.startsWith('https://')), 'Build 4.6 programme candidates must retain official HTTPS sources')
+assert.equal(SCALE_CATALOGUE_DEPTH.find((programme) => programme.name === 'Bachelor of Arts and Bachelor of Laws (Honours)')?.degreeType, 'Double degree', 'Build 4.6 must preserve Australian double-degree identity')
 
 assert.equal(getInstitution('melbourne')?.id, 'unimelb', 'Common Melbourne ID should resolve to the canonical institution')
 assert.equal(getInstitution('toronto')?.id, 'utoronto', 'Common Toronto ID should resolve to the canonical institution')

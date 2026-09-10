@@ -1,6 +1,7 @@
 import prospectusCandidates from '../../data/university-prospectus-candidates.json' with { type: 'json' }
 import sourceDiscovery from '../../data/university-source-discovery.json' with { type: 'json' }
-import { flattenSearchRecords, normalizeUniversityQuery } from './catalog.ts'
+import { flattenSearchRecords, getInstitution, normalizeUniversityQuery } from './catalog.ts'
+import { SCALE_CATALOGUE_DEPTH } from './catalogue-scale-data.ts'
 
 export type ReviewDecisionAction = 'APPROVE' | 'REJECT' | 'MERGE'
 export type ReviewRecommendation = ReviewDecisionAction | 'HOLD'
@@ -20,7 +21,7 @@ export interface UniversityReviewItem {
   confidenceStatus: 'NEEDS_REVIEW'
   duplicateSuspicion: 'NONE' | 'POSSIBLE' | 'EXACT'
   canonicalMatches: Array<{ id: string; name: string }>
-  sourceKind: 'PROSPECTUS' | 'OFFICIAL_DISCOVERY'
+  sourceKind: 'PROSPECTUS' | 'OFFICIAL_DISCOVERY' | 'OFFICIAL_INDEX'
   prospectusYear?: string
   discoveredAt?: string
   reviewRecommendation: ReviewRecommendation
@@ -52,6 +53,7 @@ type ProspectusInstitution = {
 const OBVIOUS_NOISE = /^(admissions?|applications?|contents?|contact|fees?|funding|programmes?|requirements?|undergraduate)$/i
 const CLEAR_PROGRAMME = /^(bachelor|bsc|ba |bcom|beng|bed|btech|diploma|certificate|llb|mbchb|mbbs)/i
 const CLEAR_FUNDING_TYPES = new Set(['OFFICIAL_FUNDING_SOURCE', 'OFFICIAL_SCHOLARSHIP_SOURCE', 'OFFICIAL_FEE_SOURCE'])
+const COUNTRY_CODES: Record<string, string> = { 'South Africa': 'ZA', Australia: 'AU', 'United Kingdom': 'GB', Canada: 'CA', 'United States': 'US' }
 
 function recommendation(candidateType: string, value: string, duplicateSuspicion: UniversityReviewItem['duplicateSuspicion']): Pick<UniversityReviewItem, 'reviewRecommendation' | 'priorityScore'> {
   if (duplicateSuspicion === 'EXACT') return { reviewRecommendation: 'MERGE', priorityScore: 0 }
@@ -65,10 +67,11 @@ function prospectusYear(sourceUrl: string) {
   return sourceUrl.match(/(?:20)\d{2}/)?.[0]
 }
 
-function canonicalMatches(institutionId: string, value: string) {
+function canonicalMatches(institutionId: string, value: string, excludedProgrammeId?: string) {
   const normalizedValue = normalizeUniversityQuery(value)
   return flattenSearchRecords()
     .filter((record) => record.institution.id === institutionId)
+    .filter((record) => record.programme.id !== excludedProgrammeId)
     .filter((record) => {
       const canonical = normalizeUniversityQuery(record.programme.name)
       return canonical === normalizedValue || canonical.includes(normalizedValue) || normalizedValue.includes(canonical)
@@ -139,6 +142,32 @@ export function buildUniversityReviewQueue() {
         discoveredAt: sourceDiscovery.generatedAt,
         ...recommendation(source.key === 'feesUrl' ? 'OFFICIAL_FEE_SOURCE' : source.key === 'scholarshipUrl' ? 'OFFICIAL_SCHOLARSHIP_SOURCE' : 'OFFICIAL_FUNDING_SOURCE', source.label, 'NONE')
       })
+    })
+  }
+  for (const programme of SCALE_CATALOGUE_DEPTH) {
+    const institution = getInstitution(programme.institutionId)
+    const matches = canonicalMatches(programme.institutionId, programme.name, programme.id)
+    const exact = matches.some((match) => normalizeUniversityQuery(match.name) === normalizeUniversityQuery(programme.name))
+    const duplicateSuspicion = exact ? 'EXACT' : matches.length ? 'POSSIBLE' : 'NONE'
+    queue.push({
+      id: `official-index:${encodeURIComponent(programme.sourceUrl)}:${programme.id}`,
+      institutionId: programme.institutionId,
+      institutionName: institution?.name ?? programme.institutionId,
+      countryCode: COUNTRY_CODES[programme.country ?? ''] ?? '',
+      sourceUrl: programme.sourceUrl,
+      sourceFingerprint: programme.sourceUrl,
+      candidateType: 'PROGRAMME',
+      candidateValue: programme.name,
+      faculty: programme.faculty,
+      pageNumber: 0,
+      evidence: `Official undergraduate programme index lists "${programme.name}". Individual programme-page verification remains pending.`,
+      confidenceStatus: 'NEEDS_REVIEW',
+      duplicateSuspicion,
+      canonicalMatches: matches,
+      sourceKind: 'OFFICIAL_INDEX',
+      prospectusYear: programme.sourceAcademicYear,
+      discoveredAt: programme.lastCheckedAt,
+      ...recommendation('PROGRAMME', programme.name, duplicateSuspicion)
     })
   }
   return queue.sort((left, right) => left.priorityScore - right.priorityScore || left.institutionName.localeCompare(right.institutionName) || left.candidateValue.localeCompare(right.candidateValue))
