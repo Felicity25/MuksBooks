@@ -1,6 +1,17 @@
 export type LearnerLevel = 'HL' | 'SL'
 export type LearnerProjectType = 'IA' | 'EE' | 'TOK' | 'CAS' | 'Mock' | 'Exam' | 'Oral'
 export type LearnerCurriculumId = 'IB' | 'IB_MYP' | 'VCE' | 'HSC' | 'QCE' | 'A_LEVEL' | 'GCSE' | 'IGCSE' | 'AP' | 'NSC' | 'IEB' | 'CUSTOM'
+export type LearnerSubjectProvenance = 'CATALOGUE' | 'CUSTOM'
+
+export interface ConfirmedSubjectTopic {
+  id: string
+  title: string
+  officialTopicId?: string
+  sourceDocumentId: string
+  sourceFileName: string
+  confirmedAt: string
+  provenance: 'LEARNER_UPLOAD'
+}
 
 export interface SchoolProfile {
   name: string
@@ -11,6 +22,11 @@ export interface SchoolProfile {
 export interface LearnerSubject {
   id: string
   name: string
+  provenance?: LearnerSubjectProvenance
+  curriculumId?: LearnerCurriculumId
+  levelId?: string
+  description?: string
+  active?: boolean
   level?: LearnerLevel | string
   curriculumSubjectCode?: string
   teacher?: string
@@ -18,6 +34,7 @@ export interface LearnerSubject {
   predictedGrade?: string
   currentGrade?: string
   currentTopics?: string[]
+  confirmedTopics?: ConfirmedSubjectTopic[]
   notes?: string
 }
 
@@ -34,6 +51,7 @@ export interface LearnerAssessment {
   id: string
   title: string
   subject: string
+  subjectId?: string
   type: string
   dueDate: string
   dueTime?: string
@@ -136,6 +154,10 @@ export interface LearnerProfile {
 }
 
 export const LEARNER_STORAGE_KEY = 'muksbooks:learner-profile:v1'
+
+function learnerStorageKey(userId?: string | null) {
+  return userId ? `${LEARNER_STORAGE_KEY}:${userId}` : LEARNER_STORAGE_KEY
+}
 
 export const DEFAULT_LEARNER_PROFILE: LearnerProfile = {
   preferredName: '',
@@ -279,18 +301,44 @@ export function normalizeLearnerProfile(input: unknown): LearnerProfile {
     },
     learningPreferences: Array.isArray(source.learningPreferences) ? source.learningPreferences.map((item) => String(item)).filter(Boolean) : [],
     onboardingCompleted: Boolean(source.onboardingCompleted),
-    subjects: Array.isArray(source.subjects) ? source.subjects.map((subject) => ({
-      id: String(subject?.id || Math.random().toString(36).slice(2)),
-      name: String(subject?.name || 'New subject'),
-      level: subject?.level ? String(subject.level) : 'Standard',
-      curriculumSubjectCode: subject?.curriculumSubjectCode ? String(subject.curriculumSubjectCode) : '',
-      teacher: subject?.teacher ? String(subject.teacher) : '',
-      targetGrade: subject?.targetGrade ? String(subject.targetGrade) : '',
-      predictedGrade: subject?.predictedGrade ? String(subject.predictedGrade) : '',
-      currentGrade: subject?.currentGrade ? String(subject.currentGrade) : '',
-      currentTopics: Array.isArray(subject?.currentTopics) ? subject.currentTopics.map((topic) => String(topic)).filter(Boolean) : [],
-      notes: subject?.notes ? String(subject.notes) : ''
-    })) : [],
+    subjects: Array.isArray(source.subjects) ? source.subjects.map((subject) => {
+      const record = subject && typeof subject === 'object' ? subject as Partial<LearnerSubject> : {}
+      const curriculumSubjectCode = record.curriculumSubjectCode ? String(record.curriculumSubjectCode) : ''
+      const curriculumId = typeof record.curriculumId === 'string' && LEARNER_CURRICULUM_OPTIONS.some((option) => option.value === record.curriculumId)
+        ? record.curriculumId
+        : source.curriculum && LEARNER_CURRICULUM_OPTIONS.some((option) => option.value === source.curriculum)
+          ? source.curriculum
+          : DEFAULT_LEARNER_PROFILE.curriculum
+      return {
+        id: String(record.id || Math.random().toString(36).slice(2)),
+        name: String(record.name || 'New subject'),
+        provenance: record.provenance === 'CUSTOM' || (!record.provenance && !curriculumSubjectCode) ? 'CUSTOM' : 'CATALOGUE',
+        curriculumId,
+        levelId: record.levelId ? String(record.levelId) : '',
+        description: record.description ? String(record.description) : '',
+        active: record.active !== false,
+        level: record.level ? String(record.level) : 'Standard',
+        curriculumSubjectCode,
+        teacher: record.teacher ? String(record.teacher) : '',
+        targetGrade: record.targetGrade ? String(record.targetGrade) : '',
+        predictedGrade: record.predictedGrade ? String(record.predictedGrade) : '',
+        currentGrade: record.currentGrade ? String(record.currentGrade) : '',
+        currentTopics: Array.isArray(record.currentTopics) ? record.currentTopics.map((topic) => String(topic)).filter(Boolean) : [],
+        confirmedTopics: Array.isArray(record.confirmedTopics) ? record.confirmedTopics.flatMap((topic) => {
+          if (!topic || typeof topic !== 'object') return []
+          return [{
+            id: String(topic.id || Math.random().toString(36).slice(2)),
+            title: String(topic.title || '').trim(),
+            officialTopicId: topic.officialTopicId ? String(topic.officialTopicId) : undefined,
+            sourceDocumentId: String(topic.sourceDocumentId || ''),
+            sourceFileName: String(topic.sourceFileName || ''),
+            confirmedAt: String(topic.confirmedAt || new Date().toISOString()),
+            provenance: 'LEARNER_UPLOAD' as const
+          }].filter((item) => item.title && item.sourceDocumentId)
+        }) : [],
+        notes: record.notes ? String(record.notes) : ''
+      }
+    }) : [],
     timetable: Array.isArray(source.timetable) ? source.timetable.map((entry) => ({
       id: String(entry?.id || Math.random().toString(36).slice(2)),
       day: String(entry?.day || 'Monday'),
@@ -303,6 +351,7 @@ export function normalizeLearnerProfile(input: unknown): LearnerProfile {
       id: String(assessment?.id || Math.random().toString(36).slice(2)),
       title: String(assessment?.title || 'Assessment'),
       subject: String(assessment?.subject || 'Subject'),
+      subjectId: assessment?.subjectId ? String(assessment.subjectId) : undefined,
       type: String(assessment?.type || 'Assessment'),
       dueDate: String(assessment?.dueDate || new Date().toISOString().slice(0, 10)),
       dueTime: assessment?.dueTime ? String(assessment.dueTime) : '',
@@ -341,13 +390,31 @@ export function normalizeLearnerProfile(input: unknown): LearnerProfile {
   }
 }
 
-export function getLearnerProfile(): LearnerProfile {
+export function mergeLearnerSubjects(
+  existing: LearnerSubject[],
+  selected: LearnerSubject[],
+  curriculumId: LearnerCurriculumId
+): LearnerSubject[] {
+  const selectedByKey = new Map(selected.map((subject) => [subject.curriculumSubjectCode || subject.id, subject]))
+  const merged = existing.map((subject) => {
+    if (subject.curriculumId !== curriculumId) return subject
+    const key = subject.curriculumSubjectCode || subject.id
+    const next = selectedByKey.get(key)
+    if (!next) return { ...subject, active: false }
+    selectedByKey.delete(key)
+    return { ...subject, ...next, id: subject.id, active: true }
+  })
+
+  return [...merged, ...Array.from(selectedByKey.values()).map((subject) => ({ ...subject, active: true }))]
+}
+
+export function getLearnerProfile(userId?: string | null): LearnerProfile {
   if (typeof window === 'undefined') {
     return DEFAULT_LEARNER_PROFILE
   }
 
   try {
-    const value = window.localStorage.getItem(LEARNER_STORAGE_KEY)
+    const value = window.localStorage.getItem(learnerStorageKey(userId))
     if (!value) return DEFAULT_LEARNER_PROFILE
     return normalizeLearnerProfile(JSON.parse(value))
   } catch {
@@ -355,10 +422,10 @@ export function getLearnerProfile(): LearnerProfile {
   }
 }
 
-export function saveLearnerProfile(profile: LearnerProfile): LearnerProfile {
+export function saveLearnerProfile(profile: LearnerProfile, userId?: string | null): LearnerProfile {
   const normalized = normalizeLearnerProfile(profile)
   if (typeof window !== 'undefined') {
-    window.localStorage.setItem(LEARNER_STORAGE_KEY, JSON.stringify(normalized))
+    window.localStorage.setItem(learnerStorageKey(userId), JSON.stringify(normalized))
   }
   return normalized
 }

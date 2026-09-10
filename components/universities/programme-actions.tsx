@@ -31,7 +31,7 @@ export function ProgrammeActions({ programmeId, institutionId, compact = false }
 
   const toggleCompare = () => {
     const current = isGuest ? universityStorage.getCompare() : settings.universityCompare
-    const next = current.includes(programmeId) ? current.filter((id) => id !== programmeId) : [...current, programmeId].slice(-4)
+    const next = current.includes(programmeId) ? current.filter((id) => id !== programmeId) : [...current, programmeId]
     if (isGuest) universityStorage.saveCompare(next)
     else void saveSettings({ universityCompare: next })
     setCompared(next.includes(programmeId))

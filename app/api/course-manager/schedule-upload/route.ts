@@ -7,6 +7,7 @@ import { extractScheduleFromText, type ExtractedScheduleEntry } from '@/lib/cour
 import { extractScheduleWithAi } from '@/lib/course-manager/schedule-ai-fallback'
 import { appendLog } from '@/lib/logging'
 import { getCloudUnit, uploadFileToStorage, persistUploadMetadata } from '@/lib/supabase/documents-service'
+import { universityUnitContainer } from '@/lib/academic-context'
 
 export const runtime = 'nodejs'
 
@@ -90,7 +91,8 @@ export async function POST(request: NextRequest) {
               documentType: 'Unit guide',
               processingStatus: 'tutor_ready',
               domain: 'academic',
-              unitId: unit.id as string
+              unitId: unit.id as string,
+              container: universityUnitContainer({ id: unit.id as string, code: unit.code as string, name: unit.name as string })
             })
           } catch (cloudErr) {
             console.error('[Schedule upload] Cloud persistence failed (non-fatal):', cloudErr)

@@ -4,7 +4,7 @@ import { promises as fs } from 'fs'
 import { getCurrentMonashCalendar, getCurrentSemesterWeek } from '@/lib/semester-calendar'
 import { getDb, nowIso } from './db'
 import { loadCatalog, saveCatalog } from '@/lib/knowledge-base/catalog'
-import { normalizeUserSettings, type UserSettings } from '@/lib/user-settings'
+import { isValidTimeZone, normalizeUserSettings, type UserSettings } from '@/lib/user-settings'
 
 function id(prefix: string) {
   return `${prefix}_${crypto.randomUUID()}`
@@ -1321,6 +1321,14 @@ export function getUserSettings(userId = 'default'): UserSettings {
   const row = db.prepare('SELECT name, preferences FROM users WHERE id = ?').get(userId) as { name?: string | null; preferences?: string | null } | undefined
   const parsed = parseJson<Partial<UserSettings>>(row?.preferences || null) || {}
   return normalizeUserSettings({ ...parsed, name: parsed.name || row?.name || '' })
+}
+
+export function hasStoredUserTimezone(userId = 'default') {
+  ensureUser(userId)
+  const db = getDb()
+  const row = db.prepare('SELECT preferences FROM users WHERE id = ?').get(userId) as { preferences?: string | null } | undefined
+  const parsed = parseJson<Partial<UserSettings>>(row?.preferences || null)
+  return isValidTimeZone(parsed?.timezone)
 }
 
 export function updateUserSettings(userId: string, updates: Partial<UserSettings>) {

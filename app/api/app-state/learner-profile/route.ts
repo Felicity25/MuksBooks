@@ -18,7 +18,7 @@ export async function GET() {
       .eq('user_id', user.id)
       .maybeSingle()
 
-    if (error && error.code !== '42703') throw new Error(error.message)
+    if (error && !['42703', 'PGRST204'].includes(error.code || '')) throw new Error(error.message)
     return NextResponse.json({ ok: true, profile: data?.learner_profile || null })
   } catch (error) {
     console.error('[Learner profile GET] Failed:', error)

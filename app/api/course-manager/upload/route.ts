@@ -12,6 +12,7 @@ import {
   upsertCloudUnit
 } from '@/lib/supabase/documents-service'
 import { extractScheduleFromText } from '@/lib/course-manager/schedule-extractor'
+import { universityUnitContainer } from '@/lib/academic-context'
 
 export const runtime = 'nodejs'
 
@@ -209,7 +210,8 @@ export async function POST(request: NextRequest) {
                 resourceType: metadata?.resourceType ?? undefined,
                 topic: metadata?.topic || classified.topic || undefined,
                 domain,
-                unitId: cloudUnit?.id ?? null
+                unitId: cloudUnit?.id ?? null,
+                container: cloudUnit ? universityUnitContainer(cloudUnit) : null
               })
               if (upload.chunkData && upload.chunkData.length > 0) {
                 await persistDocumentChunks(user.id, uploadId, String(upload.documentId), isUnitBound ? unitCode : '', upload.chunkData)

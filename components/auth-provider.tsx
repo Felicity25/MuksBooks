@@ -10,6 +10,7 @@ import {
   type UserSettings
 } from '@/lib/user-settings'
 import { resolveThemeId } from '@/lib/design/themes'
+import { getBrowserTimeZone, resolveTimeZoneWhenMissing } from '@/lib/timezones'
 
 interface AuthPromptState {
   open: boolean
@@ -74,7 +75,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const stored = window.localStorage.getItem(GUEST_SETTINGS_KEY)
         if (generation === loadGenerationRef.current) {
-          const loaded = normalizeUserSettings(stored ? JSON.parse(stored) : null)
+          const parsed = stored ? JSON.parse(stored) : null
+          const timezone = resolveTimeZoneWhenMissing(parsed?.timezone, getBrowserTimeZone())
+          const loaded = normalizeUserSettings({ ...(parsed || {}), ...(timezone ? { timezone } : {}) })
           confirmedSettingsRef.current = loaded
           applySettings(loaded)
         }
@@ -94,7 +97,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!response.ok) return
       const payload = await response.json().catch(() => null)
       if (generation === loadGenerationRef.current && identityRef.current === userId && payload?.ok && payload.settings) {
-        const loaded = normalizeUserSettings(payload.settings)
+        const browserTimeZone = payload.hasSavedTimezone ? undefined : getBrowserTimeZone()
+        const loaded = normalizeUserSettings({
+          ...payload.settings,
+          ...(browserTimeZone ? { timezone: browserTimeZone } : {})
+        })
         confirmedSettingsRef.current = loaded
         applySettings(loaded)
       }
@@ -112,10 +119,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return
     }
 
-    client.auth.getSession().then((result: { data: { session: Session | null } }) => {
+    client.auth.getSession().then(async (result: { data: { session: Session | null } }) => {
       const sessionUser = result.data.session?.user ?? null
       setUser(sessionUser)
-      void loadSettings(sessionUser?.id ?? null)
+      await loadSettings(sessionUser?.id ?? null)
       setIsLoading(false)
     })
 

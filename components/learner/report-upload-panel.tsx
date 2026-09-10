@@ -4,7 +4,8 @@ import { useMemo, useState } from 'react'
 import { Check, FileText, UploadCloud } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { getLearnerProfile, saveLearnerProfile, type ReportEntry } from '@/lib/learner/store'
+import { useCurriculum } from '@/components/learner/curriculum-context'
+import type { ReportEntry } from '@/lib/learner/store'
 
 interface ExtractedReport {
   subject: string
@@ -29,6 +30,7 @@ function analyseFile(fileName: string): ExtractedReport {
 }
 
 export function ReportUploadPanel() {
+  const { profile, saveProfile } = useCurriculum()
   const [files, setFiles] = useState<File[]>([])
   const [draft, setDraft] = useState<ExtractedReport[]>([])
   const [confirmed, setConfirmed] = useState<string[]>([])
@@ -41,10 +43,9 @@ export function ReportUploadPanel() {
     setDraft(nextFiles.map((file) => analyseFile(file.name)))
   }
 
-  const confirmDraft = () => {
+  const confirmDraft = async () => {
     if (!extractedSummary.length) return
 
-    const profile = getLearnerProfile()
     const nextReports: ReportEntry[] = extractedSummary.map((item, index) => ({
       id: `${Date.now()}-${index}`,
       title: `${item.subject} report`,
@@ -58,7 +59,7 @@ export function ReportUploadPanel() {
       year: '2026'
     }))
 
-    const saved = saveLearnerProfile({ ...profile, reports: [...nextReports, ...profile.reports], updatedAt: new Date().toISOString() })
+    const saved = await saveProfile({ reports: [...nextReports, ...profile.reports] })
     setConfirmed(saved.reports.slice(0, nextReports.length).map((report) => report.subject))
   }
 
@@ -94,7 +95,7 @@ export function ReportUploadPanel() {
           ))}
 
           <div className="flex items-center gap-2">
-            <Button type="button" onClick={confirmDraft} size="sm">Confirm values</Button>
+            <Button type="button" onClick={() => void confirmDraft()} size="sm">Confirm values</Button>
             <Button type="button" variant="secondary" size="sm">Adjust</Button>
           </div>
         </div>

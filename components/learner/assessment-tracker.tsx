@@ -1,10 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Check, Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { getLearnerProfile, saveLearnerProfile, type LearnerAssessment } from '@/lib/learner/store'
+import { useCurriculum } from '@/components/learner/curriculum-context'
+import type { LearnerAssessment } from '@/lib/learner/store'
 
 const defaultAssessment: Omit<LearnerAssessment, 'id'> = {
   title: '',
@@ -20,23 +21,16 @@ const defaultAssessment: Omit<LearnerAssessment, 'id'> = {
 const asAssessmentStatus = (value: string): LearnerAssessment['status'] => value === 'completed' ? 'completed' : 'upcoming'
 
 export function AssessmentTracker() {
-  const [items, setItems] = useState<LearnerAssessment[]>([])
+  const { profile, saveProfile } = useCurriculum()
+  const items = profile.assessments
   const [form, setForm] = useState<Omit<LearnerAssessment, 'id'>>(defaultAssessment)
 
-  useEffect(() => {
-    const profile = getLearnerProfile()
-    setItems(profile.assessments)
-  }, [])
-
-  const persist = (next: LearnerAssessment[]) => {
-    const profile = getLearnerProfile()
-    const saved = saveLearnerProfile({ ...profile, assessments: next, updatedAt: new Date().toISOString() })
-    setItems(saved.assessments)
-  }
+  const persist = (next: LearnerAssessment[]) => void saveProfile({ assessments: next })
 
   const addAssessment = () => {
     if (!form.title.trim()) return
-    const next: LearnerAssessment[] = [{ ...form, id: `${Date.now()}`, status: asAssessmentStatus(form.status) } as LearnerAssessment, ...items]
+    const selectedSubject = profile.subjects.find((subject) => subject.id === form.subjectId)
+    const next: LearnerAssessment[] = [{ ...form, subject: selectedSubject?.name || form.subject, id: `${Date.now()}`, status: asAssessmentStatus(form.status) } as LearnerAssessment, ...items]
     persist(next)
     setForm(defaultAssessment)
   }
@@ -62,7 +56,7 @@ export function AssessmentTracker() {
 
       <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <input value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} placeholder="Assessment title" className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900" />
-        <input value={form.subject} onChange={(event) => setForm({ ...form, subject: event.target.value })} placeholder="Subject" className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900" />
+        <select value={form.subjectId || ''} onChange={(event) => { const subject = profile.subjects.find((item) => item.id === event.target.value); setForm({ ...form, subjectId: event.target.value || undefined, subject: subject?.name || '' }) }} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"><option value="">Select subject</option>{profile.subjects.filter((subject) => subject.active !== false).map((subject) => <option key={subject.id} value={subject.id}>{subject.name}</option>)}</select>
         <select value={form.type} onChange={(event) => setForm({ ...form, type: event.target.value })} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900">
           {['Test', 'Assignment', 'Mock', 'Internal Assessment', 'Oral', 'Exam', 'Other'].map((option) => <option key={option} value={option}>{option}</option>)}
         </select>

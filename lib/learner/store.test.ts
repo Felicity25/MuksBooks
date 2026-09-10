@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { DEFAULT_LEARNER_PROFILE, normalizeLearnerProfile, saveLearnerProfile } from './store.ts'
+import { DEFAULT_LEARNER_PROFILE, mergeLearnerSubjects, normalizeLearnerProfile, saveLearnerProfile, type LearnerSubject } from './store.ts'
 
 const describe = (name: string, fn: () => void) => {
   console.log(`\n${name}`)
@@ -44,9 +44,50 @@ describe('learner store', () => {
 
     assert.equal(normalized.subjects[0].level, 'SL')
     assert.equal(normalized.subjects[0].name, 'Biology')
+    assert.equal(normalized.subjects[0].provenance, 'CUSTOM')
+    assert.equal(normalized.subjects[0].curriculumId, 'IB')
+    assert.equal(normalized.subjects[0].active, true)
     assert.equal(normalized.projects[0].type, 'EE')
     assert.equal(normalized.applications[0].status, 'Interested')
     assert.equal(normalized.school?.name, 'Test School')
+  })
+
+  it('normalizes legacy catalogue and custom subjects without losing metadata', () => {
+    const normalized = normalizeLearnerProfile({
+      curriculum: 'IB',
+      subjects: [
+        { id: 'bio', name: 'Biology', curriculumSubjectCode: 'biology', level: 'HL', teacher: 'Ms Patel' },
+        { id: 'robotics', name: 'Robotics', notes: 'School elective' }
+      ]
+    })
+
+    assert.deepEqual(normalized.subjects.map((subject) => subject.provenance), ['CATALOGUE', 'CUSTOM'])
+    assert.equal(normalized.subjects[0].teacher, 'Ms Patel')
+    assert.equal(normalized.subjects[1].notes, 'School elective')
+  })
+
+  it('merges catalogue selections while preserving custom subjects and existing metadata', () => {
+    const existing = normalizeLearnerProfile({ curriculum: 'IB', subjects: [
+      { id: 'bio-record', name: 'Biology', curriculumSubjectCode: 'biology', level: 'HL', teacher: 'Ms Patel' },
+      { id: 'robotics', name: 'Robotics', description: 'School elective' }
+    ] }).subjects
+    const selected: LearnerSubject[] = [{
+      id: 'ib-biology', name: 'Biology', provenance: 'CATALOGUE', curriculumId: 'IB', curriculumSubjectCode: 'biology', levelId: 'sl', level: 'SL', active: true
+    }, existing[1]]
+    const merged = mergeLearnerSubjects(existing, selected, 'IB')
+
+    assert.equal(merged.find((subject) => subject.id === 'bio-record')?.teacher, 'Ms Patel')
+    assert.equal(merged.find((subject) => subject.id === 'bio-record')?.levelId, 'sl')
+    assert.equal(merged.find((subject) => subject.id === 'robotics')?.description, 'School elective')
+    assert.equal(merged.find((subject) => subject.id === 'robotics')?.active, true)
+  })
+
+  it('keeps deselected subjects as inactive history', () => {
+    const existing = normalizeLearnerProfile({ curriculum: 'IB', subjects: [{ id: 'robotics', name: 'Robotics' }] }).subjects
+    const merged = mergeLearnerSubjects(existing, [], 'IB')
+
+    assert.equal(merged[0].active, false)
+    assert.equal(merged[0].name, 'Robotics')
   })
 
   it('persists the learner profile to localStorage when available', () => {
@@ -60,8 +101,16 @@ describe('learner store', () => {
     }
 
     ;(globalThis as any).window = fakeWindow
-    const saved = saveLearnerProfile({ ...DEFAULT_LEARNER_PROFILE, preferredName: 'Test Learner', updatedAt: '2026-09-08T11:00:00.000Z' })
+    const saved = saveLearnerProfile(normalizeLearnerProfile({
+      ...DEFAULT_LEARNER_PROFILE,
+      preferredName: 'Test Learner',
+      subjects: [{ id: 'robotics', name: 'Robotics', description: 'School elective' }],
+      updatedAt: '2026-09-08T11:00:00.000Z'
+    }))
     assert.equal(saved.updatedAt, '2026-09-08T11:00:00.000Z')
-    assert.equal(Array.isArray(saved.subjects), true)
+    const persisted = JSON.parse(storage.get('muksbooks:learner-profile:v1') || '{}')
+    assert.equal(persisted.subjects[0].provenance, 'CUSTOM')
+    assert.equal(persisted.subjects[0].description, 'School elective')
+    assert.equal(persisted.subjects[0].active, true)
   })
 })

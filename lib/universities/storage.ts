@@ -26,8 +26,8 @@ function writeJson<T>(key: string, value: T) {
 export const universityStorage = {
   getShortlist: () => { const value = readJson<unknown>(SHORTLIST_KEY, []); return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [] },
   saveShortlist: (ids: string[]) => writeJson(SHORTLIST_KEY, Array.from(new Set(ids))),
-  getCompare: () => { const value = readJson<unknown>(COMPARE_KEY, []); return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string').slice(0, 4) : [] },
-  saveCompare: (ids: string[]) => writeJson(COMPARE_KEY, Array.from(new Set(ids)).slice(0, 4)),
+  getCompare: () => { const value = readJson<unknown>(COMPARE_KEY, []); return Array.isArray(value) ? Array.from(new Set(value.filter((item): item is string => typeof item === 'string'))) : [] },
+  saveCompare: (ids: string[]) => writeJson(COMPARE_KEY, Array.from(new Set(ids))),
   getApplications: () => { const value = readJson<unknown>(APPLICATIONS_KEY, []); return Array.isArray(value) ? value.filter((item): item is Partial<UniversityApplication> & Record<string, unknown> => Boolean(item && typeof item === 'object')).map(normalizeUniversityApplication) : [] },
   saveApplications: (applications: UniversityApplication[]) => writeJson(APPLICATIONS_KEY, applications),
   getFundingSaved: () => { const value = readJson<unknown>(FUNDING_SAVED_KEY, []); return Array.isArray(value) ? Array.from(new Set(value.filter((item): item is string => typeof item === 'string'))) : [] },

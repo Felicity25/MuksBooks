@@ -16,6 +16,10 @@ function mapCloudDoc(d: any) {
     topic: d.topic ?? null,
     domain: d.domain ?? 'academic',
     unit_id: d.unit_id ?? null,
+    academic_mode: d.academic_mode ?? (d.unit_id ? 'UNIVERSITY' : null),
+    container_kind: d.container_kind ?? (d.unit_id ? 'UNIT' : null),
+    container_id: d.container_id ?? d.unit_id ?? null,
+    subject_id: d.subject_id ?? null,
     processing_status: d.processing_status ?? 'tutor_ready',
     upload_date: d.created_at,
     chunk_count: d.chunk_count ?? 0,
@@ -34,14 +38,16 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url)
     const courseCode = searchParams.get('courseCode') || undefined
+    const subjectId = searchParams.get('subjectId') || undefined
 
     // Prefer Supabase for authenticated users (persistent across redeploys)
     if (user) {
       const cloudDocs = await listCloudDocuments(user.id)
       if (cloudDocs !== null) {
-        const filtered = courseCode
-          ? cloudDocs.filter((d) => d.course_code === courseCode.toUpperCase())
-          : cloudDocs
+        const filtered = cloudDocs.filter((document: any) =>
+          (!courseCode || document.course_code === courseCode.toUpperCase()) &&
+          (!subjectId || document.subject_id === subjectId)
+        )
         return NextResponse.json({ ok: true, documents: filtered.map(mapCloudDoc) })
       }
     }

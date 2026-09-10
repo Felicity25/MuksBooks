@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { getLearnerProfile, saveLearnerProfile, type LearnerAdmissionsTest, type LearnerEnglishTest, type LearnerProfile } from '@/lib/learner/store'
+import { useCurriculum } from '@/components/learner/curriculum-context'
+import { type LearnerAdmissionsTest, type LearnerEnglishTest, type LearnerProfile } from '@/lib/learner/store'
 import { INTEREST_AREAS } from '@/lib/universities/discovery'
 
 const COUNTRIES = ['South Africa', 'Australia', 'United Kingdom', 'United States', 'Canada', 'Singapore', 'Malaysia']
@@ -16,11 +17,12 @@ function toggle(values: string[], value: string) {
 }
 
 export function UniversityPlanningSettings() {
-  const [profile, setProfile] = useState<LearnerProfile | null>(null)
+  const { profile: savedProfile, saveProfile } = useCurriculum()
+  const [profile, setProfile] = useState<LearnerProfile>(savedProfile)
   const [message, setMessage] = useState('')
+  const [saving, setSaving] = useState(false)
 
-  useEffect(() => setProfile(getLearnerProfile()), [])
-  if (!profile) return null
+  useEffect(() => setProfile(savedProfile), [savedProfile])
 
   const planning = profile.universityPlanning
   const english = planning.englishTests[0]
@@ -45,9 +47,18 @@ export function UniversityPlanningSettings() {
   }
   const removeAdmissionsTest = (index: number) => setProfile({ ...profile, universityPlanning: { ...planning, admissionsTests: planning.admissionsTests.filter((_, testIndex) => testIndex !== index) } })
   const updateList = (field: 'preferredCountries' | 'studyAreas' | 'priorities', value: string) => setProfile({ ...profile, universityPlanning: { ...planning, [field]: toggle(planning[field], value) } })
-  const save = () => {
-    setProfile(saveLearnerProfile({ ...profile, updatedAt: new Date().toISOString() }))
-    setMessage('University planning saved.')
+  const save = async () => {
+    setSaving(true)
+    setMessage('Saving...')
+    try {
+      const saved = await saveProfile(profile)
+      setProfile(saved)
+      setMessage('University planning saved.')
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'University planning could not be saved.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -74,7 +85,7 @@ export function UniversityPlanningSettings() {
       {english?.test === 'CAMBRIDGE' ? <label className="block max-w-xs text-sm font-medium text-slate-700">Cambridge qualification<input value={english.qualification ?? ''} onChange={(event) => updateEnglish({ qualification: event.target.value })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2" placeholder="e.g. C1 Advanced" /></label> : null}
       <fieldset><legend className="text-sm font-medium text-slate-700">English component scores</legend><div className="mt-2 grid gap-3 sm:grid-cols-4">{['listening', 'reading', 'speaking', 'writing'].map((component) => <label key={component} className="text-xs font-medium capitalize text-slate-600">{component}<input type="number" step="0.5" value={english?.components?.[component] ?? ''} onChange={(event) => updateEnglishComponent(component, event.target.value)} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" /></label>)}</div></fieldset>
       <fieldset><div className="flex flex-wrap items-center justify-between gap-3"><div><legend className="text-sm font-medium text-slate-700">Admissions tests</legend><p className="mt-1 text-xs text-slate-500">Record booked sittings and received results. A booking is not treated as a qualifying score.</p></div><Button type="button" size="sm" variant="secondary" onClick={addAdmissionsTest}><Plus className="mr-2 h-4 w-4" />Add test</Button></div><div className="mt-3 space-y-3">{planning.admissionsTests.map((test, index) => <div key={test.id || `${test.test}-${index}`} className="grid gap-3 border-t border-slate-200 pt-3 sm:grid-cols-[1fr_1fr_1fr_1fr_auto]"><label className="text-xs font-medium text-slate-600">Test<select value={test.test} onChange={(event) => updateAdmissionsTest(index, { test: event.target.value as LearnerAdmissionsTest['test'] })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"><option value="SAT">SAT</option><option value="ACT">ACT</option><option value="NBT_AQL">NBT AQL</option><option value="NBT_MAT">NBT MAT</option><option value="UCAT">UCAT</option><option value="UCAT_ANZ">UCAT ANZ</option><option value="GAMSAT">GAMSAT</option><option value="LNAT">LNAT</option><option value="TMUA">TMUA</option><option value="ESAT">ESAT</option><option value="ISAT">ISAT</option></select></label><label className="text-xs font-medium text-slate-600">Status<select value={test.resultStatus ?? 'BOOKED'} onChange={(event) => updateAdmissionsTest(index, { resultStatus: event.target.value as LearnerAdmissionsTest['resultStatus'] })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"><option value="BOOKED">Booked</option><option value="AWAITING_RESULT">Awaiting result</option><option value="RESULT_RECEIVED">Result received</option></select></label><label className="text-xs font-medium text-slate-600">Score<input type="number" step="0.5" value={test.score ?? ''} onChange={(event) => updateAdmissionsTest(index, { score: event.target.value ? Number(event.target.value) : undefined })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" /></label><label className="text-xs font-medium text-slate-600">Test date<input type="date" value={test.testDate ?? ''} onChange={(event) => updateAdmissionsTest(index, { testDate: event.target.value })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" /></label><Button type="button" size="sm" variant="ghost" className="h-10 w-10 self-end px-0" onClick={() => removeAdmissionsTest(index)} title="Remove test"><Trash2 className="h-4 w-4" /><span className="sr-only">Remove test</span></Button></div>)}</div></fieldset>
-      <div className="flex items-center gap-3"><Button type="button" onClick={save}>Save university planning</Button>{message ? <p role="status" className="text-sm font-medium text-emerald-700">{message}</p> : null}</div>
+      <div className="flex items-center gap-3"><Button type="button" disabled={saving} onClick={() => void save()}>{saving ? 'Saving...' : 'Save university planning'}</Button>{message ? <p role="status" className="text-sm font-medium text-slate-700">{message}</p> : null}</div>
     </Card>
   )
 }

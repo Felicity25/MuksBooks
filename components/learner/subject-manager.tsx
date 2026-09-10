@@ -1,19 +1,21 @@
 'use client'
 
-import { useMemo, useState } from 'react'
-import { BookOpenText, Plus, Trash2 } from 'lucide-react'
+import Link from 'next/link'
+import { useMemo } from 'react'
+import { BookOpenText, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { useCurriculum } from '@/components/learner/curriculum-context'
-import type { LearnerSubject } from '@/lib/learner/store'
+import { CurriculumSubjectPicker } from '@/components/learner/curriculum-subject-picker'
+import { mergeLearnerSubjects, type LearnerSubject } from '@/lib/learner/store'
 
 interface SubjectRecord extends LearnerSubject {}
 
 export function SubjectManager() {
   const { profile, curriculum, viewingCurriculum, saveProfile } = useCurriculum()
-  const subjects = profile.subjects
+  const subjects = profile.subjects.filter((subject) => subject.active !== false)
+  const selectedSubjects = subjects.filter((subject) => subject.curriculumId === curriculum.id)
   const isViewingSavedCurriculum = viewingCurriculum === 'MY' && profile.curriculum === curriculum.id
-  const [form, setForm] = useState({ subjectId: '', level: curriculum.levels[0]?.label || '', teacher: '', targetGrade: '', predictedGrade: '', currentGrade: '', notes: '' })
 
   const persist = async (next: SubjectRecord[]) => {
     await saveProfile({ subjects: next })
@@ -29,28 +31,12 @@ export function SubjectManager() {
     return `${(total / numeric.length).toFixed(1)}%`
   }, [subjects])
 
-  const addSubject = () => {
-    const curriculumSubject = curriculum.subjects.find((subject) => subject.id === form.subjectId)
-    if (!curriculumSubject || subjects.some((subject) => subject.curriculumSubjectCode === curriculumSubject.id)) return
-
-    const next = [{
-      id: `${Date.now()}`,
-      name: curriculumSubject.title,
-      level: form.level,
-      curriculumSubjectCode: curriculumSubject.id,
-      teacher: form.teacher.trim(),
-      targetGrade: form.targetGrade.trim(),
-      predictedGrade: form.predictedGrade.trim() || form.targetGrade.trim() || '—',
-      currentGrade: form.currentGrade.trim() || '—',
-      notes: form.notes.trim() || 'No notes yet.'
-    }, ...subjects]
-
-    void persist(next)
-    setForm({ subjectId: '', level: curriculum.levels[0]?.label || '', teacher: '', targetGrade: '', predictedGrade: '', currentGrade: '', notes: '' })
+  const updateSelection = (next: LearnerSubject[]) => {
+    void persist(mergeLearnerSubjects(profile.subjects, next, curriculum.id))
   }
 
   const removeSubject = (id: string) => {
-    void persist(subjects.filter((subject) => subject.id !== id))
+    updateSelection(selectedSubjects.filter((subject) => subject.id !== id))
   }
 
   return (
@@ -69,26 +55,7 @@ export function SubjectManager() {
           <div className="mt-3 flex flex-wrap gap-2">{curriculum.subjects.map((subject) => <span key={subject.id} className="rounded-full border border-slate-200 px-2.5 py-1 text-xs text-slate-700">{subject.title}</span>)}</div>
         </div>
       ) : <>
-      <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        <select value={form.subjectId} onChange={(event) => setForm({ ...form, subjectId: event.target.value })} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900">
-          <option value="">Select {curriculum.terminology.subject.toLowerCase()}</option>
-          {curriculum.subjects.map((subject) => <option key={subject.id} value={subject.id}>{subject.title}</option>)}
-        </select>
-        <select value={form.level} onChange={(event) => setForm({ ...form, level: event.target.value })} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900">
-          {curriculum.levels.map((level) => <option key={level.id} value={level.label}>{level.label}</option>)}
-        </select>
-        <input value={form.teacher} onChange={(event) => setForm({ ...form, teacher: event.target.value })} placeholder="Teacher (optional)" className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900" />
-        <input value={form.targetGrade} onChange={(event) => setForm({ ...form, targetGrade: event.target.value })} placeholder="Target grade" className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900" />
-        <input value={form.predictedGrade} onChange={(event) => setForm({ ...form, predictedGrade: event.target.value })} placeholder="Predicted grade" className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900" />
-        <input value={form.currentGrade} onChange={(event) => setForm({ ...form, currentGrade: event.target.value })} placeholder="Current grade" className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900" />
-        <div className="md:col-span-2 xl:col-span-3">
-          <input value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} placeholder="Teacher comments or focus area" className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900" />
-        </div>
-      </div>
-
-      <div className="mt-4 flex justify-end">
-        <Button type="button" onClick={addSubject} size="sm"><Plus className="mr-2 h-4 w-4" />Add subject</Button>
-      </div>
+      <div className="mt-4"><CurriculumSubjectPicker curriculumId={curriculum.id} value={selectedSubjects} onChange={updateSelection} /></div>
 
       <div className="mt-5 space-y-3">
         {subjects.map((subject) => (
@@ -101,9 +68,13 @@ export function SubjectManager() {
               <p className="mt-1 text-xs text-slate-500">Teacher: {subject.teacher || 'Not recorded'} • Current: {subject.currentGrade || '—'} • Predicted: {subject.predictedGrade || '—'} • Target: {subject.targetGrade || '—'}</p>
               <p className="mt-1 text-xs text-slate-600">{subject.notes}</p>
             </div>
-            <Button type="button" variant="ghost" size="sm" onClick={() => removeSubject(subject.id)} aria-label={`Remove ${subject.name}`}>
-              <Trash2 className="h-4 w-4" />
-            </Button>
+            <div className="flex shrink-0 items-center gap-1">
+              <Link href={`/school/subjects/${encodeURIComponent(subject.id)}`} className="inline-flex h-9 items-center rounded-md px-3 text-sm font-medium text-sky-700 hover:bg-sky-50">Open</Link>
+              <Link href={`/school/subjects/${encodeURIComponent(subject.id)}?edit=1`} className="inline-flex h-9 items-center rounded-md px-3 text-sm font-medium text-slate-700 hover:bg-slate-100">Edit</Link>
+              <Button type="button" variant="ghost" size="sm" onClick={() => removeSubject(subject.id)} aria-label={`Remove ${subject.name}`}>
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         ))}
         {!subjects.length ? <p className="rounded-md border border-dashed border-slate-300 p-4 text-sm text-slate-600">No subjects added yet. Choose your official curriculum subjects above.</p> : null}

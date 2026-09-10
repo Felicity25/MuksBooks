@@ -1,15 +1,17 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Check } from 'lucide-react'
 import { useAuth } from '@/components/auth-provider'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { TimezoneSelector } from '@/components/ui/timezone-selector'
 import { UniversityPlanningSettings } from '@/components/universities/university-planning-settings'
 import { DEFAULT_USER_SETTINGS, HOMEPAGE_PRESETS, PROACTIVITY_DEFAULTS, type HomepagePreset, type ProactivityControls, type ProactivityLevel, type ThemePreference, type UserSettings, type YearLevel } from '@/lib/user-settings'
 import { THEMES } from '@/lib/design/themes'
 import { LearnerAcademicProfileSettings } from '@/components/learner/learner-academic-profile-settings'
+import { mergeSettingsHydration, reconcileSavedFields } from '@/lib/settings-draft'
 
 const PRESET_LABELS: Record<HomepagePreset, string> = {
   'academic-weapon': 'Academic Weapon',
@@ -27,12 +29,15 @@ const LEVELS: Record<ProactivityLevel, string> = {
 
 const CAREER_INTERESTS = [
   'STEM', 'Economics', 'Biology', 'Engineering', 'Psychology',
-  'Law', 'Languages', 'Design', 'Education', 'Health'
+  'Law', 'Languages', 'Design', 'Education', 'Health', 'Business', 'Finance',
+  'Technology', 'Medicine', 'Public policy', 'Sustainability', 'Arts', 'Media'
 ]
 
 const ACADEMIC_INTERESTS = [
   'Mathematics', 'Research', 'Scientific writing', 'Data analysis',
-  'Essay structure', 'Exam strategy', 'Lab work', 'Presentation skills'
+  'Essay structure', 'Exam strategy', 'Lab work', 'Presentation skills',
+  'Computer science', 'Statistics', 'Economics', 'Literature', 'History',
+  'Languages', 'Critical thinking', 'Problem solving', 'Oral practice', 'Revision planning'
 ]
 
 const YEAR_LEVELS: Array<{ value: YearLevel; label: string }> = [
@@ -51,6 +56,29 @@ const ASSISTANCE: Array<{ title: string; items: Array<[keyof ProactivityControls
   { title: 'Community', items: [['massEvents', 'MASS events'], ['massProjects', 'MASS projects'], ['massCareers', 'MASS careers'], ['massAcademic', 'MASS academic events']] }
 ]
 
+type SettingsSection = 'profile' | 'academics' | 'study' | 'university' | 'appearance' | 'focus' | 'homepage'
+type SaveState = { state: 'idle' | 'dirty' | 'saving' | 'saved' | 'error'; message?: string }
+
+const SECTIONS: Array<{ id: SettingsSection; label: string }> = [
+  { id: 'profile', label: 'Profile' },
+  { id: 'academics', label: 'Academics' },
+  { id: 'study', label: 'Study preferences' },
+  { id: 'university', label: 'University planning' },
+  { id: 'appearance', label: 'Appearance' },
+  { id: 'focus', label: 'MuksFocus' },
+  { id: 'homepage', label: 'Homepage' }
+]
+
+const SECTION_FIELDS: Record<SettingsSection, Array<keyof UserSettings>> = {
+  profile: ['academicMode', 'name'],
+  academics: ['institution', 'degree', 'fieldOfStudy', 'major', 'yearLevel', 'targetMarks', 'feedbackStrictness'],
+  study: ['careerInterests', 'academicInterests', 'studyTimes', 'proactivityLevel', 'proactivityControls'],
+  university: [],
+  appearance: ['theme', 'textSize', 'density', 'motion', 'font'],
+  focus: ['timezone', 'focusDurationMinutes', 'shortBreakMinutes', 'longBreakMinutes', 'focusCycleCount', 'autoStartBreaks', 'autoStartFocus', 'studyBellMuted', 'studyBellVolume', 'focusNotificationsEnabled'],
+  homepage: ['homepagePreset', 'homepageLayout', 'quickActions']
+}
+
 function toggle(list: string[], value: string, enabled: boolean) {
   if (enabled) return list.includes(value) ? list : [...list, value]
   return list.filter((item) => item !== value)
@@ -59,54 +87,81 @@ function toggle(list: string[], value: string, enabled: boolean) {
 export function SettingsManager() {
   const { settings, saveSettings, isGuest } = useAuth()
   const [draft, setDraft] = useState(settings)
-  const [message, setMessage] = useState('')
-  const [saving, setSaving] = useState(false)
+  const draftRef = useRef(settings)
+  const [activeSection, setActiveSection] = useState<SettingsSection>('profile')
+  const [sectionStates, setSectionStates] = useState<Record<SettingsSection, SaveState>>(() => Object.fromEntries(SECTIONS.map(({ id }) => [id, { state: 'idle' }])) as Record<SettingsSection, SaveState>)
+  const [dirtyFields, setDirtyFields] = useState<Set<keyof UserSettings>>(() => new Set())
 
-  useEffect(() => setDraft(settings), [settings])
+  useEffect(() => {
+    setDraft((current) => {
+      const next = mergeSettingsHydration(current, settings, dirtyFields)
+      draftRef.current = next
+      return next
+    })
+  }, [dirtyFields, settings])
 
-  const persist = async (updates: Partial<UserSettings>, confirmation = 'Settings saved.') => {
-    const next = { ...draft, ...updates }
+  const updateDraft = (section: SettingsSection, updates: Partial<UserSettings>) => {
+    const next = { ...draftRef.current, ...updates }
+    draftRef.current = next
     setDraft(next)
-    setSaving(true)
+    setDirtyFields((current) => new Set([...current, ...(Object.keys(updates) as Array<keyof UserSettings>)]))
+    setSectionStates((current) => ({ ...current, [section]: { state: 'dirty', message: 'Unsaved changes' } }))
+  }
+
+  const persist = async (section: SettingsSection, updates?: Partial<UserSettings>, confirmation = 'Saved.') => {
+    const payload = updates ?? Object.fromEntries(SECTION_FIELDS[section].map((key) => [key, draftRef.current[key]])) as Partial<UserSettings>
+    if (updates) updateDraft(section, updates)
+    setSectionStates((current) => ({ ...current, [section]: { state: 'saving', message: 'Saving...' } }))
     try {
-      const saved = await saveSettings(updates)
-      setDraft(saved)
-      setMessage(confirmation)
+      await saveSettings(payload)
+      setDirtyFields((current) => {
+        const reconciled = reconcileSavedFields(current, payload, draftRef.current)
+        if (reconciled.hasNewerEdits) setSectionStates((states) => ({ ...states, [section]: { state: 'dirty', message: 'Newer changes are not saved yet.' } }))
+        return reconciled.dirtyFields
+      })
+      const reconciled = reconcileSavedFields(dirtyFields, payload, draftRef.current)
+      if (!reconciled.hasNewerEdits) setSectionStates((current) => ({ ...current, [section]: { state: 'saved', message: confirmation } }))
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Settings could not be saved.')
-    } finally {
-      setSaving(false)
+      setSectionStates((current) => ({ ...current, [section]: { state: 'error', message: error instanceof Error ? error.message : 'Settings could not be saved.' } }))
     }
   }
 
-  const saveForm = (event: React.FormEvent) => {
-    event.preventDefault()
-    void persist(draft, 'Personalisation saved.')
-  }
-
   const applyPreset = (preset: HomepagePreset) => {
-    void persist({
+    void persist('homepage', {
       homepagePreset: preset,
       homepageLayout: HOMEPAGE_PRESETS[preset].map((item) => ({ ...item }))
     }, `${PRESET_LABELS[preset]} layout applied.`)
   }
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
         <p className="text-slate-600">{isGuest ? 'Guest personalisation stays on this device.' : 'Your personalisation syncs to your account.'}</p>
-        {message ? <p className="font-medium text-emerald-700" role="status">{message}</p> : null}
+        {sectionStates[activeSection].message ? <p className={`font-medium ${sectionStates[activeSection].state === 'error' ? 'text-rose-700' : sectionStates[activeSection].state === 'saved' ? 'text-emerald-700' : 'text-slate-600'}`} role="status">{sectionStates[activeSection].message}</p> : null}
       </div>
 
-      <form onSubmit={saveForm} className="space-y-6">
+      <nav aria-label="Settings sections" className="flex gap-2 overflow-x-auto border-b border-slate-200 pb-2">
+        {SECTIONS.map((section) => <button key={section.id} type="button" onClick={() => setActiveSection(section.id)} aria-current={activeSection === section.id ? 'page' : undefined} className={`whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium ${activeSection === section.id ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>{section.label}{sectionStates[section.id].state === 'dirty' ? ' *' : ''}</button>)}
+      </nav>
+
+      <form onSubmit={(event) => event.preventDefault()} className="space-y-6">
+        {activeSection === 'profile' ? <Card className="space-y-4">
+          <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-500">Profile</p><h2 className="mt-2 text-section-title text-slate-950">Your MuksBooks identity</h2></div><Link href="/onboarding" className="rounded-md border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">Re-run onboarding</Link></div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="text-sm font-medium text-slate-700">Academic mode<select value={draft.academicMode} onChange={(event) => updateDraft('profile', { academicMode: event.target.value as UserSettings['academicMode'] })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2"><option value="UNIVERSITY">University</option><option value="LEARNER">School / Learner</option></select></label>
+            <label className="text-sm font-medium text-slate-700">Preferred name<input value={draft.name} onChange={(event) => updateDraft('profile', { name: event.target.value })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2" /></label>
+          </div>
+          <Button type="button" disabled={sectionStates.profile.state === 'saving'} onClick={() => void persist('profile')}>Save profile</Button>
+        </Card> : null}
+
+        {activeSection === 'appearance' ? (
         <Card className="space-y-4">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-500">Personalisation</p>
+              <p className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-500">Appearance</p>
               <h2 className="mt-2 text-section-title text-slate-950">Make MuksBooks yours</h2>
-              <p className="mt-1 text-sm text-slate-600">Your personalised academia app. Choose how your workspace feels, then shape your profile.</p>
+              <p className="mt-1 text-sm text-slate-600">Choose how your workspace looks and feels.</p>
             </div>
-            <Link href="/onboarding" className="rounded-md border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">Re-run onboarding</Link>
           </div>
 
           <div>
@@ -119,7 +174,7 @@ export function SettingsManager() {
                   <button
                     key={theme.id}
                     type="button"
-                    onClick={() => void persist({ theme: theme.id as ThemePreference }, `${theme.name} theme applied.`)}
+                    onClick={() => void persist('appearance', { theme: theme.id as ThemePreference }, `${theme.name} theme applied.`)}
                     className={`rounded-lg border p-3 text-left transition ${selected ? 'border-slate-900 ring-1 ring-slate-900' : 'border-slate-200 hover:border-slate-400'}`}
                   >
                     <div className="h-20 rounded-md border" style={{ borderColor: theme.preview.sidebar, backgroundColor: theme.preview.background }}>
@@ -153,7 +208,7 @@ export function SettingsManager() {
 
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="text-sm font-medium text-slate-700">Text size
-              <select value={draft.textSize} onChange={(event) => void persist({ textSize: event.target.value as UserSettings['textSize'] }, 'Text size updated.')} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2">
+              <select value={draft.textSize} onChange={(event) => void persist('appearance', { textSize: event.target.value as UserSettings['textSize'] }, 'Text size updated.')} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2">
                 <option value="small">Small</option>
                 <option value="default">Default</option>
                 <option value="large">Large</option>
@@ -161,28 +216,28 @@ export function SettingsManager() {
               </select>
             </label>
             <label className="text-sm font-medium text-slate-700">Font style
-              <select value={draft.font} onChange={(event) => void persist({ font: event.target.value as UserSettings['font'] }, 'Font updated.')} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2">
+              <select value={draft.font} onChange={(event) => void persist('appearance', { font: event.target.value as UserSettings['font'] }, 'Font updated.')} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2">
                 <option value="modern">Modern</option>
                 <option value="readable">Readable</option>
                 <option value="academic">Academic</option>
               </select>
             </label>
             <label className="text-sm font-medium text-slate-700">Interface density
-              <select value={draft.density} onChange={(event) => void persist({ density: event.target.value as UserSettings['density'] }, 'Density updated.')} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2">
+              <select value={draft.density} onChange={(event) => void persist('appearance', { density: event.target.value as UserSettings['density'] }, 'Density updated.')} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2">
                 <option value="compact">Compact</option>
                 <option value="comfortable">Comfortable</option>
                 <option value="spacious">Spacious</option>
               </select>
             </label>
             <label className="text-sm font-medium text-slate-700">Motion
-              <select value={draft.motion} onChange={(event) => void persist({ motion: event.target.value as UserSettings['motion'] }, 'Motion preference updated.')} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2">
+              <select value={draft.motion} onChange={(event) => void persist('appearance', { motion: event.target.value as UserSettings['motion'] }, 'Motion preference updated.')} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2">
                 <option value="normal">Normal</option>
                 <option value="reduced">Reduced</option>
               </select>
             </label>
           </div>
 
-          <Button type="button" variant="outline" onClick={() => void persist({
+          <Button type="button" variant="outline" onClick={() => void persist('appearance', {
             theme: DEFAULT_USER_SETTINGS.theme,
             textSize: DEFAULT_USER_SETTINGS.textSize,
             density: DEFAULT_USER_SETTINGS.density,
@@ -192,41 +247,34 @@ export function SettingsManager() {
           >
             Reset appearance
           </Button>
-        </Card>
+        </Card>) : null}
 
-        {draft.academicMode === 'LEARNER' ? <UniversityPlanningSettings /> : null}
+        <div hidden={activeSection !== 'university'}>{draft.academicMode === 'LEARNER' ? <UniversityPlanningSettings /> : <Card className="space-y-3"><p className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-500">University planning</p><p className="text-sm text-slate-600">University planning is available in School / Learner mode. Your University-mode Careers workspace remains unchanged.</p></Card>}</div>
 
-        <Card className="space-y-4">
+        <div hidden={activeSection !== 'academics'}><Card className="space-y-4">
           {draft.academicMode === 'LEARNER' ? <LearnerAcademicProfileSettings /> : <>
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-500">Academic profile</p>
             <p className="mt-1 text-sm text-slate-600">Stored now for profile use and future recommendations. You can change all fields later.</p>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            <label className="text-sm font-medium text-slate-700">Academic mode
-              <select value={draft.academicMode} onChange={(event) => setDraft({ ...draft, academicMode: event.target.value as UserSettings['academicMode'] })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2">
-                <option value="UNIVERSITY">University</option>
-                <option value="LEARNER">School / Learner</option>
-              </select>
-            </label>
-            <label className="text-sm font-medium text-slate-700">Preferred name<input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2" /></label>
-            <label className="text-sm font-medium text-slate-700">University or institution<input value={draft.institution} onChange={(event) => setDraft({ ...draft, institution: event.target.value })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2" placeholder="Monash University" /></label>
-            <label className="text-sm font-medium text-slate-700">Academic track<input value={draft.degree} onChange={(event) => setDraft({ ...draft, degree: event.target.value })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2" placeholder="Bachelor of Actuarial Science" /></label>
+            <label className="text-sm font-medium text-slate-700">University or institution<input value={draft.institution} onChange={(event) => updateDraft('academics', { institution: event.target.value })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2" placeholder="Monash University" /></label>
+            <label className="text-sm font-medium text-slate-700">Academic track<input value={draft.degree} onChange={(event) => updateDraft('academics', { degree: event.target.value })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2" placeholder="Bachelor of Actuarial Science" /></label>
             <label className="text-sm font-medium text-slate-700">Year level
-              <select value={draft.yearLevel} onChange={(event) => setDraft({ ...draft, yearLevel: event.target.value as YearLevel })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2">
+              <select value={draft.yearLevel} onChange={(event) => updateDraft('academics', { yearLevel: event.target.value as YearLevel })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2">
                 {YEAR_LEVELS.map((level) => <option key={level.value} value={level.value}>{level.label}</option>)}
               </select>
             </label>
-            <label className="text-sm font-medium text-slate-700">Target marks<input value={draft.targetMarks} onChange={(event) => setDraft({ ...draft, targetMarks: event.target.value })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2" placeholder="HD / 90+" /></label>
-            <label className="text-sm font-medium text-slate-700">Field of study<input value={draft.fieldOfStudy} onChange={(event) => setDraft({ ...draft, fieldOfStudy: event.target.value })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2" placeholder="Actuarial studies" /></label>
-            <label className="text-sm font-medium text-slate-700">Major / specialisation<input value={draft.major} onChange={(event) => setDraft({ ...draft, major: event.target.value })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2" placeholder="Quantitative finance" /></label>
-            <label className="text-sm font-medium text-slate-700">Feedback strictness<select value={draft.feedbackStrictness} onChange={(event) => setDraft({ ...draft, feedbackStrictness: event.target.value as UserSettings['feedbackStrictness'] })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2"><option value="lenient">Lenient</option><option value="normal">Normal</option><option value="strict">Strict</option></select></label>
+            <label className="text-sm font-medium text-slate-700">Target marks<input value={draft.targetMarks} onChange={(event) => updateDraft('academics', { targetMarks: event.target.value })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2" placeholder="HD / 90+" /></label>
+            <label className="text-sm font-medium text-slate-700">Field of study<input value={draft.fieldOfStudy} onChange={(event) => updateDraft('academics', { fieldOfStudy: event.target.value })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2" placeholder="Actuarial studies" /></label>
+            <label className="text-sm font-medium text-slate-700">Major / specialisation<input value={draft.major} onChange={(event) => updateDraft('academics', { major: event.target.value })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2" placeholder="Quantitative finance" /></label>
+            <label className="text-sm font-medium text-slate-700">Feedback strictness<select value={draft.feedbackStrictness} onChange={(event) => updateDraft('academics', { feedbackStrictness: event.target.value as UserSettings['feedbackStrictness'] })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2"><option value="lenient">Lenient</option><option value="normal">Normal</option><option value="strict">Strict</option></select></label>
           </div>
-          <Button type="submit" disabled={saving}>Save profile</Button>
+          <Button type="button" disabled={sectionStates.academics.state === 'saving'} onClick={() => void persist('academics')}>Save academics</Button>
           </>}
-        </Card>
+        </Card></div>
 
-        <Card className="space-y-4">
+        {activeSection === 'study' ? <Card className="space-y-4">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-500">Interests</p>
             <p className="mt-1 text-sm text-slate-600">These preferences prepare MuksBooks for personalised resources and careers matching.</p>
@@ -242,7 +290,7 @@ export function SettingsManager() {
                     <input
                       type="checkbox"
                       checked={selected}
-                      onChange={(event) => setDraft({ ...draft, careerInterests: toggle(draft.careerInterests, interest, event.target.checked) })}
+                      onChange={(event) => updateDraft('study', { careerInterests: toggle(draft.careerInterests, interest, event.target.checked) })}
                       className="sr-only"
                     />
                     {interest}
@@ -262,7 +310,7 @@ export function SettingsManager() {
                     <input
                       type="checkbox"
                       checked={selected}
-                      onChange={(event) => setDraft({ ...draft, academicInterests: toggle(draft.academicInterests, interest, event.target.checked) })}
+                      onChange={(event) => updateDraft('study', { academicInterests: toggle(draft.academicInterests, interest, event.target.checked) })}
                       className="sr-only"
                     />
                     {interest}
@@ -272,10 +320,11 @@ export function SettingsManager() {
             </div>
           </fieldset>
 
-          <Button type="submit" disabled={saving}>Save interests</Button>
-        </Card>
+          <label className="block text-sm font-medium text-slate-700">Preferred study times<input value={draft.studyTimes} onChange={(event) => updateDraft('study', { studyTimes: event.target.value })} placeholder="e.g. Weekday evenings" className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2" /></label>
+          <Button type="button" disabled={sectionStates.study.state === 'saving'} onClick={() => void persist('study')}>Save study preferences</Button>
+        </Card> : null}
 
-        <Card className="space-y-5">
+        {activeSection === 'homepage' ? <Card className="space-y-5">
           <div><p className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-500">Homepage</p><p className="mt-1 text-sm text-slate-600">Presets are starting points. Every widget remains movable, resizable, and optional.</p></div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             {(Object.keys(PRESET_LABELS) as HomepagePreset[]).map((preset) => (
@@ -290,19 +339,30 @@ export function SettingsManager() {
               </button>
             ))}
           </div>
-        </Card>
+        </Card> : null}
 
-        <Card className="space-y-5">
+        {activeSection === 'study' ? <Card className="space-y-5">
           <div><p className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-500">MuksBooks assistance</p><h2 className="mt-2 text-xl font-semibold text-slate-950">How proactive should MuksBooks be?</h2><p className="mt-1 text-sm text-slate-600">Choose how often MuksBooks should actively recommend things to you.</p></div>
-          <div className="grid gap-3 md:grid-cols-3">{(Object.keys(LEVELS) as ProactivityLevel[]).map((level) => <button key={level} type="button" onClick={() => void persist({ proactivityLevel: level, proactivityControls: PROACTIVITY_DEFAULTS[level] }, `${level} assistance applied.`)} className={`rounded-lg border p-4 text-left ${draft.proactivityLevel === level ? 'border-slate-900 bg-slate-50' : 'border-slate-200 bg-white'}`}><span className="font-semibold text-slate-950">{level}</span><span className="mt-1 block text-sm text-slate-600">{LEVELS[level]}</span></button>)}</div>
-          <div className="grid gap-5 md:grid-cols-2">{ASSISTANCE.map((group) => <fieldset key={group.title} className="rounded-lg border border-slate-200 p-4"><legend className="px-1 text-sm font-semibold text-slate-900">{group.title}</legend><div className="space-y-3">{group.items.map(([key, text]) => <label key={key} className="flex gap-3 text-sm text-slate-700"><input type="checkbox" checked={draft.proactivityControls[key]} onChange={(event) => void persist({ proactivityControls: { ...draft.proactivityControls, [key]: event.target.checked } }, 'Assistance preference saved.')} className="mt-0.5 h-4 w-4" />{text}</label>)}</div></fieldset>)}</div>
-        </Card>
+          <div className="grid gap-3 md:grid-cols-3">{(Object.keys(LEVELS) as ProactivityLevel[]).map((level) => <button key={level} type="button" onClick={() => void persist('study', { proactivityLevel: level, proactivityControls: PROACTIVITY_DEFAULTS[level] }, `${level} assistance applied.`)} className={`rounded-lg border p-4 text-left ${draft.proactivityLevel === level ? 'border-slate-900 bg-slate-50' : 'border-slate-200 bg-white'}`}><span className="font-semibold text-slate-950">{level}</span><span className="mt-1 block text-sm text-slate-600">{LEVELS[level]}</span></button>)}</div>
+          <div className="grid gap-5 md:grid-cols-2">{ASSISTANCE.map((group) => <fieldset key={group.title} className="rounded-lg border border-slate-200 p-4"><legend className="px-1 text-sm font-semibold text-slate-900">{group.title}</legend><div className="space-y-3">{group.items.map(([key, text]) => <label key={key} className="flex gap-3 text-sm text-slate-700"><input type="checkbox" checked={draft.proactivityControls[key]} onChange={(event) => void persist('study', { proactivityControls: { ...draft.proactivityControls, [key]: event.target.checked } }, 'Assistance preference saved.')} className="mt-0.5 h-4 w-4" />{text}</label>)}</div></fieldset>)}</div>
+        </Card> : null}
 
-        <Card className="space-y-4">
+        {activeSection === 'focus' ? <Card className="space-y-4">
           <div><p className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-500">MuksFocus</p><p className="mt-1 text-sm text-slate-600">Time-based recommendations use your selected timezone.</p></div>
-          <div className="grid gap-4 sm:grid-cols-2"><label className="text-sm font-medium text-slate-700">Timezone<input value={draft.timezone} onChange={(event) => setDraft({ ...draft, timezone: event.target.value })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2" /></label><label className="text-sm font-medium text-slate-700">Pomodoro length<input type="number" min="5" max="90" value={draft.pomodoroLength} onChange={(event) => setDraft({ ...draft, pomodoroLength: Number(event.target.value) || 25 })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2" /></label></div>
-          <Button type="submit" disabled={saving}>Save MuksFocus settings</Button>
-        </Card>
+          <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+            <label className="min-w-0 text-sm font-medium text-slate-700">Timezone<TimezoneSelector value={draft.timezone} onChange={(timezone) => updateDraft('focus', { timezone })} /></label>
+            <label className="text-sm font-medium text-slate-700">Focus duration (minutes)<input type="number" min="5" max="180" value={draft.focusDurationMinutes} onChange={(event) => updateDraft('focus', { focusDurationMinutes: Number(event.target.value) || 25 })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2" /></label>
+            <label className="text-sm font-medium text-slate-700">Short break (minutes)<input type="number" min="1" max="60" value={draft.shortBreakMinutes} onChange={(event) => updateDraft('focus', { shortBreakMinutes: Number(event.target.value) || 5 })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2" /></label>
+            <label className="text-sm font-medium text-slate-700">Long break (minutes)<input type="number" min="1" max="90" value={draft.longBreakMinutes} onChange={(event) => updateDraft('focus', { longBreakMinutes: Number(event.target.value) || 20 })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2" /></label>
+            <label className="text-sm font-medium text-slate-700">Focus cycles<input type="number" min="1" max="12" value={draft.focusCycleCount} onChange={(event) => updateDraft('focus', { focusCycleCount: Number(event.target.value) || 4 })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2" /></label>
+            <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={draft.autoStartBreaks} onChange={(event) => updateDraft('focus', { autoStartBreaks: event.target.checked })} />Automatically start breaks</label>
+            <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={draft.autoStartFocus} onChange={(event) => updateDraft('focus', { autoStartFocus: event.target.checked })} />Automatically start focus sessions</label>
+            <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={draft.focusNotificationsEnabled} onChange={(event) => updateDraft('focus', { focusNotificationsEnabled: event.target.checked })} />Focus notifications</label>
+            <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={draft.studyBellMuted} onChange={(event) => updateDraft('focus', { studyBellMuted: event.target.checked })} />Mute study bell</label>
+            <label className="text-sm font-medium text-slate-700">Study bell volume<input type="range" min="0" max="1" step="0.05" value={draft.studyBellVolume} onChange={(event) => updateDraft('focus', { studyBellVolume: Number(event.target.value) })} className="mt-2 block w-full" /><span className="text-xs font-normal text-slate-500">{Math.round(draft.studyBellVolume * 100)}%</span></label>
+          </div>
+          <Button type="button" disabled={sectionStates.focus.state === 'saving'} onClick={() => void persist('focus')}>Save MuksFocus settings</Button>
+        </Card> : null}
       </form>
     </div>
   )

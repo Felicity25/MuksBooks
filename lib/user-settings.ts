@@ -488,7 +488,7 @@ export function normalizeUserSettings(value?: Partial<UserSettings> | null): Use
       ? Array.from(new Set(clean.universityShortlist.map((item) => `${item}`.trim()).filter(Boolean)))
       : DEFAULT_USER_SETTINGS.universityShortlist,
     universityCompare: Array.isArray(clean.universityCompare)
-      ? Array.from(new Set(clean.universityCompare.map((item) => `${item}`.trim()).filter(Boolean))).slice(0, 4)
+      ? Array.from(new Set(clean.universityCompare.map((item) => `${item}`.trim()).filter(Boolean)))
       : DEFAULT_USER_SETTINGS.universityCompare,
     universityApplications: Array.isArray(clean.universityApplications)
       ? clean.universityApplications.map((application) => normalizeUniversityApplication(application as UniversityApplication & Record<string, unknown>))

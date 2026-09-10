@@ -4,22 +4,21 @@ import { useEffect, useState } from 'react'
 import { CalendarClock, Check, Plus, Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { getLearnerProfile, saveLearnerProfile, type TimetableEntry } from '@/lib/learner/store'
+import { useCurriculum } from '@/components/learner/curriculum-context'
+import type { TimetableEntry } from '@/lib/learner/store'
 
 export function TimetableReviewer() {
+  const { profile, saveProfile } = useCurriculum()
   const [lessons, setLessons] = useState<TimetableEntry[]>([])
   const [draft, setDraft] = useState({ day: 'Monday', time: '09:00', subject: '', teacher: '', room: '' })
   const [saved, setSaved] = useState(false)
 
   useEffect(() => {
-    const profile = getLearnerProfile()
     setLessons(profile.timetable)
-  }, [])
+  }, [profile.timetable])
 
   const persist = (next: TimetableEntry[]) => {
-    const profile = getLearnerProfile()
-    const savedProfile = saveLearnerProfile({ ...profile, timetable: next, updatedAt: new Date().toISOString() })
-    setLessons(savedProfile.timetable)
+    setLessons(next)
   }
 
   const addLesson = () => {
@@ -38,10 +37,9 @@ export function TimetableReviewer() {
     setDraft({ day: 'Monday', time: '09:00', subject: '', teacher: '', room: '' })
   }
 
-  const saveTimetable = () => {
+  const saveTimetable = async () => {
+    await saveProfile({ timetable: lessons })
     setSaved(true)
-    const profile = getLearnerProfile()
-    saveLearnerProfile({ ...profile, timetable: lessons, updatedAt: new Date().toISOString() })
   }
 
   return (
@@ -51,7 +49,7 @@ export function TimetableReviewer() {
           <CalendarClock className="h-4 w-4 text-sky-700" />
           Timetable review before save
         </div>
-        <Button type="button" onClick={saveTimetable} size="sm"><Save className="mr-2 h-4 w-4" />Save timetable</Button>
+        <Button type="button" onClick={() => void saveTimetable()} size="sm"><Save className="mr-2 h-4 w-4" />Save timetable</Button>
       </div>
 
       <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">

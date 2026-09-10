@@ -31,7 +31,7 @@ export default function CompareProgrammesPage() {
   return (
     <main className="mx-auto w-full max-w-7xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
       <Link href="/universities" className="inline-flex items-center gap-2 text-sm font-medium text-sky-700"><ArrowLeft className="h-4 w-4" />Back to Universities</Link>
-      <header><h1 className="text-3xl font-semibold text-slate-950">Compare programmes</h1><p className="mt-2 text-slate-600">Compare up to four options using published information. No universal ranking is applied.</p></header>
+      <header><h1 className="text-3xl font-semibold text-slate-950">Compare programmes</h1><p className="mt-2 text-slate-600">Compare your selected options using published information. Scroll across to review larger comparison sets. No universal ranking is applied.</p></header>
       {!records.length ? <Card className="p-6 text-sm text-slate-600">Add programmes from search or a programme page to compare them here.</Card> : (
         <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
           <table className="min-w-[760px] w-full border-collapse text-left text-sm">

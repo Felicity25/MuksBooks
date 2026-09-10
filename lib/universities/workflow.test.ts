@@ -15,7 +15,7 @@ universityStorage.saveShortlist(['uct-bsc-cs', 'uct-bsc-cs', 'monash-actuarial']
 assert.deepEqual(universityStorage.getShortlist(), ['uct-bsc-cs', 'monash-actuarial'], 'Guest shortlist should persist unique programme IDs')
 
 universityStorage.saveCompare(['a', 'b', 'c', 'd', 'e'])
-assert.deepEqual(universityStorage.getCompare(), ['a', 'b', 'c', 'd'], 'Comparison should be capped at four programmes')
+assert.deepEqual(universityStorage.getCompare(), ['a', 'b', 'c', 'd', 'e'], 'Guest comparison should preserve every selected programme')
 
 const application = createApplication('uct-bsc-cs', 'uct')
 universityStorage.saveApplications([application])
@@ -26,7 +26,7 @@ assert.deepEqual(APPLICATION_STATUSES, ['INTERESTED', 'RESEARCHING', 'PREPARING'
 
 const accountSettings = normalizeUserSettings({ universityShortlist: ['lse-economics'], universityCompare: ['a', 'a', 'b', 'c', 'd', 'e'], universityApplications: [{ ...application, status: 'APPLIED' }] })
 assert.deepEqual(accountSettings.universityShortlist, ['lse-economics'])
-assert.deepEqual(accountSettings.universityCompare, ['a', 'b', 'c', 'd'])
+assert.deepEqual(accountSettings.universityCompare, ['a', 'b', 'c', 'd', 'e'])
 assert.equal(accountSettings.universityApplications[0].status, 'APPLIED')
 
 const universityLayout = getModeAwareHomepageLayout('UNIVERSITY', [{ id: 'careers', size: 'large' }, { id: 'planner', size: 'medium' }])

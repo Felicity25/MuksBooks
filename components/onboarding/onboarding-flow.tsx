@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Check, ChevronRight } from 'lucide-react'
 import { useAuth } from '@/components/auth-provider'
@@ -8,7 +8,9 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { THEMES } from '@/lib/design/themes'
 import { useCurriculum } from '@/components/learner/curriculum-context'
+import { CurriculumSubjectPicker } from '@/components/learner/curriculum-subject-picker'
 import { getCurriculum, isSupportedCurriculumId, SUPPORTED_CURRICULA, type SupportedCurriculumId } from '@/lib/learner/curriculum-registry'
+import { mergeLearnerSubjects, type LearnerSubject } from '@/lib/learner/store'
 import type { UserSettings, YearLevel } from '@/lib/user-settings'
 
 const INTERESTS = [
@@ -37,21 +39,29 @@ function toggle(list: string[], value: string, enabled: boolean) {
 
 export function OnboardingFlow() {
   const router = useRouter()
-  const { settings, saveSettings } = useAuth()
+  const { settings, saveSettings, isLoading } = useAuth()
   const { profile, saveProfile } = useCurriculum()
   const [step, setStep] = useState(1)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [draft, setDraft] = useState(settings)
+  const [settingsHydrated, setSettingsHydrated] = useState(false)
   const [learnerCurriculumId, setLearnerCurriculumId] = useState<SupportedCurriculumId>(isSupportedCurriculumId(profile.curriculum) ? profile.curriculum : 'VCE')
   const initialCurriculum = getCurriculum(learnerCurriculumId)
   const [learnerLevelId, setLearnerLevelId] = useState(initialCurriculum.levels.find((level) => level.label === profile.yearLevel)?.id || initialCurriculum.levels[0]?.id || '')
-  const [learnerSubjectIds, setLearnerSubjectIds] = useState<string[]>(profile.subjects.map((subject) => subject.curriculumSubjectCode).filter((value): value is string => Boolean(value)))
+  const [learnerSubjects, setLearnerSubjects] = useState<LearnerSubject[]>(profile.subjects.filter((subject) => subject.active !== false && subject.curriculumId === initialCurriculum.id))
 
   const isLearner = draft.academicMode === 'LEARNER'
   const learnerCurriculum = getCurriculum(learnerCurriculumId)
   const learnerLevel = learnerCurriculum.levels.find((level) => level.id === learnerLevelId) || learnerCurriculum.levels[0]
   const progress = useMemo(() => `${step}/9`, [step])
+
+  useEffect(() => {
+    if (!isLoading && !settingsHydrated) {
+      setDraft(settings)
+      setSettingsHydrated(true)
+    }
+  }, [isLoading, settings, settingsHydrated])
 
   const next = () => setStep((value) => Math.min(9, value + 1))
   const previous = () => setStep((value) => Math.max(1, value - 1))
@@ -71,12 +81,7 @@ export function OnboardingFlow() {
         curriculumLabel: learnerCurriculum.shortName,
         yearLevel: learnerLevel?.label || '',
         expectedGraduationYear: draft.examSession || profile.expectedGraduationYear || '',
-        subjects: learnerCurriculum.subjects
-          .filter((subject) => learnerSubjectIds.includes(subject.id))
-          .map((subject) => {
-            const existing = profile.subjects.find((item) => item.curriculumSubjectCode === subject.id || item.name === subject.title)
-            return existing || { id: `${learnerCurriculum.id}-${subject.id}`, name: subject.title, curriculumSubjectCode: subject.id, level: learnerLevel?.label || '' }
-          }),
+        subjects: mergeLearnerSubjects(profile.subjects, learnerSubjects, learnerCurriculum.id),
         onboardingCompleted: true,
         updatedAt: new Date().toISOString()
       })
@@ -93,7 +98,8 @@ export function OnboardingFlow() {
         careerInterests: draft.careerInterests,
         academicInterests: draft.academicInterests,
         theme: draft.theme,
-        name: draft.name
+        name: draft.name,
+        timezone: draft.timezone
       } as Partial<UserSettings>)
       router.push('/')
     } catch (value) {
@@ -115,7 +121,7 @@ export function OnboardingFlow() {
           <h1 className="text-page-title text-slate-950">Welcome to MuksBooks</h1>
           <p className="text-body text-slate-600">Your personalised academia app.</p>
           <p className="text-sm text-slate-600">Create your study environment in a few quick steps.</p>
-          <Button type="button" onClick={next}>Get started</Button>
+          <Button type="button" onClick={next} disabled={isLoading || !settingsHydrated}>{isLoading ? 'Loading settings...' : 'Get started'}</Button>
         </section>
       ) : null}
 
@@ -157,7 +163,7 @@ export function OnboardingFlow() {
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block text-sm font-medium text-slate-700">Curriculum
-              <select value={learnerCurriculumId} onChange={(event) => { const next = event.target.value as SupportedCurriculumId; const definition = getCurriculum(next); setLearnerCurriculumId(next); setLearnerLevelId(definition.levels[0]?.id || ''); setLearnerSubjectIds([]) }} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2">
+              <select value={learnerCurriculumId} onChange={(event) => { const next = event.target.value as SupportedCurriculumId; const definition = getCurriculum(next); setLearnerCurriculumId(next); setLearnerLevelId(definition.levels[0]?.id || ''); setLearnerSubjects(profile.subjects.filter((subject) => subject.active !== false && subject.curriculumId === next)) }} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2">
                 {SUPPORTED_CURRICULA.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
               </select>
             </label>
@@ -177,7 +183,7 @@ export function OnboardingFlow() {
       {step === 4 ? (
         <section className="space-y-3">
           <h2 className="text-section-title text-slate-950">{isLearner ? `Choose your ${learnerCurriculum.terminology.subject.toLowerCase()}s` : 'What are you studying?'}</h2>
-          {isLearner ? <div className="grid max-h-80 gap-2 overflow-y-auto sm:grid-cols-2">{learnerCurriculum.subjects.map((subject) => { const selected = learnerSubjectIds.includes(subject.id); return <label key={subject.id} className={`flex items-center gap-3 rounded-md border p-3 text-sm ${selected ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-800'}`}><input type="checkbox" checked={selected} onChange={(event) => setLearnerSubjectIds(toggle(learnerSubjectIds, subject.id, event.target.checked))} />{subject.title}</label> })}</div> : <label className="block text-sm font-medium text-slate-700">Degree<input value={draft.degree} onChange={(event) => setDraft({ ...draft, degree: event.target.value })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2" placeholder="Bachelor of Actuarial Science" /></label>}
+          {isLearner ? <CurriculumSubjectPicker curriculumId={learnerCurriculum.id} value={learnerSubjects} onChange={setLearnerSubjects} defaultLevelId={learnerLevelId} /> : <label className="block text-sm font-medium text-slate-700">Degree<input value={draft.degree} onChange={(event) => setDraft({ ...draft, degree: event.target.value })} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2" placeholder="Bachelor of Actuarial Science" /></label>}
         </section>
       ) : null}
 

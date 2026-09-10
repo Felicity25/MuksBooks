@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getUserSettings, updateUserSettings } from '@/lib/app-state/service'
+import { getUserSettings, hasStoredUserTimezone, updateUserSettings } from '@/lib/app-state/service'
 import { createSupabaseServerClient, getAuthenticatedUser } from '@/lib/supabase/server'
-import { normalizeUserSettings, parseUserSettingsUpdate, type UserSettings } from '@/lib/user-settings'
+import { isValidTimeZone, normalizeUserSettings, parseUserSettingsUpdate, type UserSettings } from '@/lib/user-settings'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -20,7 +20,9 @@ export async function GET() {
       if (!expanded.error) {
         userSettings = expanded.data
       } else {
+        if (!['42703', 'PGRST204'].includes(expanded.error.code || '')) throw new Error(expanded.error.message)
         const legacy = await client.from('user_settings').select('theme, name, degree, target_marks, feedback_strictness, pomodoro_length, study_times').eq('user_id', user.id).maybeSingle()
+        if (legacy.error) throw new Error(legacy.error.message)
         userSettings = legacy.data
       }
 
@@ -38,13 +40,20 @@ export async function GET() {
         studyTimes: userSettings?.study_times || '',
         timezone: profile?.timezone || 'Australia/Melbourne'
       }
-      const settings = normalizeUserSettings({ ...legacySettings, ...(userSettings?.preferences || {}) })
+      const preferences = userSettings?.preferences || {}
+      const savedTimezone = isValidTimeZone(preferences.timezone)
+        ? preferences.timezone
+        : isValidTimeZone(profile?.timezone)
+          ? profile.timezone
+          : undefined
+      const settings = normalizeUserSettings({ ...legacySettings, ...preferences, ...(savedTimezone ? { timezone: savedTimezone } : {}) })
+      const hasSavedTimezone = Boolean(savedTimezone)
 
-      return NextResponse.json({ ok: true, settings })
+      return NextResponse.json({ ok: true, settings, hasSavedTimezone })
     }
 
     const settings = getUserSettings(user.id)
-    return NextResponse.json({ ok: true, settings })
+    return NextResponse.json({ ok: true, settings, hasSavedTimezone: hasStoredUserTimezone(user.id) })
   } catch (error) {
     console.error('[Settings GET] Failed:', error)
     return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : String(error), settings: null }, { status: 500 })
@@ -95,8 +104,10 @@ export async function POST(request: NextRequest) {
           { onConflict: 'user_id' }
         )
       if (expanded.error) {
-        const legacy = await client.from('user_settings').upsert(cloudPayload, { onConflict: 'user_id' })
-        if (legacy.error) throw new Error(legacy.error.message)
+        if (['42703', 'PGRST204'].includes(expanded.error.code || '')) {
+          throw new Error('Account personalisation storage is not ready. Apply the personalisation settings migration before saving.')
+        }
+        throw new Error(expanded.error.message)
       }
     }
 

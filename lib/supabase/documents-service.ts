@@ -11,6 +11,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server'
 import { extractKeywords, semanticChunk } from '@/lib/knowledge-base/chunking'
 import { embedText } from '@/lib/knowledge-base/embeddings'
 import { extractTextFromUploadDetailed } from '@/lib/course-manager/extractors'
+import type { AcademicContainerRef } from '@/lib/academic-context'
 
 // ─── Internal helpers ────────────────────────────────────────────────────────
 
@@ -134,6 +135,7 @@ export async function persistUploadMetadata(
     topic?: string | null
     domain?: 'academic' | 'career' | 'personal' | 'other'
     unitId?: string | null
+    container?: AcademicContainerRef | null
   }
 ): Promise<string | null> {
   const client = createSupabaseServerClient()
@@ -160,7 +162,11 @@ export async function persistUploadMetadata(
           resource_type: params.resourceType ?? null,
           topic: params.topic ?? null,
           domain: params.domain ?? 'academic',
-          unit_id: params.unitId ?? null
+          unit_id: params.unitId ?? null,
+          academic_mode: params.container?.academicMode ?? null,
+          container_kind: params.container?.kind ?? null,
+          container_id: params.container?.id ?? null,
+          subject_id: params.container?.kind === 'SUBJECT' ? params.container.id : null
         },
         { onConflict: 'document_id' }
       )
@@ -171,6 +177,10 @@ export async function persistUploadMetadata(
 
     // Fallback: column doesn't exist yet — upsert with only baseline columns
     if (isMissingRelation(error)) {
+      if (params.container?.kind === 'SUBJECT') {
+        console.error('[Cloud] Subject upload context migration is not applied.')
+        return null
+      }
       const { data: fallback, error: fallbackErr } = await client
         .from('uploads')
         .upsert(
@@ -205,14 +215,24 @@ export async function listCloudDocuments(userId: string) {
   try {
     const { data, error } = await client
       .from('uploads')
-      .select('id, document_id, original_filename, mime_type, file_size, document_type, processing_status, course_code, chunk_count, week, resource_type, topic, domain, unit_id, created_at')
+      .select('id, document_id, original_filename, mime_type, file_size, document_type, processing_status, course_code, chunk_count, week, resource_type, topic, domain, unit_id, academic_mode, container_kind, container_id, subject_id, created_at')
       .eq('user_id', userId)
       .not('document_id', 'is', null)
       .order('created_at', { ascending: false })
 
     if (error) {
-      if (!isMissingRelation(error)) console.error('[Cloud] List documents failed:', error.message)
-      return null
+      if (!isMissingRelation(error)) {
+        console.error('[Cloud] List documents failed:', error.message)
+        return null
+      }
+      const legacy = await client
+        .from('uploads')
+        .select('id, document_id, original_filename, mime_type, file_size, document_type, processing_status, course_code, chunk_count, week, resource_type, topic, domain, unit_id, created_at')
+        .eq('user_id', userId)
+        .not('document_id', 'is', null)
+        .order('created_at', { ascending: false })
+      if (legacy.error) return null
+      return legacy.data ?? []
     }
     return data ?? []
   } catch (err) {

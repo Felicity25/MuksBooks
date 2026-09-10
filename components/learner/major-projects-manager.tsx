@@ -1,25 +1,18 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Flag, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { getLearnerProfile, saveLearnerProfile, type MajorProject } from '@/lib/learner/store'
+import { useCurriculum } from '@/components/learner/curriculum-context'
+import type { MajorProject } from '@/lib/learner/store'
 
 export function MajorProjectsManager() {
-  const [projects, setProjects] = useState<MajorProject[]>([])
+  const { profile, saveProfile } = useCurriculum()
+  const projects = profile.projects
   const [form, setForm] = useState({ title: '', type: 'IA' as MajorProject['type'], dueDate: '', status: 'In progress', milestone: '' })
 
-  useEffect(() => {
-    const profile = getLearnerProfile()
-    setProjects(profile.projects)
-  }, [])
-
-  const persist = (next: MajorProject[]) => {
-    const profile = getLearnerProfile()
-    const saved = saveLearnerProfile({ ...profile, projects: next, updatedAt: new Date().toISOString() })
-    setProjects(saved.projects)
-  }
+  const persist = (next: MajorProject[]) => void saveProfile({ projects: next })
 
   const addProject = () => {
     if (!form.title.trim()) return
