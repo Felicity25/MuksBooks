@@ -295,6 +295,16 @@ type SettingsParseResult =
   | { valid: true; data: Partial<UserSettings> }
   | { valid: false; error: string }
 
+export function isValidTimeZone(value: unknown): value is string {
+  if (typeof value !== 'string' || !value.trim()) return false
+  try {
+    new Intl.DateTimeFormat('en-AU', { timeZone: value }).format()
+    return true
+  } catch {
+    return false
+  }
+}
+
 export function parseUserSettingsUpdate(value: unknown): SettingsParseResult {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return { valid: false, error: 'Settings must be a JSON object.' }
   const update = value as Record<string, unknown>
@@ -319,6 +329,7 @@ export function parseUserSettingsUpdate(value: unknown): SettingsParseResult {
   for (const field of ['academicMode', 'curriculum', 'schoolName', 'schoolCountry', 'schoolYear', 'examSession', 'name', 'institution', 'degree', 'fieldOfStudy', 'major', 'targetMarks', 'studyTimes', 'timezone']) {
     if (field in update && typeof update[field] !== 'string') return { valid: false, error: `${field} must be a string.` }
   }
+  if ('timezone' in update && !isValidTimeZone(update.timezone)) return { valid: false, error: 'timezone must be a valid IANA time zone.' }
     if ('careerInterests' in update) {
       if (!Array.isArray(update.careerInterests) || update.careerInterests.some((item) => typeof item !== 'string')) {
         return { valid: false, error: 'careerInterests must be a string array.' }
@@ -432,6 +443,7 @@ export function normalizeUserSettings(value?: Partial<UserSettings> | null): Use
     : hasSchoolProfile
       ? 'LEARNER'
       : DEFAULT_USER_SETTINGS.academicMode
+  const timezone = isValidTimeZone(clean.timezone) ? clean.timezone : DEFAULT_USER_SETTINGS.timezone
 
   const safeLayout = getModeAwareHomepageLayout(academicMode, Array.isArray(clean.homepageLayout) ? clean.homepageLayout : fallbackLayout)
   const safeQuickActions = Array.isArray(clean.quickActions)
@@ -460,6 +472,7 @@ export function normalizeUserSettings(value?: Partial<UserSettings> | null): Use
     ...DEFAULT_USER_SETTINGS,
     ...clean,
     academicMode,
+    timezone,
     homepagePreset: academicMode === 'LEARNER' && clean.homepagePreset === 'career-focus' ? 'academic-weapon' : (clean.homepagePreset || DEFAULT_USER_SETTINGS.homepagePreset),
     homepageLayout: safeLayout.length ? safeLayout : getModeAwareHomepageLayout(academicMode, HOMEPAGE_PRESETS['academic-weapon']),
     quickActions: academicMode === 'LEARNER'

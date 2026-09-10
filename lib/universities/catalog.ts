@@ -133,40 +133,37 @@ export function flattenSearchRecords() {
 
 function scoreMatch(query: string, institution: Institution, programme: Programme) {
   const normalized = expandSearchQuery(query)
-  const institutionIdentity = normalizeUniversityQuery([
-    institution.name,
-    institution.aliases.join(' '),
-  ].join(' '))
-  const programmeIdentity = normalizeUniversityQuery([
-    programme.name,
-    programme.normalizedName,
-    ...(programme.aliases ?? []),
-    ...(programme.majors ?? []),
-    ...(programme.specialisations ?? []),
-    ...(programme.streams ?? []),
-  ].join(' '))
+  if (!normalized) return { score: 0, reason: undefined }
+
+  const programmeTitles = [programme.name, programme.normalizedName, ...(programme.aliases ?? []), ...(programme.majors ?? []), ...(programme.specialisations ?? []), ...(programme.streams ?? [])].map(normalizeUniversityQuery)
+  const studyAreas = programme.studyAreas.map(normalizeUniversityQuery)
+  const institutionNames = [institution.name, ...institution.aliases].map(normalizeUniversityQuery)
   const programmeContext = normalizeUniversityQuery([
-    programme.studyAreas.join(' '),
     programme.faculty,
     programme.department ?? '',
-    ...programme.tags
+    programme.qualification ?? '',
+    programme.degreeType,
+    programme.qualificationLevel,
+    ...(programme.industryAreas ?? []),
+    ...programme.tags,
+    programme.applicationInformation ?? '',
+    programme.applicationMetadata ?? ''
   ].join(' '))
-  const location = normalizeUniversityQuery([institution.city, institution.region, institution.country].join(' '))
-
-  if (!normalized) return 0
-  if (programmeIdentity === normalized || programme.normalizedName === normalized) return 120
-  if (programmeIdentity.includes(normalized)) return 110
-  if (programmeContext.includes(normalized)) return 90
-  if (institution.aliases.some((alias) => normalizeUniversityQuery(alias) === normalized)) return 85
-  if (institutionIdentity.includes(normalized)) return 80
-  if (location.includes(normalized)) return 40
-
+  const location = normalizeUniversityQuery([institution.city, institution.region, institution.country, programme.campus ?? ''].join(' '))
+  const programmeIdentity = programmeTitles.join(' ')
   const tokens = normalized.split(' ').filter((token) => token.length > 1)
-  if (tokens.length && tokens.every((token) => programmeIdentity.includes(token))) return 100
-  if (tokens.length && tokens.every((token) => programmeContext.includes(token))) return 75
-  if (tokens.length && tokens.every((token) => institutionIdentity.includes(token))) return 65
-  if (tokens.length && tokens.every((token) => location.includes(token))) return 30
-  return 0
+
+  if (programmeTitles.some((value) => value === normalized)) return { score: 150, reason: `Exact programme match: ${programme.name}` }
+  if (programmeTitles.some((value) => value.includes(normalized))) return { score: 135, reason: `Programme title match: ${programme.name}` }
+  if (studyAreas.some((value) => value === normalized)) return { score: 125, reason: `Study area match: ${programme.studyAreas.find((area) => normalizeUniversityQuery(area) === normalized)}` }
+  if (studyAreas.some((value) => value.includes(normalized))) return { score: 115, reason: `Related study area: ${programme.studyAreas.find((area) => normalizeUniversityQuery(area).includes(normalized))}` }
+  if (institutionNames.some((value) => value === normalized)) return { score: 105, reason: `University match: ${institution.name}` }
+  if (institutionNames.some((value) => value.includes(normalized))) return { score: 95, reason: `University match: ${institution.name}` }
+  if (tokens.length && tokens.every((token) => programmeIdentity.includes(token))) return { score: 110, reason: `Programme terms match: ${programme.name}` }
+  if (tokens.length && tokens.every((token) => `${studyAreas.join(' ')} ${programmeContext}`.includes(token))) return { score: 85, reason: `Programme subject match: ${programme.faculty}` }
+  if (programmeContext.includes(normalized)) return { score: 70, reason: `Programme details match: ${programme.faculty}` }
+  if (location.includes(normalized)) return { score: 45, reason: `Location match: ${programme.campus || institution.city}` }
+  return { score: 0, reason: undefined }
 }
 
 export function searchUniversityCatalogue(query: string, filters: SearchFilters = {}) {
@@ -183,11 +180,14 @@ export function searchUniversityCatalogue(query: string, filters: SearchFilters 
 
     if (!safeQuery) return true
 
-    return scoreMatch(safeQuery, institution, programme) > 0
+    return scoreMatch(safeQuery, institution, programme).score > 0
   })
 
   return results
-    .map((record) => ({ ...record, score: scoreMatch(safeQuery || record.programme.name, record.institution, record.programme) }))
+    .map((record) => {
+      const match = scoreMatch(safeQuery, record.institution, record.programme)
+      return { ...record, score: match.score, matchReason: match.reason }
+    })
     .sort((left, right) => right.score - left.score)
 }
 

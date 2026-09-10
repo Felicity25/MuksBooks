@@ -367,6 +367,7 @@ export interface SearchResult {
   country: string
   region: string
   score: number
+  matchReason?: string
 }
 
 export interface ApplicantContext {
